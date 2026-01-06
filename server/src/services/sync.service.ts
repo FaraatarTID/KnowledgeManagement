@@ -1,13 +1,18 @@
 import { DriveService } from './drive.service.js';
 import { VectorService } from './vector.service.js';
 import { GeminiService } from './gemini.service.js';
+import { ParsingService } from './parsing.service.js';
 
 export class SyncService {
+  private parsingService: ParsingService;
+
   constructor(
     private driveService: DriveService,
     private vectorService: VectorService,
     private geminiService: GeminiService
-  ) {}
+  ) {
+    this.parsingService = new ParsingService();
+  }
 
   async syncAll(folderId: string) {
     console.log('SyncService: Starting full sync...');
@@ -30,26 +35,31 @@ export class SyncService {
         console.log(`SyncService: Processing ${file.name}...`);
         
         // 3. Extract text
-        // Note: For real PDFs we need a parser. For now, assume GDoc/Text or fallback to name/description
-        // Since we don't have pdf-parse here, we will index the metadata + name for non-gdocs
-        // OR try to export if it's a google doc.
-        
         let textContent = '';
         if (file.mimeType === 'application/vnd.google-apps.document') {
            textContent = await this.driveService.exportDocument(file.id);
         } else {
-           // For binary files (PDF/Word), we ideally download and parse. 
-           // For this "Lite" version, we'll index the Title + Snippet/Name.
-           // Warning: PDF content won't be indexed without a library like pdf-parse.
+           // For binary files (PDF/Word), index Title + Type
+           // Note: Full PDF parsing requires pdf-parse library
            textContent = `Filename: ${file.name}\nType: ${file.mimeType}`; 
         }
 
         if (!textContent) continue;
 
-        // 4. Chunking (Simple)
-        const chunks = this.chunkText(textContent, 1000); // 1000 char chunks
+        // 4. Extract metadata from YAML frontmatter (if present)
+        const { metadata, cleanContent } = this.parsingService.extractMetadata(textContent);
+        
+        // Use metadata department if available, otherwise detect from filename
+        const department = metadata.department || this.detectDepartment(file.name);
+        const sensitivity = metadata.sensitivity || 'INTERNAL';
+        const category = metadata.category || 'General';
 
-        // 5. Embed & Prepare Upsert
+        // 5. Chunk using ParsingService (paragraph-aware) or fallback
+        const chunks = metadata.title 
+          ? this.parsingService.chunkContent(cleanContent, 1000)
+          : this.chunkText(cleanContent, 1000);
+
+        // 6. Embed & Prepare Upsert
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i];
           if (!chunk) continue;
@@ -60,18 +70,21 @@ export class SyncService {
             values: embedding,
             metadata: {
               docId: file.id,
-              title: file.name,
+              title: metadata.title || file.name,
               text: chunk,
               link: file.webViewLink,
               mimeType: file.mimeType,
-              department: this.detectDepartment(file.name)
+              department,
+              sensitivity,
+              category,
+              owner: metadata.owner || file.owners?.[0]?.emailAddress
             }
           });
         }
         
         processedRequestCount++;
         
-        // Batch upsert every 10 docs to save progress
+        // Batch upsert every 20 chunks to save progress
         if (itemsToUpsert.length >= 20) {
            await this.vectorService.upsertVectors(itemsToUpsert);
            itemsToUpsert.length = 0; // Clear
@@ -101,10 +114,27 @@ export class SyncService {
   }
 
   private chunkText(text: string, size: number): string[] {
-    const chunks = [];
-    for (let i = 0; i < text.length; i += size) {
-      chunks.push(text.substring(i, i + size));
+    // Use sentence-aware chunking to preserve semantic context
+    // Split by common sentence-ending punctuation
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    const chunks: string[] = [];
+    let currentChunk = '';
+
+    for (const sentence of sentences) {
+      // If adding this sentence would exceed size, save current chunk and start new one
+      if ((currentChunk + sentence).length > size && currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+        currentChunk = sentence;
+      } else {
+        currentChunk += ' ' + sentence;
+      }
     }
+
+    // Don't forget the last chunk
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk.trim());
+    }
+
     return chunks;
   }
 }

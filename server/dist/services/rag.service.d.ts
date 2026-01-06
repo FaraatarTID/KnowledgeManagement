@@ -3,6 +3,8 @@ import { VectorService } from './vector.service.js';
 export declare class RAGService {
     private geminiService;
     private vectorService;
+    private redactionService;
+    private auditService;
     constructor(geminiService: GeminiService, vectorService: VectorService);
     query(params: {
         query: string;
@@ -17,6 +19,7 @@ export declare class RAGService {
         sources: {
             id: string;
             docId: string;
+            title: string;
             score: number;
         }[];
         usage: import("@google-cloud/vertexai").UsageMetadata | undefined;

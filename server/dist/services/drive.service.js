@@ -27,12 +27,24 @@ export class DriveService {
                 { id: 'mock-2', name: 'Mock Budget 2024.xlsx', mimeType: 'application/vnd.google-apps.spreadsheet', modifiedTime: new Date().toISOString() }
             ];
         }
-        const response = await this.drive.files.list({
-            q: `'${folderId}' in parents and trashed = false`,
-            fields: 'files(id, name, mimeType, modifiedTime, owners, permissions)',
-            pageSize: 1000
-        });
-        return response.data.files || [];
+        let allFiles = [];
+        let pageToken = undefined;
+        do {
+            const params = {
+                q: `'${folderId}' in parents and trashed = false`,
+                fields: 'nextPageToken, files(id, name, mimeType, webViewLink, modifiedTime, owners, permissions)',
+                pageSize: 1000
+            };
+            if (pageToken) {
+                params.pageToken = pageToken;
+            }
+            const response = await this.drive.files.list(params);
+            if (response.data.files) {
+                allFiles = allFiles.concat(response.data.files);
+            }
+            pageToken = response.data.nextPageToken || undefined;
+        } while (pageToken);
+        return allFiles;
     }
     async exportDocument(fileId, mimeType = 'text/plain') {
         if (this.isMock || !this.drive)

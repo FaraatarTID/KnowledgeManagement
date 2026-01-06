@@ -5,24 +5,49 @@ import { VectorService } from '../services/vector.service.js';
 import { DriveService } from '../services/drive.service.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import jwt from 'jsonwebtoken';
+import { z } from 'zod';
 const router = Router();
 // --- SERVER STARTUP VALIDATION ---
 const REQUIRED_ENV_VARS = ['GCP_PROJECT_ID', 'JWT_SECRET'];
 const missingVars = REQUIRED_ENV_VARS.filter(key => !process.env[key]);
 if (missingVars.length > 0) {
+    // SECURITY: Fail fast in production if critical env vars are missing
+    if (process.env.NODE_ENV === 'production') {
+        console.error('❌ FATAL: Missing required environment variables in production:', missingVars);
+        throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+    }
     console.warn('⚠️ WARNING: Missing Environment Variables. Falling back to DEV DEFAULTS.');
+    console.warn('⚠️ DO NOT USE IN PRODUCTION!');
     missingVars.forEach(v => console.warn(`   - ${v} (using default)`));
-    // Set defaults for Dev/Demo mode
+    // Set defaults for Dev/Demo mode ONLY
     if (!process.env.JWT_SECRET)
         process.env.JWT_SECRET = 'dev-secret-do-not-use-in-prod';
     if (!process.env.GCP_PROJECT_ID)
         process.env.GCP_PROJECT_ID = 'aikb-mock-project';
 }
+import { SyncService } from '../services/sync.service.js';
 // Services
 const geminiService = new GeminiService(process.env.GCP_PROJECT_ID || 'aikb-mock-project');
 const vectorService = new VectorService(process.env.GCP_PROJECT_ID || 'aikb-prod', 'us-central1');
 const ragService = new RAGService(geminiService, vectorService);
 const driveService = new DriveService(process.env.GCP_KEY_FILE || 'key.json');
+const syncService = new SyncService(driveService, vectorService, geminiService);
+// --- SYNC ROUTE ---
+router.post('/sync', authMiddleware, async (req, res) => {
+    if (req.user.role !== 'ADMIN')
+        return res.status(403).json({ error: 'Admin only' });
+    if (!process.env.GOOGLE_DRIVE_FOLDER_ID) {
+        return res.json({ status: 'skipped', message: 'No Drive Folder Configured (Demo Mode)' });
+    }
+    try {
+        const result = await syncService.syncAll(process.env.GOOGLE_DRIVE_FOLDER_ID);
+        res.json(result);
+    }
+    catch (e) {
+        console.error('Sync failed:', e);
+        res.status(500).json({ error: 'Sync failed' });
+    }
+});
 // --- MOCK DATABASE (In-Memory for Demo) ---
 let MOCK_USERS = [
     { id: 'u1', name: 'Alice Admin', email: 'alice@aikb.com', role: 'ADMIN', department: 'IT', status: 'Active' },
@@ -55,11 +80,24 @@ router.get('/auth/me', authMiddleware, (req, res) => {
 });
 // --- USER MANAGEMENT ROUTES ---
 router.get('/users', authMiddleware, (req, res) => {
+    // SECURITY: Restrict user listing to admins and managers only
+    if (!['ADMIN', 'MANAGER'].includes(req.user.role)) {
+        return res.status(403).json({ error: 'Access denied. Admin or Manager role required.' });
+    }
     res.json(MOCK_USERS);
 });
 router.patch('/users/:id', authMiddleware, (req, res) => {
+    // SECURITY: Only ADMIN can modify user roles
+    if (req.user.role !== 'ADMIN') {
+        return res.status(403).json({ error: 'Access denied. Admin role required to modify users.' });
+    }
     const { id } = req.params;
     const { role, status } = req.body;
+    // Validate role value if provided
+    const validRoles = ['ADMIN', 'MANAGER', 'EDITOR', 'VIEWER'];
+    if (role && !validRoles.includes(role)) {
+        return res.status(400).json({ error: `Invalid role. Must be one of: ${validRoles.join(', ')}` });
+    }
     const userIndex = MOCK_USERS.findIndex(u => u.id === id);
     if (userIndex === -1)
         return res.status(404).json({ error: 'User not found' });
@@ -71,12 +109,22 @@ router.patch('/users/:id', authMiddleware, (req, res) => {
     res.json(updatedUser);
 });
 // --- RAG & CHAT ROUTES ---
+// Input validation schema
+const querySchema = z.object({
+    query: z.string().min(1, 'Query cannot be empty').max(2000, 'Query too long (max 2000 chars)')
+});
 router.post('/query', authMiddleware, async (req, res) => {
     try {
-        const { query } = req.body;
+        // SECURITY: Validate input with Zod
+        const parsed = querySchema.safeParse(req.body);
+        if (!parsed.success) {
+            return res.status(400).json({
+                error: 'Invalid query',
+                details: parsed.error.issues.map(i => i.message)
+            });
+        }
+        const { query } = parsed.data;
         const user = req.user;
-        if (!query)
-            return res.status(400).json({ error: 'Query is required' });
         const result = await ragService.query({
             query,
             userId: user.id || 'anonymous',
@@ -94,34 +142,51 @@ router.post('/query', authMiddleware, async (req, res) => {
     }
 });
 // --- ADMIN & DOCUMENT ROUTES ---
+router.delete('/documents/:id', authMiddleware, async (req, res) => {
+    if (req.user.role !== 'ADMIN')
+        return res.status(403).json({ error: 'Admin only' });
+    try {
+        const { id } = req.params;
+        await vectorService.deleteDocument(id);
+        res.json({ status: 'success', message: `Document ${id} removed from index.` });
+    }
+    catch (e) {
+        res.status(500).json({ error: 'Failed to delete index' });
+    }
+});
 router.get('/documents', authMiddleware, async (req, res) => {
     try {
+        const user = req.user;
         if (!process.env.GOOGLE_DRIVE_FOLDER_ID) {
             // Fallback to mock docs if no Drive configured for demo
-            return res.json([
-                { id: 'd1', name: 'Security Policy 2024', category: 'Compliance', sensitivity: 'CONFIDENTIAL', status: 'Synced', date: new Date(), owner: 'alice@aikb.com' },
-                { id: 'd2', name: 'Product Specs v2', category: 'Engineering', sensitivity: 'INTERNAL', status: 'Synced', date: new Date(), owner: 'charlie@aikb.com' }
-            ]);
+            const mockDocs = [
+                { id: 'd1', name: 'Security Policy 2024', category: 'Compliance', department: 'IT', sensitivity: 'CONFIDENTIAL', status: 'Synced', date: new Date(), owner: 'alice@aikb.com' },
+                { id: 'd2', name: 'Product Specs v2', category: 'Engineering', department: 'Engineering', sensitivity: 'INTERNAL', status: 'Synced', date: new Date(), owner: 'charlie@aikb.com' }
+            ];
+            // Filter by department for non-admins
+            if (user.role === 'ADMIN')
+                return res.json(mockDocs);
+            return res.json(mockDocs.filter(d => d.department === user.department));
         }
         const files = await driveService.listFiles(process.env.GOOGLE_DRIVE_FOLDER_ID);
         const documents = files.map(f => ({
             id: f.id,
             name: f.name,
             category: f.mimeType?.includes('folder') ? 'Folder' : 'Document',
+            department: f.department || 'General', // Would be derived from Drive Metadata/Path
             sensitivity: 'INTERNAL',
             status: 'Synced',
             date: f.modifiedTime,
             owner: f.owners?.[0]?.emailAddress
         }));
-        res.json(documents);
+        // Filter by department for non-admins
+        if (user.role === 'ADMIN')
+            return res.json(documents);
+        res.json(documents.filter(d => !d.department || d.department === user.department || d.department === 'General'));
     }
     catch (error) {
         console.error('Drive listing error:', error);
-        // Graceful fallback for demo
-        res.json([
-            { id: 'd1', name: 'Security Policy 2024', category: 'Compliance', sensitivity: 'CONFIDENTIAL', status: 'Synced', date: new Date(), owner: 'alice@aikb.com' },
-            { id: 'd2', name: 'Product Specs v2', category: 'Engineering', sensitivity: 'INTERNAL', status: 'Synced', date: new Date(), owner: 'charlie@aikb.com' }
-        ]);
+        res.json([]);
     }
 });
 router.get('/stats', authMiddleware, async (req, res) => {

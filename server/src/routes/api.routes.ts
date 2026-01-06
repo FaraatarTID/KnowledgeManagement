@@ -5,6 +5,7 @@ import { VectorService } from '../services/vector.service.js';
 import { DriveService } from '../services/drive.service.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import jwt from 'jsonwebtoken';
+import { z } from 'zod';
 
 const router = Router();
 
@@ -13,10 +14,17 @@ const REQUIRED_ENV_VARS = ['GCP_PROJECT_ID', 'JWT_SECRET'];
 const missingVars = REQUIRED_ENV_VARS.filter(key => !process.env[key]);
 
 if (missingVars.length > 0) {
+  // SECURITY: Fail fast in production if critical env vars are missing
+  if (process.env.NODE_ENV === 'production') {
+    console.error('❌ FATAL: Missing required environment variables in production:', missingVars);
+    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+  }
+  
   console.warn('⚠️ WARNING: Missing Environment Variables. Falling back to DEV DEFAULTS.');
+  console.warn('⚠️ DO NOT USE IN PRODUCTION!');
   missingVars.forEach(v => console.warn(`   - ${v} (using default)`));
   
-  // Set defaults for Dev/Demo mode
+  // Set defaults for Dev/Demo mode ONLY
   if (!process.env.JWT_SECRET) process.env.JWT_SECRET = 'dev-secret-do-not-use-in-prod';
   if (!process.env.GCP_PROJECT_ID) process.env.GCP_PROJECT_ID = 'aikb-mock-project';
 }
@@ -82,13 +90,28 @@ router.get('/auth/me', authMiddleware, (req: any, res) => {
 
 // --- USER MANAGEMENT ROUTES ---
 
-router.get('/users', authMiddleware, (req, res) => {
+router.get('/users', authMiddleware, (req: any, res) => {
+  // SECURITY: Restrict user listing to admins and managers only
+  if (!['ADMIN', 'MANAGER'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Access denied. Admin or Manager role required.' });
+  }
   res.json(MOCK_USERS);
 });
 
-router.patch('/users/:id', authMiddleware, (req, res) => {
+router.patch('/users/:id', authMiddleware, (req: any, res) => {
+  // SECURITY: Only ADMIN can modify user roles
+  if (req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Access denied. Admin role required to modify users.' });
+  }
+  
   const { id } = req.params;
   const { role, status } = req.body;
+  
+  // Validate role value if provided
+  const validRoles = ['ADMIN', 'MANAGER', 'EDITOR', 'VIEWER'];
+  if (role && !validRoles.includes(role)) {
+    return res.status(400).json({ error: `Invalid role. Must be one of: ${validRoles.join(', ')}` });
+  }
   
   const userIndex = MOCK_USERS.findIndex(u => u.id === id);
   if (userIndex === -1) return res.status(404).json({ error: 'User not found' });
@@ -103,12 +126,24 @@ router.patch('/users/:id', authMiddleware, (req, res) => {
 
 // --- RAG & CHAT ROUTES ---
 
+// Input validation schema
+const querySchema = z.object({
+  query: z.string().min(1, 'Query cannot be empty').max(2000, 'Query too long (max 2000 chars)')
+});
+
 router.post('/query', authMiddleware, async (req: any, res) => {
   try {
-    const { query } = req.body;
+    // SECURITY: Validate input with Zod
+    const parsed = querySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ 
+        error: 'Invalid query', 
+        details: parsed.error.issues.map(i => i.message)
+      });
+    }
+    
+    const { query } = parsed.data;
     const user = req.user;
-
-    if (!query) return res.status(400).json({ error: 'Query is required' });
 
     const result = await ragService.query({
       query,
