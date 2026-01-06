@@ -34,5 +34,11 @@ echo    READY!
 echo    - API:     http://localhost:3001
 echo    - Frontend: http://localhost:3000
 echo ==========================================
+
+echo [5/5] Opening Browser...
+start "" "http://localhost:3000"
+
 echo.
+echo ==========================================
+
 pause
