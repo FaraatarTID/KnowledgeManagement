@@ -24,19 +24,19 @@ Before we start, make sure you have these installed on your computer. If not, cl
 1.  Open your command prompt (Cmd) or Terminal.
 2.  Type this command and press Enter:
     ```bash
-    git clone https://github.com/your-repo/KM.git
+    git clone https://github.com/FaraatarTID/KnowledgeManagement
     ```
     _(Replace the URL with your actual repository URL)_
 3.  Go into the folder:
     ```bash
-    cd KM
+    cd KnowledgeManagement
     ```
 
 ### 2. The "One-Click" Install (Windows Users)
 
 If you are on Windows, we made this super easy for you.
 
-1.  Open the `KM` folder in your File Explorer.
+1.  Open the `KnowledgeManagement` folder in your File Explorer.
 2.  Find the file named **`run_app.bat`**.
 3.  **Double-click it.**
 4.  A black window will pop up. **Wait.** It might take 5 minutes to install everything.
@@ -65,7 +65,7 @@ This is the hardest part, but just follow the screenshots/steps below.
     - Click the email address of the account you just created.
     - Go to the **Keys** tab > **Add Key** > **Create new key** > **JSON**.
     - A file will automatically download. **Rename this file to `gcp-key.json`**.
-    - **Move this file** into the `KM\server` folder on your computer.
+    - **Move this file** into the `KnowledgeManagement\server` folder on your computer.
 
 ### Step B: Supabase (For the Database)
 
@@ -94,7 +94,7 @@ This is the hardest part, but just follow the screenshots/steps below.
 
 ## ⚙️ Part 3: Connecting the Dots
 
-1.  Open the `KM\server` folder.
+1.  Open the `KnowledgeManagement\server` folder.
 2.  You will see a file named `.env.example`.
 3.  Make a copy of it and rename the copy to `.env` (just `.env`, nothing else).
 4.  Open `.env` with Notepad.
