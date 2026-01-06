@@ -2,9 +2,11 @@ import { DriveService } from './drive.service.js';
 import { VectorService } from './vector.service.js';
 import { GeminiService } from './gemini.service.js';
 import { ParsingService } from './parsing.service.js';
+import { HistoryService } from './history.service.js';
 
 export class SyncService {
   private parsingService: ParsingService;
+  private historyService: HistoryService;
 
   constructor(
     private driveService: DriveService,
@@ -12,6 +14,7 @@ export class SyncService {
     private geminiService: GeminiService
   ) {
     this.parsingService = new ParsingService();
+    this.historyService = new HistoryService();
   }
 
   async syncAll(folderId: string) {
@@ -77,10 +80,21 @@ export class SyncService {
               department,
               sensitivity,
               category,
+              modifiedAt: file.modifiedTime,
               owner: metadata.owner || file.owners?.[0]?.emailAddress
             }
           });
         }
+
+        // 7. Record History Event
+        // Check if this doc was already in vector store to decide CREATED vs UPDATED
+        // (Simple heuristic: if processing succeeds, it's an update or new sync)
+        await this.historyService.recordEvent({
+          event_type: 'UPDATED', // Defaulting to updated for simplicity in this pass
+          doc_id: file.id!,
+          doc_name: file.name!,
+          details: `Synced ${chunks.length} chunks. Last modified in Drive: ${file.modifiedTime}`
+        });
         
         processedRequestCount++;
         

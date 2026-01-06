@@ -94,6 +94,10 @@ EMBEDDING_MODEL=text-embedding-004
 # --- LOGIN ---
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
+
+# --- DATABASE (Optional for History) ---
+SUPABASE_URL=your-supabase-url
+SUPABASE_SERVICE_ROLE_KEY=your-key
 ```
 
 ---
@@ -111,6 +115,12 @@ GOOGLE_CLIENT_SECRET=...
 2. Go to the **Dashboard** or **Library**.
 3. Click the **Sync** or **Refresh** button.
 4. The server will now read your Drive folder, redact any PII (emails/phones), and index them for the AI.
+
+### 3. The Activity Log (New!)
+
+1. Go to the **Admin Console**.
+2. Click on **Activity Log** in the sidebar.
+3. You can see a chronological history of every time a document was created or updated in the AI's memory. This is great for verifying that your latest edits in Drive have actually been "learned" by the AI.
 
 ### 🎖️ Advanced: Document Metadata (YAML)
 

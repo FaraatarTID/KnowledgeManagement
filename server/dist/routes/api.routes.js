@@ -3,6 +3,8 @@ import { RAGService } from '../services/rag.service.js';
 import { GeminiService } from '../services/gemini.service.js';
 import { VectorService } from '../services/vector.service.js';
 import { DriveService } from '../services/drive.service.js';
+import { SyncService } from '../services/sync.service.js';
+import { HistoryService } from '../services/history.service.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
@@ -25,13 +27,18 @@ if (missingVars.length > 0) {
     if (!process.env.GCP_PROJECT_ID)
         process.env.GCP_PROJECT_ID = 'aikb-mock-project';
 }
-import { SyncService } from '../services/sync.service.js';
 // Services
 const geminiService = new GeminiService(process.env.GCP_PROJECT_ID || 'aikb-mock-project');
 const vectorService = new VectorService(process.env.GCP_PROJECT_ID || 'aikb-prod', 'us-central1');
 const ragService = new RAGService(geminiService, vectorService);
 const driveService = new DriveService(process.env.GCP_KEY_FILE || 'key.json');
 const syncService = new SyncService(driveService, vectorService, geminiService);
+const historyService = new HistoryService();
+console.log('✅ API Routes: Registering endpoints...');
+// Public Ping
+router.get('/ping', (req, res) => {
+    res.json({ message: 'pong', timestamp: new Date().toISOString() });
+});
 // --- SYNC ROUTE ---
 router.post('/sync', authMiddleware, async (req, res) => {
     if (req.user.role !== 'ADMIN')
@@ -78,13 +85,22 @@ router.get('/auth/me', authMiddleware, (req, res) => {
         return res.status(404).json({ error: 'User not found' });
     res.json(user);
 });
-// --- USER MANAGEMENT ROUTES ---
+// --- User Management ---
 router.get('/users', authMiddleware, (req, res) => {
     // SECURITY: Restrict user listing to admins and managers only
     if (!['ADMIN', 'MANAGER'].includes(req.user.role)) {
         return res.status(403).json({ error: 'Access denied. Admin or Manager role required.' });
     }
     res.json(MOCK_USERS);
+});
+// History / Activity Log (Admin/Manager only)
+router.get('/history', authMiddleware, async (req, res) => {
+    console.log(`[API] GET /history called by ${req.user?.email} (${req.user?.role})`);
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'MANAGER') {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+    const history = await historyService.getHistory();
+    res.json(history);
 });
 router.patch('/users/:id', authMiddleware, (req, res) => {
     // SECURITY: Only ADMIN can modify user roles

@@ -68,9 +68,26 @@ _(Do NOT copy `node_modules` folders, they are huge and unneeded)_
     ```ini
     NODE_ENV=production
     JWT_SECRET=... # Generate a long random string
+    SUPABASE_URL=...
+    SUPABASE_SERVICE_ROLE_KEY=...
     ```
 
-2.  **Start the engines**:
+2.  **Initialize the Database**:
+    Go to your Supabase Dashboard and run the following SQL in the SQL Editor to enable history tracking:
+
+    ```sql
+    create table document_history (
+      id uuid default gen_random_uuid() primary key,
+      created_at timestamp with time zone default now(),
+      event_type text not null,
+      doc_id text not null,
+      doc_name text not null,
+      details text,
+      user_id text
+    );
+    ```
+
+3.  **Start the engines**:
     Run this command in the folder where you uploaded the files:
 
     ```bash
@@ -85,7 +102,7 @@ _(Do NOT copy `node_modules` folders, they are huge and unneeded)_
     - `-d`: Detached (Run in background)
     - `--build`: Build the app from scratch
 
-3.  **Check if it's running**:
+4.  **Check if it's running**:
     ```bash
     sudo docker ps
     ```

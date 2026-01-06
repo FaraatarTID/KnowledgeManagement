@@ -11,6 +11,7 @@ This is an intelligent "Brain" for your company. It connects to your **Google Dr
 - **It knows your data**: Unlike ChatGPT, this AI knows your private company secrets and policies because it reads your Google Drive.
 - **Enterprise Security**: Advanced RBAC (Role-Based Access Control), PII Redaction (strips emails/phones), and Audit Logging of all queries.
 - **Context-Aware Parsing**: Intelligent sentence-aware chunking and YAML Metadata support for document-level permissions.
+- **Document History**: Cloud-backed Activity Logs (via Supabase) to track when the AI was last updated and which documents were synced.
 - **Free-Tier Friendly**: Designed to run 100% on the free tiers of Google Cloud (Gemini 2.5 Flash-Lite) and Supabase.
 
 ---
