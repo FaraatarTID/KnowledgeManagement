@@ -17,10 +17,14 @@ export class RAGService {
     // 1. Generate query embedding
     const queryEmbedding = await this.geminiService.generateEmbedding(query);
 
-    // 2. Vector similarity search
+    // 2. Vector similarity search with access control
     const searchResults = await this.vectorService.similaritySearch({
       embedding: queryEmbedding,
-      topK: 5
+      topK: 5,
+      filters: {
+        department: userProfile.department,
+        role: userProfile.role
+      }
     });
 
     // 3. Build context from results

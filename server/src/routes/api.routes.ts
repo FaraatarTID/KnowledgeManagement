@@ -21,11 +21,31 @@ if (missingVars.length > 0) {
   if (!process.env.GCP_PROJECT_ID) process.env.GCP_PROJECT_ID = 'aikb-mock-project';
 }
 
+import { SyncService } from '../services/sync.service.js';
+
 // Services
 const geminiService = new GeminiService(process.env.GCP_PROJECT_ID || 'aikb-mock-project');
 const vectorService = new VectorService(process.env.GCP_PROJECT_ID || 'aikb-prod', 'us-central1');
 const ragService = new RAGService(geminiService, vectorService);
 const driveService = new DriveService(process.env.GCP_KEY_FILE || 'key.json');
+const syncService = new SyncService(driveService, vectorService, geminiService);
+
+// --- SYNC ROUTE ---
+router.post('/sync', authMiddleware, async (req: any, res) => {
+  if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
+  
+  if (!process.env.GOOGLE_DRIVE_FOLDER_ID) {
+    return res.json({ status: 'skipped', message: 'No Drive Folder Configured (Demo Mode)' });
+  }
+
+  try {
+    const result = await syncService.syncAll(process.env.GOOGLE_DRIVE_FOLDER_ID);
+    res.json(result);
+  } catch (e: any) {
+    console.error('Sync failed:', e);
+    res.status(500).json({ error: 'Sync failed' });
+  }
+});
 
 // --- MOCK DATABASE (In-Memory for Demo) ---
 let MOCK_USERS = [
@@ -109,14 +129,29 @@ router.post('/query', authMiddleware, async (req: any, res) => {
 
 // --- ADMIN & DOCUMENT ROUTES ---
 
-router.get('/documents', authMiddleware, async (req, res) => {
+router.delete('/documents/:id', authMiddleware, async (req: any, res) => {
+  if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
   try {
+    const { id } = req.params;
+    await vectorService.deleteDocument(id);
+    res.json({ status: 'success', message: `Document ${id} removed from index.` });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to delete index' });
+  }
+});
+
+router.get('/documents', authMiddleware, async (req: any, res) => {
+  try {
+    const user = req.user;
     if (!process.env.GOOGLE_DRIVE_FOLDER_ID) {
        // Fallback to mock docs if no Drive configured for demo
-       return res.json([
-         { id: 'd1', name: 'Security Policy 2024', category: 'Compliance', sensitivity: 'CONFIDENTIAL', status: 'Synced', date: new Date(), owner: 'alice@aikb.com' },
-         { id: 'd2', name: 'Product Specs v2', category: 'Engineering', sensitivity: 'INTERNAL', status: 'Synced', date: new Date(), owner: 'charlie@aikb.com' }
-       ]);
+       const mockDocs = [
+         { id: 'd1', name: 'Security Policy 2024', category: 'Compliance', department: 'IT', sensitivity: 'CONFIDENTIAL', status: 'Synced', date: new Date(), owner: 'alice@aikb.com' },
+         { id: 'd2', name: 'Product Specs v2', category: 'Engineering', department: 'Engineering', sensitivity: 'INTERNAL', status: 'Synced', date: new Date(), owner: 'charlie@aikb.com' }
+       ];
+       // Filter by department for non-admins
+       if (user.role === 'ADMIN') return res.json(mockDocs);
+       return res.json(mockDocs.filter(d => d.department === user.department));
     }
     const files = await driveService.listFiles(process.env.GOOGLE_DRIVE_FOLDER_ID);
     
@@ -124,20 +159,20 @@ router.get('/documents', authMiddleware, async (req, res) => {
       id: f.id,
       name: f.name,
       category: f.mimeType?.includes('folder') ? 'Folder' : 'Document',
+      department: (f as any).department || 'General', // Would be derived from Drive Metadata/Path
       sensitivity: 'INTERNAL', 
       status: 'Synced',
       date: f.modifiedTime,
       owner: f.owners?.[0]?.emailAddress
     }));
 
-    res.json(documents);
+    // Filter by department for non-admins
+    if (user.role === 'ADMIN') return res.json(documents);
+    res.json(documents.filter(d => !d.department || d.department === user.department || d.department === 'General'));
+
   } catch (error: any) {
     console.error('Drive listing error:', error);
-    // Graceful fallback for demo
-    res.json([
-       { id: 'd1', name: 'Security Policy 2024', category: 'Compliance', sensitivity: 'CONFIDENTIAL', status: 'Synced', date: new Date(), owner: 'alice@aikb.com' },
-       { id: 'd2', name: 'Product Specs v2', category: 'Engineering', sensitivity: 'INTERNAL', status: 'Synced', date: new Date(), owner: 'charlie@aikb.com' }
-     ]);
+    res.json([]);
   }
 });
 
