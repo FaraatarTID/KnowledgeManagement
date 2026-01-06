@@ -67,6 +67,10 @@ _(Do NOT copy `node_modules` folders, they are huge and unneeded)_
     sudo docker-compose up -d --build
     ```
 
+    > **IMPORTANT**: If your server domain is NOT `localhost`, you must edit `docker-compose.yml` before building!
+    > Change `- NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1`
+    > To: `- NEXT_PUBLIC_API_URL=https://your-domain.com/api/v1`
+
     - `up`: Start
     - `-d`: Detached (Run in background)
     - `--build`: Build the app from scratch

@@ -13,7 +13,7 @@ Before we start, make sure you have these installed on your computer. If not, cl
 2.  **Git**: [Download Here](https://git-scm.com/downloads).
     - _Tip_: Just click "Next" through all the options.
 3.  **A Google Account**: (Gmail works fine).
-4.  **A Supabase Account**: [Sign Up Here](https://supabase.com) (It's free).
+4.  **A Google Account**: (Gmail works fine). <!-- id: supabase-removed -->
 
 ---
 
@@ -37,10 +37,10 @@ Before we start, make sure you have these installed on your computer. If not, cl
 If you are on Windows, we made this super easy for you.
 
 1.  Open the `KnowledgeManagement` folder in your File Explorer.
-2.  Find the file named **`run_app.bat`**.
-3.  **Double-click it.**
-4.  A black window will pop up. **Wait.** It might take 5 minutes to install everything.
-5.  If it says "Ready", you are good! But wait! **You still need to add your passwords/keys.** Close the window for now.
+2.  **Double-click it.**
+3.  A black window will pop up. **Wait.** It might take 5 minutes to install everything.
+4.  Once ready, **your default browser will open automatically** to the login page.
+5.  If it says "Ready" but the browser didn't open, go to `http://localhost:3000`.
 
 ---
 
@@ -67,16 +67,7 @@ This is the hardest part, but just follow the screenshots/steps below.
     - A file will automatically download. **Rename this file to `gcp-key.json`**.
     - **Move this file** into the `KnowledgeManagement\server` folder on your computer.
 
-### Step B: Supabase (For the Database)
-
-1.  Log in to [Supabase](https://supabase.com/dashboard).
-2.  Click **"New Project"**. Give it a name and a strong password.
-3.  Wait for it to setup (takes ~2 mins).
-4.  Go to **Project Settings** (gear icon) > **API**.
-5.  Copy the **URL**.
-6.  Copy the **anon / public** Key.
-7.  Save these for the next step.
-8.  Go to **Project Settings** > **Database** > **Connection String** > **URI**. Copy it.
+<!-- Supabase Section Removed -->
 
 ### Step C: Google Login (For YOU)
 
@@ -112,10 +103,7 @@ GCP_KEY_FILE=gcp-key.json             <-- This is the file you moved earlier!
 # --- GOOGLE DRIVE ---
 GOOGLE_DRIVE_FOLDER_ID=12345abcde     <-- Go to a Drive folder, copy ID from URL
 
-# --- SUPABASE (DATABASE) ---
-SUPABASE_URL=https://your-url.supabase.co
-SUPABASE_ANON_KEY=eyJh...             <-- Your long key
-DATABASE_URL=postgresql://...         <-- Your Connection String
+# --- SERVER SETTINGS ---
 
 # --- LOGIN ---
 GOOGLE_CLIENT_ID=...                  <-- From Step C
@@ -141,3 +129,4 @@ GOOGLE_CLIENT_SECRET=...              <-- From Step C
 - **"Command not found"?** -> You didn't install Node.js. Install it and restart your computer.
 - **"White screen"?** -> Check the black command windows for errors.
 - **"Login failed"?** -> Check your Google Client ID/Secret in the `.env` file.
+- **"Token not valid yet"?** -> Your computer's clock is wrong. Sync your time in Windows settings.
