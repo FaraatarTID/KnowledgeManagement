@@ -58,7 +58,17 @@ _(Do NOT copy `node_modules` folders, they are huge and unneeded)_
 ## 🚀 Step 3: Launch!
 
 1.  **Create your secret `.env` files**:
-    On the server, make sure you create the `.env` file in the `server` folder just like you did on your laptop. **This is critical.** The app won't start without secrets.
+    On the server, create the `.env` file in the `server` folder. **This is critical.**
+
+    > [!IMPORTANT]
+    > In Production (`NODE_ENV=production`), the app will **REFUSE TO START** if `JWT_SECRET` is not set. This is a security feature to prevent using guessable defaults.
+
+    Ensure your `.env` contains:
+
+    ```ini
+    NODE_ENV=production
+    JWT_SECRET=... # Generate a long random string
+    ```
 
 2.  **Start the engines**:
     Run this command in the folder where you uploaded the files:
