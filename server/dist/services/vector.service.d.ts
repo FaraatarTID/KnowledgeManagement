@@ -7,6 +7,7 @@ export declare class VectorService {
     private localMetadataService;
     constructor(projectId: string, location: string);
     private loadVectors;
+    private saveTimeout;
     private saveVectors;
     similaritySearch(params: {
         embedding: number[];
@@ -57,5 +58,9 @@ export declare class VectorService {
         metadata: any;
     }[]): Promise<void>;
     private cosineSimilarity;
+    checkHealth(): Promise<{
+        status: 'OK' | 'ERROR';
+        message?: string;
+    }>;
 }
 //# sourceMappingURL=vector.service.d.ts.map

@@ -13,8 +13,8 @@ describe('RBAC (Role Based Access Control)', () => {
             .send({ email: 'david@aikb.com', password: 'admin123' });
         
         const cookiesV = resViewer.header['set-cookie'];
-        if (cookiesV && cookiesV[0]) {
-            viewerToken = cookiesV[0].split(';')[0].split('=')[1];
+        if (cookiesV && Array.isArray(cookiesV) && cookiesV[0]) {
+            viewerToken = cookiesV[0].split(';')[0].split('=')[1] || '';
         } else {
              throw new Error('Viewer login failed');
         }
@@ -25,8 +25,8 @@ describe('RBAC (Role Based Access Control)', () => {
             .send({ email: 'alice@aikb.com', password: 'admin123' });
             
         const cookiesA = resAdmin.header['set-cookie'];
-        if (cookiesA && cookiesA[0]) {
-            adminToken = cookiesA[0].split(';')[0].split('=')[1];
+        if (cookiesA && Array.isArray(cookiesA) && cookiesA[0]) {
+            adminToken = cookiesA[0].split(';')[0].split('=')[1] || '';
         } else {
             throw new Error('Admin login failed');
         }

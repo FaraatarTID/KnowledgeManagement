@@ -17,6 +17,7 @@ This is an intelligent "Brain" for your company. It connects to your **Google Dr
   - **Dashboard**: Real-time statistics on document usage.
   - **Manual Uploads**: Upload urgent files directly via the UI for instant indexing.
   - **Google Drive Sync**: Automatically stays in sync with your cloud folders.
+  - **Smart Organization**: Uses filename keywords and YAML headers for automated classification.
 - **⚡ Developer Friendly**:
   - **Tested**: Includes an automated test suite.
   - **Portable**: Runs on Windows, Mac, or Linux.

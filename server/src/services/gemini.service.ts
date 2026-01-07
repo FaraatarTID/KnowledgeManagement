@@ -97,4 +97,15 @@ Provide your response:`;
       usageMetadata: response.usageMetadata
     };
   }
+
+  async checkHealth(): Promise<{ status: 'OK' | 'ERROR'; message?: string }> {
+    if (this.isMock) return { status: 'OK', message: 'Mock Mode (No Google Cloud)' };
+    try {
+      // Simple test: generate embedding for a single word
+      await this.generateEmbedding('healthcheck');
+      return { status: 'OK', message: 'Connected to Vertex AI' };
+    } catch (e: any) {
+      return { status: 'ERROR', message: `Google Cloud Error: ${e.message}` };
+    }
+  }
 }

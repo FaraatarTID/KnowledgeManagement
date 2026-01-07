@@ -39,13 +39,19 @@ export class VectorService {
             console.error('VectorService: Failed to load vectors', e);
         }
     }
-    saveVectors() {
-        try {
-            fs.writeFileSync(this.DATA_FILE, JSON.stringify(this.vectors, null, 2));
-        }
-        catch (e) {
-            console.error('VectorService: Failed to save vectors', e);
-        }
+    // Debounce save operation to prevent hitting disk on every chunk
+    saveTimeout = null;
+    async saveVectors() {
+        if (this.saveTimeout)
+            clearTimeout(this.saveTimeout);
+        this.saveTimeout = setTimeout(async () => {
+            try {
+                await fs.promises.writeFile(this.DATA_FILE, JSON.stringify(this.vectors, null, 2));
+            }
+            catch (e) {
+                console.error('VectorService: Failed to save vectors', e);
+            }
+        }, 1000); // 1 second debounce
     }
     async similaritySearch(params) {
         if (this.isMock) {
@@ -56,13 +62,26 @@ export class VectorService {
         }
         // Perform exact Cosine Similarity
         const queryVec = params.embedding;
+        // Map with scores
+        const sensitivityMap = { 'PUBLIC': 0, 'INTERNAL': 1, 'CONFIDENTIAL': 2, 'RESTRICTED': 3, 'EXECUTIVE': 4 };
+        const roleMap = { 'VIEWER': 1, 'EDITOR': 2, 'MANAGER': 3, 'ADMIN': 4 };
+        const userRole = (params.filters?.role || 'VIEWER').toUpperCase();
+        const userClearance = roleMap[userRole] || 1;
         // Filter first
         let filteredVectors = this.vectors;
         if (params.filters) {
             filteredVectors = this.vectors.filter(vec => {
-                // If vector has a department, it MUST match the user's department UNLESS user is ADMIN
-                if (vec.metadata.department && params.filters?.department) {
-                    if (params.filters.role !== 'ADMIN' && vec.metadata.department !== params.filters.department) {
+                // 1. Sensitivity Clearance Check
+                const docSensitivity = (vec.metadata.sensitivity || 'INTERNAL').toUpperCase();
+                const docRequiredLevel = sensitivityMap[docSensitivity] ?? 1;
+                if (userClearance < docRequiredLevel) {
+                    return false;
+                }
+                // 2. Department check (Admins bypass department check)
+                if (userRole !== 'ADMIN' && vec.metadata.department && params.filters?.department) {
+                    const vecDept = vec.metadata.department.toLowerCase();
+                    const userDept = params.filters.department.toLowerCase();
+                    if (vecDept !== userDept) {
                         return false;
                     }
                 }
@@ -85,7 +104,7 @@ export class VectorService {
         if (this.isMock)
             return;
         this.vectors = this.vectors.filter(v => v.metadata.docId !== docId);
-        this.saveVectors();
+        await this.saveVectors();
         console.log(`VectorService: Deleted all chunks for document ${docId}.`);
     }
     async getAllMetadata() {
@@ -124,7 +143,7 @@ export class VectorService {
             return v;
         });
         if (updatedCount > 0) {
-            this.saveVectors();
+            await this.saveVectors();
             console.log(`VectorService: Updated metadata for ${updatedCount} chunks of document ${docId}.`);
         }
     }
@@ -149,7 +168,7 @@ export class VectorService {
         }));
         this.vectors.push(...newItems);
         // Persist
-        this.saveVectors();
+        await this.saveVectors();
         console.log(`VectorService: Upserted ${vectors.length} vectors. Total: ${this.vectors.length}`);
     }
     cosineSimilarity(vecA, vecB) {
@@ -166,6 +185,19 @@ export class VectorService {
         if (normA === 0 || normB === 0)
             return 0;
         return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+    async checkHealth() {
+        if (this.isMock)
+            return { status: 'OK', message: 'Mock Mode' };
+        try {
+            if (fs.existsSync(this.DATA_FILE)) {
+                return { status: 'OK', message: `${this.vectors.length} vectors` };
+            }
+            return { status: 'ERROR', message: 'Data file missing' };
+        }
+        catch (e) {
+            return { status: 'ERROR', message: e.message };
+        }
     }
 }
 //# sourceMappingURL=vector.service.js.map

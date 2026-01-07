@@ -138,29 +138,4 @@ export class SyncService {
     if (fn.includes('engineering') || fn.includes('product')) return 'Engineering';
     return 'General';
   }
-
-  private chunkText(text: string, size: number): string[] {
-    // Use sentence-aware chunking to preserve semantic context
-    // Split by common sentence-ending punctuation
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-    const chunks: string[] = [];
-    let currentChunk = '';
-
-    for (const sentence of sentences) {
-      // If adding this sentence would exceed size, save current chunk and start new one
-      if ((currentChunk + sentence).length > size && currentChunk.trim()) {
-        chunks.push(currentChunk.trim());
-        currentChunk = sentence;
-      } else {
-        currentChunk += ' ' + sentence;
-      }
-    }
-
-    // Don't forget the last chunk
-    if (currentChunk.trim()) {
-      chunks.push(currentChunk.trim());
-    }
-
-    return chunks;
-  }
 }

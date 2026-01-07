@@ -96,12 +96,17 @@ EMBEDDING_MODEL=text-embedding-004
 
 ### 1. Logging In
 
-By default (if no database is configured), the system runs in **Demo Mode**. Use these credentials:
+The system uses a standard **Unified Login**. Enter your email and password to access your specific role (Admin, Manager, or Employee).
 
-| Role       | Email            | Password   | Access                              |
-| :--------- | :--------------- | :--------- | :---------------------------------- |
-| **Admin**  | `alice@aikb.com` | `admin123` | Full Access (Settings, Users, Sync) |
-| **Viewer** | `david@aikb.com` | `admin123` | Read Only (Chat)                    |
+**Initial Demo Credentials:**
+
+- **Admin**: `alice@aikb.com` | `admin123`
+- **Employee**: `david@aikb.com` | `admin123`
+
+> [!IMPORTANT] > **Authentication Type**: This system uses a secure **Internal Login** (Email/Password). It does NOT require a "Google Login" for individual employees. Access to Google Drive is handled automatically in the background using the company's central [Service Account](file:///c:/Faraatar-TID_Apps/KnowledgeManagement/DEPLOYMENT_GUIDE.md#L25).
+
+> [!NOTE]
+> When moving to **Production** (using `.env` and a real database), the app will automatically create your first Admin account on startup using the `INITIAL_ADMIN_*` variables in your `.env`. See the [Deployment Guide](file:///c:/Faraatar-TID_Apps/KnowledgeManagement/DEPLOYMENT_GUIDE.md) for details.
 
 ### 2. How to Add Resources (Sync & Upload)
 
@@ -111,20 +116,72 @@ By default (if no database is configured), the system runs in **Demo Mode**. Use
    - **Google Drive Sync**: Best for batch-importing entire folders.
    - **Manual Upload**: Securely upload a PDF/Word file directly from your computer.
 
-### 3. Managing Settings
+### 3. Monitoring the System (Dashboard)
+
+Admins can monitor the health and performance of the Knowledge Base via the **Dashboard** indicators:
+
+- **Total Documents**: The total number of files currently indexed and searchable by the AI.
+- **Active Users**: The number of team members currently registered in the system.
+- **AI Resolution**: The "Success Rate" of the AI. It calculates the percentage of user questions that were successfully answered using documents from your library versus questions where no matching info was found.
+- **System Health**: A real-time heart-beat monitor.
+  - **Optimal**: All systems (Google Drive, Gemini AI, Database) are connected.
+  - **Warning**: The system is running in "Demo Mode" or a minor connection issue exists.
+  - **Critical**: A major service is down. Use the "Sync" button or check `.env` settings.
+
+### 4. Document Organization (Automation)
+
+The system can automatically assign **Department**, **Category**, and **Sensitivity** as it syncs.
+
+#### Method A: Smart Filenaming
+
+Include keywords in the file name:
+
+- **IT**: `it`, `security` (e.g., `it_guide.pdf`)
+- **Compliance**: `legal`, `compliance`
+- **Marketing**: `marketing`, `sales`
+- **Engineering**: `engineering`, `product`
+
+#### Method B: Explicit YAML Headers
+
+For 100% control, paste this block at the **very first line** of your Google Doc or Text/Markdown file:
+
+```yaml
+---
+department: Engineering
+category: Technical Specification
+sensitivity: CONFIDENTIAL
+---
+```
+
+### 4. Managing Settings
 
 Admins can go to **Settings** to:
 
 1.  **Categories**: Define organizational tags (e.g., "HR", "Legal").
 2.  **Departments**: Define user groups.
 
-### 4. Security Note
-
-This app uses robust security measures:
-
-- **Rate Limiting**: Brute-force attacks are blocked.
-- **Secure Sessions**: Login sessions use HTTP-Only cookies to prevent theft.
 - **File Scanning**: Uploaded files are checked for dangerous types (like .exe).
+
+### 5. Read-Only Guarantee (Google Drive Protection)
+
+The system is designed with a **"Read-Only" Data Path** for all non-admin users.
+
+- **Isolation**: Employees (Viewers/Managers) never have access to your Google credentials or the Drive folder directly.
+- **Firewall**: Even if a user tries to "hack" the app, the backend verifies their role (Admin-only) before any file can be synced or uploaded.
+- **Directional Sync**: The AIKB app only _reads_ from Google Drive to index data. It does not have buttons to "edit," "delete," or "overwrite" your original files on Google Drive.
+
+### 6. Security Tiers & Permissions
+
+The system uses a **Clearance Tier** logic to protect sensitive data. Users can only access/chat with documents that match their Role and Department.
+
+| Document Sensitivity | Required Role         | Department Match?      |
+| :------------------- | :-------------------- | :--------------------- |
+| **INTERNAL**         | Viewer or higher      | Yes (unless Admin)     |
+| **CONFIDENTIAL**     | Editor or higher      | Yes (unless Admin)     |
+| **RESTRICTED**       | **Manager** or higher | **Yes** (unless Admin) |
+| **EXECUTIVE**        | **Admin** only        | Global (No match req)  |
+
+> [!TIP] > **Admins** bypass all department restrictions and can access all documents across the entire company.
 
 ---
 

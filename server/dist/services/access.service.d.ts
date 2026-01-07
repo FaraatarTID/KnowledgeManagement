@@ -9,12 +9,14 @@ export declare class AccessControlEngine {
         documentId: string;
         userRole: string;
         userDepartment: string;
-        sensitivityLevel: string;
         documentSensitivity: string;
-        accessControl: any;
+        documentDepartment?: string;
     }): Promise<AccessDecision>;
 }
 export declare class AuditService {
+    private supabase;
+    private isDemoMode;
+    constructor();
     log(entry: {
         userId: string;
         action: string;
@@ -23,5 +25,8 @@ export declare class AuditService {
         granted: boolean;
         reason?: string;
     }): Promise<void>;
+    getResolutionStats(): Promise<{
+        percentage: string;
+    }>;
 }
 //# sourceMappingURL=access.service.d.ts.map

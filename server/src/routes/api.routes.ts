@@ -8,6 +8,7 @@ import { HistoryService } from '../services/history.service.js';
 import { ConfigService } from '../services/config.service.js';
 import { AuthService } from '../services/auth.service.js';
 import { UserService } from '../services/user.service.js';
+import { AuditService } from '../services/access.service.js';
 import { authMiddleware, requireRole } from '../middleware/auth.middleware.js';
 import { authLimiter } from '../middleware/rateLimit.middleware.js';
 import type { AuthRequest } from '../middleware/auth.middleware.js';
@@ -87,6 +88,7 @@ const upload = multer({
 // Services
 const geminiService = new GeminiService(process.env.GCP_PROJECT_ID || 'aikb-mock-project');
 const vectorService = new VectorService(process.env.GCP_PROJECT_ID || 'aikb-prod', 'us-central1');
+const auditService = new AuditService();
 const ragService = new RAGService(geminiService, vectorService);
 const driveService = new DriveService(process.env.GCP_KEY_FILE || 'key.json');
 const syncService = new SyncService(driveService, vectorService, geminiService);
@@ -354,6 +356,39 @@ router.get('/users', authMiddleware, requireRole('ADMIN', 'MANAGER'), async (req
   res.json(users);
 });
 
+router.post('/users', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  try {
+    const { email, password, name, role, department } = req.body;
+    
+    if (!email || !password || !name) {
+      return res.status(400).json({ error: 'Email, password and name are required' });
+    }
+
+    // Check if user already exists
+    const existing = await userService.getByEmail(email);
+    if (existing) {
+      return res.status(400).json({ error: 'User with this email already exists' });
+    }
+
+    const newUser = await userService.create({
+      email,
+      password,
+      name,
+      role: role || 'VIEWER',
+      department: department || 'General'
+    });
+
+    if (!newUser) {
+      return res.status(500).json({ error: 'Failed to create user' });
+    }
+
+    res.status(201).json(newUser);
+  } catch (error) {
+    console.error('User creation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // History / Activity Log (Admin/Manager only)
 router.get('/history', authMiddleware, requireRole('ADMIN', 'MANAGER'), async (req: AuthRequest, res) => {
   console.log(`[API] GET /history called by ${req.user?.email} (${req.user?.role})`);
@@ -377,6 +412,32 @@ router.patch('/users/:id', authMiddleware, requireRole('ADMIN'), async (req: Aut
   }
   
   res.json(updatedUser);
+});
+
+router.delete('/users/:id', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  const id = req.params.id;
+  if (!id) return res.status(400).json({ error: 'User ID is required' });
+  
+  const success = await userService.delete(id);
+  if (!success) {
+    return res.status(404).json({ error: 'User not found or deletion failed' });
+  }
+  res.json({ success: true, message: 'User deleted successfully' });
+});
+
+router.patch('/users/:id/password', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  const id = req.params.id;
+  if (!id) return res.status(400).json({ error: 'User ID is required' });
+
+  const { password } = req.body;
+  if (!password) {
+    return res.status(400).json({ error: 'New password is required' });
+  }
+  const success = await userService.updatePassword(id, password);
+  if (!success) {
+    return res.status(404).json({ error: 'User not found or update failed' });
+  }
+  res.json({ success: true, message: 'Password updated successfully' });
 });
 
 // --- RAG & CHAT ROUTES ---
@@ -510,8 +571,8 @@ router.get('/documents', authMiddleware, async (req: any, res) => {
        try {
          const files = await driveService.listFiles(process.env.GOOGLE_DRIVE_FOLDER_ID);
          documents = files.map(f => {
-          const vMeta = vectorMetadata[f.id!] || {};
-          const link = vMeta.link || f.webViewLink || `https://docs.google.com/document/d/${f.id}`;
+           const vMeta = vectorMetadata[f.id!] || {};
+           const link = vMeta.link || f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`;
           
           return {
             id: f.id,
@@ -523,7 +584,7 @@ router.get('/documents', authMiddleware, async (req: any, res) => {
             department: vMeta.department || 'General',
             owner: vMeta.owner || (f.owners?.[0] as any)?.emailAddress,
             link: link,
-            status: 'Synced'
+            status: vectorMetadata[f.id!] ? 'Synced' : 'Not Synced'
           };
         });
        } catch (e) {
@@ -545,20 +606,84 @@ router.get('/documents', authMiddleware, async (req: any, res) => {
 });
 
 router.get('/stats', authMiddleware, async (req, res) => {
-  const users = await userService.getAll();
-  const vectorMeta = await vectorService.getAllMetadata();
-  const docCount = Object.keys(vectorMeta).length;
+  try {
+    const [users, vectorMeta, vectorHealth, geminiHealth, driveHealth, userHealth, resStats] = await Promise.all([
+      userService.getAll(),
+      vectorService.getAllMetadata(),
+      vectorService.checkHealth(),
+      geminiService.checkHealth(),
+      driveService.checkHealth(),
+      userService.checkHealth(),
+      auditService.getResolutionStats()
+    ]);
 
-  res.json({
-    totalDocuments: docCount,
-    activeUsers: users.length,
-    aiResolution: '98%', // Placeholder - to be implemented with feedback loop
-    systemHealth: 'Optimal'
-  });
+    const docCount = Object.keys(vectorMeta).length;
+    
+    // Aggregate health status
+    const healthChecks = [vectorHealth, geminiHealth, driveHealth, userHealth];
+    const errors = healthChecks.filter(h => h.status === 'ERROR');
+    
+    let systemHealth = 'Optimal';
+    if (errors.length > 0) {
+      systemHealth = 'Critical'; // Any error is critical for now
+    } else if (healthChecks.some(h => h.message?.includes('Mock'))) {
+      systemHealth = 'Warning'; // Mock mode is a warning (demo only)
+    }
+
+    res.json({
+      totalDocuments: docCount,
+      activeUsers: users.length,
+      aiResolution: resStats.percentage,
+      systemHealth,
+      details: {
+        vector: vectorHealth,
+        gemini: geminiHealth,
+        drive: driveHealth,
+        identity: userHealth
+      }
+    });
+  } catch (error) {
+    console.error('Stats aggregation failed', error);
+    res.status(500).json({ error: 'Failed to aggregate system stats' });
+  }
 });
 
 router.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'aikb-api' });
+});
+
+router.post('/documents/:id/sync', authMiddleware, async (req: any, res) => {
+  const { id } = req.params;
+  if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
+
+  try {
+    // 1. Get file metadata from Drive
+    const file = await driveService.getFileMetadata(id);
+    if (!file) {
+      return res.status(404).json({ error: 'Source file not found in Google Drive' });
+    }
+
+    // 2. Trigger targeted indexing
+    await syncService.indexFile({
+      id: file.id || '',
+      name: file.name || 'document',
+      mimeType: file.mimeType as string,
+      modifiedTime: file.modifiedTime as string
+    });
+
+    // 3. Record in History
+    await historyService.recordEvent({
+      event_type: 'UPDATED',
+      doc_id: file.id!,
+      doc_name: file.name!,
+      details: 'Targeted sync/re-indexing completed.'
+    });
+
+    res.json({ success: true, message: `Re-indexed document: ${file.name}` });
+  } catch (e: any) {
+    console.error(`Targeted sync failed for ${id}:`, e);
+    res.status(500).json({ error: 'Failed to re-index document' });
+  }
 });
 
 export default router;

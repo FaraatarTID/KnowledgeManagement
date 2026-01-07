@@ -139,6 +139,22 @@ export class DriveService {
     return channel.data;
   }
 
+  async getFileMetadata(fileId: string): Promise<drive_v3.Schema$File | null> {
+    if (this.isMock || !this.drive) {
+      return { id: fileId, name: 'Mock File.pdf', mimeType: 'application/pdf' };
+    }
+    try {
+      const response = await this.drive.files.get({
+        fileId: fileId,
+        fields: 'id, name, mimeType, webViewLink, modifiedTime, owners'
+      });
+      return response.data;
+    } catch (e) {
+      console.error(`DriveService: Failed to get metadata for ${fileId}`, e);
+      return null;
+    }
+  }
+
   async checkPermission(fileId: string, userEmail: string): Promise<boolean> {
     if (this.isMock || !this.drive) return true;
     try {
@@ -151,6 +167,17 @@ export class DriveService {
       );
     } catch (e) {
       return false;
+    }
+  }
+
+  async checkHealth(): Promise<{ status: 'OK' | 'ERROR'; message?: string }> {
+    if (this.isMock || !this.drive) return { status: 'OK', message: 'Mock Mode' };
+    try {
+      // Test by listing root folder (just 1 file)
+      await this.drive.files.list({ pageSize: 1 });
+      return { status: 'OK', message: 'Connected to Google Drive' };
+    } catch (e: any) {
+      return { status: 'ERROR', message: `Drive Error: ${e.message}` };
     }
   }
 }

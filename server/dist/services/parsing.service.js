@@ -24,20 +24,43 @@ export class ParsingService {
      * Chunks content into smaller pieces for RAG.
      */
     chunkContent(content, chunkSize = 1000) {
-        // Simple chunking by paragraph or fixed size for now
-        const paragraphs = content.split('\n\n');
         const chunks = [];
+        // Normalize newlines
+        const text = content.replace(/\r\n/g, '\n');
+        // Split by paragraphs first (double newline)
+        const paragraphs = text.split(/\n\s*\n/);
         let currentChunk = '';
-        for (const paragraph of paragraphs) {
-            if ((currentChunk + paragraph).length > chunkSize && currentChunk !== '') {
+        const pushChunk = () => {
+            if (currentChunk.trim().length > 0) {
                 chunks.push(currentChunk.trim());
                 currentChunk = '';
             }
-            currentChunk += paragraph + '\n\n';
+        };
+        for (const paragraph of paragraphs) {
+            // If paragraph is small enough to fit in current chunk
+            if (currentChunk.length + paragraph.length + 2 <= chunkSize) {
+                currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
+                continue;
+            }
+            // If paragraph causes overflow, push current chunk
+            pushChunk();
+            // If paragraph itself is larger than chunk size, split by sentences
+            if (paragraph.length > chunkSize) {
+                // Regex to split by sentence endings (. ! ?), keeping the punctuation
+                const sentences = paragraph.match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) || [paragraph];
+                for (const sentence of sentences) {
+                    if (currentChunk.length + sentence.length > chunkSize) {
+                        pushChunk();
+                    }
+                    currentChunk += sentence;
+                }
+            }
+            else {
+                // Paragraph fits in a fresh chunk
+                currentChunk = paragraph;
+            }
         }
-        if (currentChunk.trim() !== '') {
-            chunks.push(currentChunk.trim());
-        }
+        pushChunk();
         return chunks;
     }
 }

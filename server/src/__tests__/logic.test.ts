@@ -22,7 +22,7 @@ describe('Core Logic: ParsingService', () => {
         
         expect(chunks.length).toBeGreaterThan(1);
         // Ensure no chunk exceeds limit (approx)
-        expect(chunks[0].length).toBeLessThanOrEqual(100); // Strict limit depends on implementation
+        expect(chunks[0]!.length).toBeLessThanOrEqual(100); // Strict limit depends on implementation
     });
 
     it('should extract metadata from YAML', () => {

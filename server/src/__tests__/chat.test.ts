@@ -12,11 +12,11 @@ describe('Chat API (Core Loop)', () => {
             .send({ email: 'david@aikb.com', password: 'admin123' });
         
         const cookies = res.header['set-cookie'];
-        if (cookies && cookies[0]) {
-            token = cookies[0].split(';')[0].split('=')[1];
+        if (cookies && Array.isArray(cookies) && cookies[0]) {
+            token = cookies[0].split(';')[0].split('=')[1] || '';
         } else {
              // Fallback for demo mode if cookies fail logic (shouldn't happen with fix)
-             token = res.body.token;
+             token = res.body.token || '';
         }
     });
 

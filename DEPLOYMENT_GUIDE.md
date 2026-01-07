@@ -2,6 +2,37 @@
 
 This guide explains how to take the AIKB app from your computer and put it on the internet so your whole company can use it securely.
 
+### 🔑 Admin Bootstrapping
+
+On the first run with a fresh database, the system automatically creates the initial Admin user. By default, it uses:
+
+- **Email**: `alice@aikb.com`
+- **Password**: `admin123`
+
+You can customize this in your `.env`:
+
+```env
+INITIAL_ADMIN_EMAIL=your-real-email@domain.com
+INITIAL_ADMIN_PASSWORD=your-secure-password
+INITIAL_ADMIN_NAME=System Administrator
+```
+
+> [!IMPORTANT]
+> Change the password in the "Access Control" tab immediately after your first login.
+
+---
+
+### 🌐 Google Cloud Integration (RAG Data)
+
+The system uses a **Service Account** to index your documents.
+
+1. Place your Google Cloud Service Account JSON key in `/server/data/google-key.json`.
+2. Add the path to `.env`: `GOOGLE_AUTH_KEY_PATH=./data/google-key.json`.
+3. Share your Google Drive folders with the `client_email` found inside that JSON file.
+
+> [!NOTE]
+> Application Login is NOT Google OAuth. It is an internal Email/Password system. The "Google Account" refers solely to the Data Access layer.
+
 ---
 
 ## 🛠️ Step 1: Prepare the Server

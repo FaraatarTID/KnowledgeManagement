@@ -17,5 +17,9 @@ export declare class GeminiService {
         text: string;
         usageMetadata: import("@google-cloud/vertexai").UsageMetadata | undefined;
     }>;
+    checkHealth(): Promise<{
+        status: 'OK' | 'ERROR';
+        message?: string;
+    }>;
 }
 //# sourceMappingURL=gemini.service.d.ts.map

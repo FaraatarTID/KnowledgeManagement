@@ -13,10 +13,10 @@ describe('Upload API Security', () => {
             .send({ email: 'alice@aikb.com', password: 'admin123', type: 'admin' }); // Use legacy demo login for easy token
         
         const cookies = res.header['set-cookie'];
-        if (!cookies || !cookies[0]) {
+        if (!cookies || !Array.isArray(cookies) || !cookies[0]) {
             throw new Error(`Login failed: ${res.status} ${JSON.stringify(res.body)}`);
         }
-        token = cookies[0].split(';')[0].split('=')[1];
+        token = cookies[0].split(';')[0].split('=')[1] || '';
     });
 
     it('should reject .exe files', async () => {

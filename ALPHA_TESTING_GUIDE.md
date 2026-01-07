@@ -33,9 +33,10 @@ To confirm that the "Brain" of the system works:
 
 ### 1. Authentication Check
 
-- [ ] **Login as Admin**: Click "Admin Console". Should verify success (see Dashboard).
+- [ ] **Unified Login**: Use the new email/password form for both roles.
+- [ ] **Login as Admin**: Enter `alice@aikb.com` / `admin123`. Verify access to Admin Console.
 - [ ] **Logout**: Click Profile > Logout. Should return to Login screen.
-- [ ] **Login as Viewer**: Click "Employee Login". Should verify success (limited view).
+- [ ] **Login as Viewer**: Enter `david@aikb.com` / `admin123`. Verify limited view (Chat only).
 
 ### 2. Manual Upload (The "Speed" Test)
 
@@ -60,8 +61,42 @@ _Log in as **Admin** or **Viewer**._
   - Does it cite the **Source** (the file name)?
 - [ ] **Context Test**: Ask a follow-up.
   - _Example: "Does this apply to contractors too?"_ (It should remember previous context).
+- [ ] **General RAG Test**:
+  - Go to **Chat**.
+  - Ask: "What is our policy on remote work?"
+  - Verify the AI answers and cites sources from the library.
 
-### 4. Security & Permissions
+### 4. Smart Organization (The "Automation" Test)
+
+- [ ] **Upload File with Keyword**:
+  - Upload a file named `security_test_1.pdf`.
+  - Go to **Library**.
+- [ ] **Verify Department**: Does the system automatically assign it to the **IT** department?
+- [ ] **Upload with YAML (Advanced)**:
+  - Upload a `.txt` file starting with `--- department: Finance ---`.
+  - Verify the **Finance** department is assigned.
+
+### 5. Security Clearance (Tiered Access)
+
+- [ ] **Restricted Document Test**:
+  - As Admin, change a document's sensitivity to `RESTRICTED`.
+  - Log in as an **Employee (Viewer)** in the same department.
+  - Ask the Chat about that document.
+- [ ] **Verify Denial**: Does the AI refuse or state it has no information? (It should not "see" the restricted file).
+- [ ] **Elevated Access**:
+  - Change the Employee's role to **Manager**.
+  - Ask the Chat again.
+- [ ] **Verify Access**: Does the AI now answer correctly?
+
+### 6. User Management (Admin Only)
+
+- [ ] **Navigate**: In Admin Console, go to **Access Control**.
+- [ ] **Create User**: Click **Add User**.
+- [ ] **Form**: Create a test user: `test@aikb.com` / `pass123` / Role: `VIEWER`.
+- [ ] **Verify Login**: Log out and try to log in with the new `test@aikb.com` account.
+- [ ] **Verify Permissions**: Verify the new user can Chat but NOT access the Admin Console.
+
+### 5. Security & Permissions
 
 - [ ] **Viewer Upload Block**:
   - Log in as **David (Viewer)**.

@@ -78,16 +78,31 @@ export class VectorService {
     // Perform exact Cosine Similarity
     const queryVec = params.embedding;
     
+    // Map with scores
+    const sensitivityMap: Record<string, number> = { 'PUBLIC': 0, 'INTERNAL': 1, 'CONFIDENTIAL': 2, 'RESTRICTED': 3, 'EXECUTIVE': 4 };
+    const roleMap: Record<string, number> = { 'VIEWER': 1, 'EDITOR': 2, 'MANAGER': 3, 'ADMIN': 4 };
+    
+    const userRole = (params.filters?.role || 'VIEWER').toUpperCase();
+    const userClearance = roleMap[userRole] || 1;
+
     // Filter first
     let filteredVectors = this.vectors;
     if (params.filters) {
       filteredVectors = this.vectors.filter(vec => {
-        // If vector has a department, it MUST match the user's department UNLESS user is ADMIN
-        if (vec.metadata.department && params.filters?.department) {
+        // 1. Sensitivity Clearance Check
+        const docSensitivity = (vec.metadata.sensitivity || 'INTERNAL').toUpperCase();
+        const docRequiredLevel = sensitivityMap[docSensitivity] ?? 1;
+
+        if (userClearance < docRequiredLevel) {
+          return false;
+        }
+
+        // 2. Department check (Admins bypass department check)
+        if (userRole !== 'ADMIN' && vec.metadata.department && params.filters?.department) {
            const vecDept = vec.metadata.department.toLowerCase();
            const userDept = params.filters.department.toLowerCase();
            
-           if (params.filters.role !== 'ADMIN' && vecDept !== userDept) {
+           if (vecDept !== userDept) {
              return false;
            }
         }
@@ -204,5 +219,17 @@ export class VectorService {
     
     if (normA === 0 || normB === 0) return 0;
     return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  async checkHealth(): Promise<{ status: 'OK' | 'ERROR'; message?: string }> {
+    if (this.isMock) return { status: 'OK', message: 'Mock Mode' };
+    try {
+      if (fs.existsSync(this.DATA_FILE)) {
+        return { status: 'OK', message: `${this.vectors.length} vectors` };
+      }
+      return { status: 'ERROR', message: 'Data file missing' };
+    } catch (e: any) {
+      return { status: 'ERROR', message: e.message };
+    }
   }
 }
