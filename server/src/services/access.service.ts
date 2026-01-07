@@ -29,7 +29,10 @@ export class AccessControlEngine {
     // 2. Department Check
     // Admins bypass department checks.
     if (userRole.toUpperCase() !== 'ADMIN' && documentDepartment && documentDepartment !== 'General') {
-      if (documentDepartment.toLowerCase() !== userDepartment.toLowerCase()) {
+      const normalizedDocDept = documentDepartment.trim().toLowerCase();
+      const normalizedUserDept = userDepartment.trim().toLowerCase();
+      
+      if (normalizedDocDept !== normalizedUserDept) {
         return { allowed: false, reason: `Restricted to ${documentDepartment} department` };
       }
     }

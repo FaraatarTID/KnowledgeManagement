@@ -20,7 +20,7 @@ api.interceptors.response.use(
     // If 401, redirect to login unless we are already there
     if (error.response?.status === 401) {
        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-         // Clear user data but NOT token (browser handles cookie)
+         // Clear user data (browser handles cookie)
          localStorage.removeItem('user');
          window.location.href = '/login?expired=true';
        }
@@ -68,6 +68,15 @@ export const authApi = {
         window.location.href = '/login';
       }
     }
+  },
+  getMe: async () => {
+    const response = await api.get('/auth/me');
+    if (response.data) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user', JSON.stringify(response.data));
+      }
+    }
+    return response.data;
   }
 };
 

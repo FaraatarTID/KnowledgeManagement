@@ -104,50 +104,7 @@ router.get('/ping', (req, res) => {
   res.json({ message: 'pong', timestamp: new Date().toISOString() });
 });
 
-router.post('/upload', authMiddleware, requireRole('ADMIN', 'MANAGER'), upload.single('file'), (req: any, res) => {
-  // Security: Multer middleware has already validated file type and size
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
-  
-  // TODO: Trigger SyncService processing for local file
-  // For now, return success to confirm upload security
-  res.json({ 
-    status: 'success', 
-    message: 'File uploaded successfully', 
-    file: {
-      filename: req.file.filename,
-      mimetype: req.file.mimetype,
-      size: req.file.size
-    }
-  });
-});
-
-// --- CONFIG ROUTES ---
-
-router.get('/config', authMiddleware, (req: any, res) => {
-  res.json(configService.getConfig());
-});
-
-router.patch('/config/categories', authMiddleware, (req: any, res) => {
-  if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
-  const { categories } = req.body;
-  if (!Array.isArray(categories)) return res.status(400).json({ error: 'Invalid categories format' });
-  configService.updateCategories(categories);
-  res.json({ success: true, categories: configService.getConfig().categories });
-});
-
-router.patch('/config/departments', authMiddleware, (req: any, res) => {
-  if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
-  const { departments } = req.body;
-  if (!Array.isArray(departments)) return res.status(400).json({ error: 'Invalid departments format' });
-  configService.updateDepartments(departments);
-  res.json({ success: true, departments: configService.getConfig().departments });
-});
-
-// --- MANUAL UPLOAD ROUTE ---
-
-router.post('/upload', authMiddleware, upload.single('file'), async (req: any, res) => {
+router.post('/upload', authMiddleware, requireRole('ADMIN', 'MANAGER'), upload.single('file'), async (req: any, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const { category, department, title } = req.body;
@@ -158,17 +115,16 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: any, r
     // 0. Upload to Google Drive
     const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
     let driveFileId = docId;
-    let webViewLink = '#';
+    // We'll assume the sync service or a separate call gets the link, 
+    // or we can live with # for manual until next sync.
 
-    if (driveFolderId) {
+    if (driveFolderId && driveFolderId !== 'mock-folder') {
       driveFileId = await driveService.uploadFile(
         driveFolderId,
         fileName,
         req.file.path,
         req.file.mimetype
       );
-      // We'll assume the sync service or a separate call gets the link, 
-      // or we can live with # for manual until next sync.
     }
 
     // 1. Persist Metadata Overrides (Stability Feature)
@@ -198,7 +154,12 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: any, r
     res.json({ 
       success: true, 
       message: 'File uploaded, saved to Drive, and indexed successfully',
-      docId: driveFileId 
+      docId: driveFileId,
+      file: {
+        filename: req.file.filename,
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      }
     });
   } catch (e) {
     console.error('Upload processing failed:', e);
@@ -209,6 +170,28 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: any, r
       fs.unlinkSync(req.file.path);
     }
   }
+});
+
+// --- CONFIG ROUTES ---
+
+router.get('/config', authMiddleware, (req: any, res) => {
+  res.json(configService.getConfig());
+});
+
+router.patch('/config/categories', authMiddleware, (req: any, res) => {
+  if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
+  const { categories } = req.body;
+  if (!Array.isArray(categories)) return res.status(400).json({ error: 'Invalid categories format' });
+  configService.updateCategories(categories);
+  res.json({ success: true, categories: configService.getConfig().categories });
+});
+
+router.patch('/config/departments', authMiddleware, (req: any, res) => {
+  if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
+  const { departments } = req.body;
+  if (!Array.isArray(departments)) return res.status(400).json({ error: 'Invalid departments format' });
+  configService.updateDepartments(departments);
+  res.json({ success: true, departments: configService.getConfig().departments });
 });
 
 // --- SYNC ROUTE ---
@@ -661,15 +644,7 @@ router.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'aikb-api' });
 });
 
-router.get('/history', authMiddleware, async (req, res) => {
-  try {
-    const history = await historyService.getHistory();
-    res.json(history);
-  } catch (error) {
-    console.error('Failed to fetch history:', error);
-    res.status(500).json({ error: 'Failed to fetch activity log' });
-  }
-});
+// Redundant /history route removed (already defined with requireRole at line 402)
 
 router.post('/documents/:id/sync', authMiddleware, async (req: any, res) => {
   const { id } = req.params;

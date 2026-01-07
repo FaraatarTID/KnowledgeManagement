@@ -40,15 +40,20 @@ export default function Home() {
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
-      
-      if (!token || !storedUser) {
-        // Redirect to login instead of auto-login
+      try {
+        const storedUser = localStorage.getItem('user');
+        if (!storedUser) {
+          router.push('/login');
+          return;
+        }
+
+        // Verify session with server
+        const freshUser = await authApi.getMe();
+        setUser(freshUser);
+      } catch (e) {
+        console.error('Auth check failed', e);
         router.push('/login');
-        return;
       }
-      setUser(JSON.parse(storedUser));
     };
     initAuth();
   }, []);
@@ -190,8 +195,8 @@ export default function Home() {
         {/* Input Area */}
         <div className="p-8 bg-gradient-to-t from-[#F8FAFC] via-[#F8FAFC] to-transparent">
           <div className="max-w-4xl mx-auto relative group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-purple-600 rounded-[28px] blur opacity-10 group-focus-within:opacity-20 transition-all duration-500"></div>
-            <div className="relative bg-white border border-[#E2E8F0] rounded-[24px] shadow-xl shadow-blue-500/5 group-focus-within:border-blue-500 transition-all">
+            <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-[28px] blur-md opacity-0 group-focus-within:opacity-20 transition-all duration-500"></div>
+            <div className="relative bg-white border border-[#E2E8F0] rounded-[24px] shadow-xl shadow-blue-500/5 transition-all outline-none">
               <input 
                 type="text" 
                 value={input}
@@ -199,16 +204,15 @@ export default function Home() {
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="Ask me anything..."
                 disabled={isLoading}
-                className="w-full px-8 py-6 bg-transparent border-none focus:ring-0 text-lg text-[#0F172A] placeholder-[#94A3B8] disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Ask a question to the knowledge base"
+                className="w-full px-8 py-6 bg-transparent border-none focus:ring-2 focus:ring-blue-500/20 rounded-[24px] text-lg text-[#0F172A] placeholder-[#94A3B8] disabled:cursor-not-allowed disabled:opacity-50"
               />
               <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                <button className="p-2 text-[#94A3B8] hover:bg-gray-50 rounded-lg transition-colors">
-                  <PlusCircle size={24} />
-                </button>
                 <button 
                   onClick={handleSend}
                   disabled={!input.trim() || isLoading}
-                  className="bg-[#0F172A] text-white p-3 rounded-2xl hover:bg-blue-600 transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:grayscale"
+                  aria-label="Send message"
+                  className="bg-[#0F172A] text-white p-3 rounded-2xl hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:grayscale"
                 >
                   <Send size={24} />
                 </button>

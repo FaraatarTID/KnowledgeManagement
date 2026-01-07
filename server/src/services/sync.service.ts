@@ -91,29 +91,38 @@ export class SyncService {
     // 5. Chunk using ParsingService (paragraph-aware) or fallback
     const chunks = this.parsingService.chunkContent(cleanContent, 1000);
 
+    // 6. Embed & Prepare Upsert (Parallel with Concurrency Control)
+    // We'll process chunks in batches of 5 to avoid hitting Rate Limits while speeding up indexing.
+    const BATCH_SIZE = 5;
     const itemsToUpsert: any[] = [];
 
-    // 6. Embed & Prepare Upsert
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      if (!chunk) continue;
-      const embedding = await this.geminiService.generateEmbedding(chunk);
-      
-      itemsToUpsert.push({
-        id: `${file.id}_${i}`,
-        values: embedding,
-        metadata: {
-          docId: file.id,
-          title: finalTitle,
-          text: chunk,
-          link: file.webViewLink || '#',
-          mimeType: file.mimeType,
-          department: finalDepartment,
-          sensitivity: finalSensitivity,
-          category: finalCategory,
-          modifiedAt: file.modifiedTime || new Date().toISOString(),
-          owner: metadata.owner || file.owners?.[0]?.emailAddress
-        }
+    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+      const batch = chunks.slice(i, i + BATCH_SIZE);
+      const batchEmbeddings = await Promise.all(
+        batch.map(chunk => this.geminiService.generateEmbedding(chunk))
+      );
+
+      batchEmbeddings.forEach((embedding, index) => {
+        const chunkIndex = i + index;
+        const chunk = batch[index];
+        if (!chunk) return;
+
+        itemsToUpsert.push({
+          id: `${file.id}_${chunkIndex}`,
+          values: embedding,
+          metadata: {
+            docId: file.id,
+            title: finalTitle,
+            text: chunk,
+            link: file.webViewLink || '#',
+            mimeType: file.mimeType,
+            department: finalDepartment,
+            sensitivity: finalSensitivity,
+            category: finalCategory,
+            modifiedAt: file.modifiedTime || new Date().toISOString(),
+            owner: metadata.owner || file.owners?.[0]?.emailAddress
+          }
+        });
       });
     }
 

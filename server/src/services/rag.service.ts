@@ -67,15 +67,21 @@ export class RAGService {
       // SECURITY: Redact PII before sending to LLM
       text = this.redactionService.redactPII(text);
       
-      if (currentLength + text.length > MAX_CONTEXT_CHARS) {
-        const remaining = MAX_CONTEXT_CHARS - currentLength;
-        if (remaining > 0) {
+      const sourceBlock = `SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${text}`;
+      
+      // LOGICAL FIX: Chunk-aware truncation.
+      // If adding this chunk exceeds limit, we stop. We don't want partial chunks confusing the LLM.
+      if (currentLength + sourceBlock.length > MAX_CONTEXT_CHARS) {
+        // Exception: If it's the first result and it's already too big, we HAVE to truncate or we have no context.
+        if (context.length === 0) {
+           const remaining = MAX_CONTEXT_CHARS;
            context.push(`SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${text.substring(0, remaining)}...[TRUNCATED]`);
         }
         break; 
       }
-      context.push(`SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${text}`);
-      currentLength += text.length;
+      
+      context.push(sourceBlock);
+      currentLength += sourceBlock.length;
     }
 
     // 5. Generate response with Gemini
