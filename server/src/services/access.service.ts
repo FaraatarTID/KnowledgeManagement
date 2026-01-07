@@ -65,9 +65,10 @@ export class AuditService {
     query?: string;
     granted: boolean;
     reason?: string;
+    metadata?: any; // New: For citations / sensitivity levels
   }) {
     if (this.isDemoMode || !this.supabase) {
-      console.log(`[AUDIT] ${new Date().toISOString()}: ${entry.userId} performed ${entry.action} on ${entry.resourceId || 'N/A'}. Granted: ${entry.granted}. Reason: ${entry.reason || 'N/A'}`);
+      console.log(`[AUDIT] ${new Date().toISOString()}: ${entry.userId} performed ${entry.action} on ${entry.resourceId || 'N/A'}. Granted: ${entry.granted}. Metadata: ${JSON.stringify(entry.metadata || {})}`);
       return;
     }
 
@@ -81,6 +82,7 @@ export class AuditService {
           query: entry.query,
           granted: entry.granted,
           reason: entry.reason,
+          metadata: entry.metadata, // NEW: citations
           created_at: new Date().toISOString()
         }]);
 

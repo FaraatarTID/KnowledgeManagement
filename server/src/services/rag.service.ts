@@ -84,39 +84,39 @@ export class RAGService {
       currentLength += sourceBlock.length;
     }
 
+    // STRATEGIC FIX: Capture citations for Audit log
+    const citations = searchResults.map(r => ({
+      id: (r.metadata as any).docId,
+      title: (r.metadata as any).title,
+      sensitivity: (r.metadata as any).sensitivity
+    }));
+
     // 5. Generate response with Gemini
-    const response = await this.geminiService.queryKnowledgeBase({
+    const { text, usageMetadata } = await this.geminiService.queryKnowledgeBase({
       query,
       context,
       userProfile,
       history
     });
 
-    // Handle Ghost Files
-    // Filter out undefined IDs to ensure valid sources
-    const validSources = searchResults
-      .map(res => ({
-        id: res.id,
-        docId: res.metadata.docId,
-        title: res.metadata.title,
-        score: res.score,
-      }))
-      .filter(s => s.docId && s.id);
-
-    // 6. Audit: Log successful query
+    // 6. Audit Logging (Improved with Citations)
     await this.auditService.log({
-      userId,
+      userId: userId || 'anonymous',
       action: 'RAG_QUERY',
-      resourceId: validSources.map(s => s.docId).join(','),
       query,
       granted: true,
-      reason: `Retrieved ${validSources.length} sources`
+      resourceId: citations[0]?.id,
+      metadata: {
+        citations,
+        usage: usageMetadata,
+        sourceCount: searchResults.length
+      }
     });
 
     return {
-      answer: response.text,
-      sources: validSources,
-      usage: response.usageMetadata
+      answer: text,
+      sources: citations,
+      usage: usageMetadata
     };
   }
 }

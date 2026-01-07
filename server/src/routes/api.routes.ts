@@ -194,6 +194,39 @@ router.post('/upload', authMiddleware, requireRole('ADMIN', 'MANAGER'), upload.s
   }
 });
 
+// --- SYSTEM MONITORING ---
+router.get('/system/health', authMiddleware, requireRole('ADMIN'), async (req, res) => {
+  const geminiHealth = await geminiService.checkHealth();
+  const driveHealth = await driveService.checkHealth();
+  const vectorCount = vectorService.getVectorCount();
+
+  res.json({
+    status: 'online',
+    timestamp: new Date().toISOString(),
+    services: {
+      gemini: geminiHealth,
+      drive: driveHealth
+    },
+    vectors: {
+      count: vectorCount
+    }
+  });
+});
+
+router.get('/system/sync-status', authMiddleware, requireRole('ADMIN'), (req, res) => {
+  const STATUS_FILE = path.join(process.cwd(), 'data', 'sync_status.json');
+  try {
+    if (fs.existsSync(STATUS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(STATUS_FILE, 'utf-8'));
+      res.json(data);
+    } else {
+      res.json({});
+    }
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to read sync status' });
+  }
+});
+
 // --- CONFIG ROUTES ---
 
 router.get('/config', authMiddleware, (req: any, res) => {

@@ -5,6 +5,8 @@ import { ParsingService } from './parsing.service.js';
 import { HistoryService } from './history.service.js';
 import { LocalMetadataService } from './localMetadata.service.js';
 import { ExtractionService } from './extraction.service.js';
+import fs from 'fs';
+import path from 'path';
 
 export class SyncService {
   private parsingService: ParsingService;
@@ -52,7 +54,21 @@ export class SyncService {
     return { status: 'success', processed: processedRequestCount };
   }
 
-  async indexFile(file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }) {
+  async indexFile(file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }, initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string }): Promise<string> {
+    try {
+      return await this._doIndexFile(file, initialMetadata);
+    } catch (e: any) {
+      await this.updateSyncStatus(file.id, {
+        status: 'FAILED',
+        message: e.message,
+        lastSync: new Date().toISOString(),
+        fileName: file.name
+      });
+      throw e;
+    }
+  }
+
+  private async _doIndexFile(file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }, initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string }): Promise<string> {
     console.log(`SyncService: Indexing ${file.name}...`);
     
     // 3. Extract text
@@ -76,7 +92,7 @@ export class SyncService {
        textContent = `Filename: ${file.name}\nType: ${file.mimeType}`; 
     }
 
-    if (!textContent) return;
+    if (!textContent) return file.id;
 
     // 4. Extract metadata from YAML frontmatter (if present)
     const { metadata, cleanContent } = this.parsingService.extractMetadata(textContent);
@@ -135,7 +151,38 @@ export class SyncService {
     });
 
     if (itemsToUpsert.length > 0) {
-       await this.vectorService.upsertVectors(itemsToUpsert);
+      // Finalize indexing
+      await this.vectorService.upsertVectors(itemsToUpsert);
+      
+      // STRATEGIC FIX: Log Sync Success to Status Tracking
+      await this.updateSyncStatus(file.id, {
+        status: 'SUCCESS',
+        message: `Successfully indexed ${chunks.length} chunks`,
+        lastSync: new Date().toISOString(),
+        fileName: file.name
+      });
+    }
+
+    return file.id;
+  }
+
+  private async updateSyncStatus(docId: string, status: any) {
+    const STATUS_FILE = path.join(process.cwd(), 'data', 'sync_status.json');
+    try {
+      const dataDir = path.dirname(STATUS_FILE);
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      
+      let data: Record<string, any> = {};
+      if (fs.existsSync(STATUS_FILE)) {
+        data = JSON.parse(fs.readFileSync(STATUS_FILE, 'utf-8'));
+      }
+      
+      data[docId] = { ...status, updatedAt: new Date().toISOString() };
+      fs.writeFileSync(STATUS_FILE, JSON.stringify(data, null, 2));
+    } catch (e) {
+      console.error('SyncService: Failed to update sync status', e);
     }
   }
 

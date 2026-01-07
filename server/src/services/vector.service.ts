@@ -105,6 +105,10 @@ export class VectorService {
     if (this.pendingWrite) await this.pendingWrite;
   }
 
+  getVectorCount(): number {
+    return this.vectors.length;
+  }
+
   async similaritySearch(params: {
     embedding: number[];
     topK: number;

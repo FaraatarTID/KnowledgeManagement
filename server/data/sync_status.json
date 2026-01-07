@@ -1,0 +1,16 @@
+{
+  "manual-1767780952206": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks",
+    "lastSync": "2026-01-07T10:15:52.230Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-07T10:15:52.230Z"
+  },
+  "manual-1767780952295": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks",
+    "lastSync": "2026-01-07T10:15:52.320Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-07T10:15:52.321Z"
+  }
+}

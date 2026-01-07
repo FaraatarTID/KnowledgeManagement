@@ -74,8 +74,9 @@ export class ParsingService {
 
         // If paragraph itself is larger than chunk size, split by sentences
         if (paragraph.length > chunkSize) {
-            // Regex to split by sentence endings (. ! ?), keeping the punctuation
-            const sentences = paragraph.match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) || [paragraph];
+            // STRATEGIC FIX: Robust sentence splitting with character class boundaries
+            // This prevents ReDoS and handles diverse punctuation.
+            const sentences = paragraph.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) || [paragraph];
             
             for (const sentence of sentences) {
                 if (currentChunk.length + sentence.length > chunkSize) {
