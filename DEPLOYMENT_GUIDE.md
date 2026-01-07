@@ -87,6 +87,9 @@ GOOGLE_DRIVE_FOLDER_ID=...
 # Database (Supabase) - REQUIRED for production users
 SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
+
+# Model Selection: Gemini 2.5 Flash is recommended for the 100k context window
+GEMINI_MODEL=gemini-2.5-flash-lite-001
 ```
 
 ### 2. Initialize Database (Supabase)

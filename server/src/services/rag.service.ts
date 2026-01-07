@@ -29,15 +29,20 @@ export class RAGService {
     // 2. Vector similarity search with access control
     const searchResults = await this.vectorService.similaritySearch({
       embedding: queryEmbedding,
-      topK: 5,
+      topK: 10, // Increased from 5 to 10 for better depth
       filters: {
         department: userProfile.department,
         role: userProfile.role
       }
     });
 
-    // 3. Build context from results
-    if (searchResults.length === 0) {
+    // 3. Filter by Similarity Threshold
+    // If the best match score is too low (e.g. < 0.60), we assume it's "noise" and return early.
+    // This is a HARD GATE against hallucination on irrelevant data.
+    const MIN_SIMILARITY_SCORE = 0.60;
+    const relevantResults = searchResults.filter(res => (res as any).score >= MIN_SIMILARITY_SCORE);
+
+    if (relevantResults.length === 0) {
       // Audit: Log query with no results
       await this.auditService.log({
         userId,
@@ -56,12 +61,12 @@ export class RAGService {
 
     // 4. Build context from results with Token Cap
     // Limit total context size to prevent token exhaustion/cost spikes.
-    // Assuming ~4 chars per token, 20,000 chars is ~5k tokens, safe for Gemini Flash.
-    const MAX_CONTEXT_CHARS = 20000;
+    // Increased from 20k to 100k to prevent "oversimplification" by providing full document nuances.
+    const MAX_CONTEXT_CHARS = 100000;
     let currentLength = 0;
     const context: string[] = [];
 
-    for (const res of searchResults) {
+    for (const res of relevantResults) {
       let text = res.metadata.text || '';
       
       // SECURITY: Redact PII before sending to LLM
@@ -85,7 +90,7 @@ export class RAGService {
     }
 
     // STRATEGIC FIX: Capture citations for Audit log
-    const citations = searchResults.map(r => ({
+    const citations = relevantResults.map(r => ({
       id: (r.metadata as any).docId,
       title: (r.metadata as any).title,
       sensitivity: (r.metadata as any).sensitivity
@@ -99,7 +104,10 @@ export class RAGService {
       history
     });
 
-    // 6. Audit Logging (Improved with Citations)
+    // --- INTEGRITY ENGINE: Post-Generation Verification ---
+    const integrityResults = this.verifyIntegrity(text, context);
+
+    // 6. Audit Logging (Improved with Integrity Metadata)
     await this.auditService.log({
       userId: userId || 'anonymous',
       action: 'RAG_QUERY',
@@ -109,14 +117,43 @@ export class RAGService {
       metadata: {
         citations,
         usage: usageMetadata,
-        sourceCount: searchResults.length
+        sourceCount: relevantResults.length,
+        integrity: integrityResults
       }
     });
 
     return {
       answer: text,
       sources: citations,
-      usage: usageMetadata
+      usage: usageMetadata,
+      integrity: integrityResults
+    };
+  }
+
+  /**
+   * Verifies the AI's reported quotes against the actual retrieved context.
+   */
+  private verifyIntegrity(aiText: string, searchContext: string[]): any {
+    const quotes = aiText.match(/\[QUOTE\]: "(.*?)"/g) || [];
+    const verifiedQuotes = quotes.map(q => {
+      const quoteText = q.replace('[QUOTE]: "', '').replace(/"$/, '');
+      // Check if this quote exists in ANY of the source blocks
+      const exists = searchContext.some(ctx => ctx.includes(quoteText));
+      return { quote: quoteText, verified: exists };
+    });
+
+    const confidenceMatch = aiText.match(/\[CONFIDENCE\]: (High|Medium|Low)/i);
+    const confidence = confidenceMatch ? confidenceMatch[1] : 'Unknown';
+
+    const hallucinatedQuoteCount = verifiedQuotes.filter(v => !v.verified).length;
+    const isCompromised = hallucinatedQuoteCount > 0;
+
+    return {
+      confidence,
+      isVerified: !isCompromised,
+      hallucinatedQuoteCount,
+      verifiedQuoteCount: verifiedQuotes.length - hallucinatedQuoteCount,
+      details: verifiedQuotes
     };
   }
 }

@@ -59,14 +59,21 @@ _Log in as **Admin** or **Viewer**._
 - [ ] **Verify Answer**:
   - Is the answer accurate?
   - Does it cite the **Source** (the file name)?
+  - **New Requirement**: Does it include at least one **Direct Quote** from the document?
 - [ ] **Context Test**: Ask a follow-up.
   - _Example: "Does this apply to contractors too?"_ (It should remember previous context).
-- [ ] **General RAG Test**:
-  - Go to **Chat**.
-  - Ask: "What is our policy on remote work?"
-  - Verify the AI answers and cites sources from the library.
 
-### 4. Smart Organization (The "Automation" Test)
+### 4. Precision & Grounding (Anti-Hallucination)
+
+- [ ] **Negative Retrieval Test**: Ask a question that you **know** is not in any of your uploaded docs.
+  - _Example: "What is our company's policy on interplanetary travel?"_
+  - **Verify Resilience**: Does the AI correctly state it doesn't know? (It should NOT make up an answer).
+- [ ] **Literal Test**: Ask a complex question and check if the AI "guesses" intent.
+  - _Example: "What does the CEO think about the new budget?"_ (If the doc only lists budget numbers, the AI should refuse to comment on the CEO's "thoughts").
+- [ ] **Conflict Test**: Upload two docs with slightly different dates for a deadline. Ask the AI: "When is the deadline?"
+  - **Verify Report**: Does it mention that there is conflicting information between the two files?
+
+### 5. Smart Organization (The "Automation" Test)
 
 - [ ] **Upload File with Keyword**:
   - Upload a file named `security_test_1.pdf`.
@@ -76,7 +83,7 @@ _Log in as **Admin** or **Viewer**._
   - Upload a `.txt` file starting with `--- department: Finance ---`.
   - Verify the **Finance** department is assigned.
 
-### 5. Security Clearance (Tiered Access)
+### 6. Security Clearance (Tiered Access)
 
 - [ ] **Restricted Document Test**:
   - As Admin, change a document's sensitivity to `RESTRICTED`.
@@ -88,7 +95,7 @@ _Log in as **Admin** or **Viewer**._
   - Ask the Chat again.
 - [ ] **Verify Access**: Does the AI now answer correctly?
 
-### 6. User Management (Admin Only)
+### 7. User Management (Admin Only)
 
 - [ ] **Navigate**: In Admin Console, go to **Access Control**.
 - [ ] **Create User**: Click **Add User**.
@@ -96,14 +103,14 @@ _Log in as **Admin** or **Viewer**._
 - [ ] **Verify Login**: Log out and try to log in with the new `test@aikb.com` account.
 - [ ] **Verify Permissions**: Verify the new user can Chat but NOT access the Admin Console.
 
-### 5. Security & Permissions
+### 8. Security & Permissions
 
 - [ ] **Viewer Upload Block**:
   - Log in as **David (Viewer)**.
   - Try to find the "Add Resource" button. (It should be missing or disabled).
   - If you try to access `http://localhost:3000/admin`, you should be redirected or blocked.
 
-### 5. Drive Sync (Optional)
+### 9. Drive Sync (Optional)
 
 _Requires Google Drive Setup._
 

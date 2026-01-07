@@ -13,6 +13,10 @@ This is an intelligent "Brain" for your company. It connects to your **Google Dr
   - **Custom Authentication**: Secure login system with role-based access.
   - **Rate Limiting**: Protects against abuse.
   - **Input Validation**: Rejects malicious files (e.g., `.exe` malware).
+- **✅ High-Fidelity Accuracy (Anti-Hallucination)**:
+  - **Strict Grounding**: The AI is forbidden from "hallucinating" or inferring conclusions not found in your text.
+  - **Mandatory Quotes**: Every claim requires a direct supporting quote from your documents.
+  - **Deep Context**: Analyzes up to 100,000 characters per query for maximum nuance.
 - **🚀 Dynamic & Fast**:
   - **Dashboard**: Real-time statistics on document usage.
   - **Manual Uploads**: Upload urgent files directly via the UI for instant indexing.

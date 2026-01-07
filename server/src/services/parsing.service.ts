@@ -43,8 +43,9 @@ export class ParsingService {
 
   /**
    * Chunks content into smaller pieces for RAG.
+   * Includes overlap to prevent "False Interpretations" caused by slicing context mid-sentence.
    */
-  chunkContent(content: string, chunkSize: number = 1000): string[] {
+  chunkContent(content: string, chunkSize: number = 1000, chunkOverlap: number = 200): string[] {
     const chunks: string[] = [];
     
     // Normalize newlines
@@ -56,41 +57,68 @@ export class ParsingService {
     let currentChunk = '';
 
     const pushChunk = () => {
-        if (currentChunk.trim().length > 0) {
-            chunks.push(currentChunk.trim());
-            currentChunk = '';
+        let trimmedResult = currentChunk.trim();
+        if (trimmedResult.length > 0) {
+            chunks.push(trimmedResult);
+            
+            // For overlap, keep the last N characters for the next chunk
+            if (chunkOverlap > 0 && currentChunk.length > chunkOverlap) {
+                currentChunk = currentChunk.substring(currentChunk.length - chunkOverlap);
+            } else {
+                currentChunk = '';
+            }
         }
     };
 
     for (const paragraph of paragraphs) {
-        // If paragraph is small enough to fit in current chunk
-        if (currentChunk.length + paragraph.length + 2 <= chunkSize) {
-            currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
-            continue;
-        }
-
-        // If paragraph causes overflow, push current chunk
-        pushChunk();
-
-        // If paragraph itself is larger than chunk size, split by sentences
+        // If paragraph is larger than chunk size, we need to break it down
         if (paragraph.length > chunkSize) {
-            // STRATEGIC FIX: Robust sentence splitting with character class boundaries
-            // This prevents ReDoS and handles diverse punctuation.
             const sentences = paragraph.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) || [paragraph];
             
-            for (const sentence of sentences) {
-                if (currentChunk.length + sentence.length > chunkSize) {
-                    pushChunk();
+            for (let sentence of sentences) {
+                // If even a single sentence is too large, split by words
+                if (sentence.length > chunkSize) {
+                   const words = sentence.split(/\s+/);
+                   for (const word of words) {
+                       if (word.length > chunkSize) {
+                           // FALLBACK: If a single word is too large, slice it by chars
+                           let remaining = word;
+                           while (remaining.length > 0) {
+                               if (currentChunk.length >= chunkSize) pushChunk();
+                               const take = chunkSize - currentChunk.length;
+                               currentChunk += remaining.substring(0, take);
+                               remaining = remaining.substring(take);
+                               if (remaining.length > 0) pushChunk();
+                           }
+                       } else {
+                           if (currentChunk.length + word.length + 1 > chunkSize) {
+                               pushChunk();
+                           }
+                           currentChunk += (currentChunk ? ' ' : '') + word;
+                       }
+                   }
+                } else {
+                    if (currentChunk.length + sentence.length + 1 > chunkSize) {
+                        pushChunk();
+                    }
+                    currentChunk += (currentChunk ? (currentChunk.endsWith(' ') ? '' : ' ') : '') + sentence;
                 }
-                currentChunk += sentence;
             }
         } else {
-             // Paragraph fits in a fresh chunk
-             currentChunk = paragraph;
+            if (currentChunk.length + paragraph.length + 2 > chunkSize) {
+                pushChunk();
+            }
+            currentChunk += (currentChunk ? (currentChunk.endsWith('\n\n') ? '' : '\n\n') : '') + paragraph;
         }
     }
 
-    pushChunk();
+    // Final push: only if it's longer than just the overlap we carried over
+    if (currentChunk.trim().length > chunkOverlap) {
+        chunks.push(currentChunk.trim());
+    } else if (chunks.length === 0 && currentChunk.trim().length > 0) {
+        // Handle case where total content is smaller than overlap
+        chunks.push(currentChunk.trim());
+    }
     return chunks;
   }
 }

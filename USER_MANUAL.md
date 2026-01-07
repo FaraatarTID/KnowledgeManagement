@@ -183,11 +183,21 @@ The system uses a **Clearance Tier** logic to protect sensitive data. Users can 
 
 > [!TIP] > **Admins** bypass all department restrictions and can access all documents across the entire company.
 
+### 7. AI Grounding & Trust (Anti-Hallucination)
+
+This system is built for **High-Fidelity Accuracy**. The AI agent is designed to prioritize **Accuracy over Confidence**.
+
+- **Machine-Verified Quotes**: The system includes an automated "Integrity Engine" that machine-checks every AI quote against your source documents. If a quote is "invented," it is flagged in the audit logs.
+- **Confidence Levels**: Every AI response starts with an explicit confidence rating (High, Medium, or Low).
+- **Missing Info Breakdown**: The AI will explicitly list exactly what is **missing** from its knowledge for any specific question.
+- **Proactive Clarification**: If your question is vague, the AI will ask for more details instead of guessing.
+- **Verbatim Technical Data**: The AI is strictly forbidden from changing technical keywords, acronyms, or numbers.
+- **Literalism**: The AI avoids "reading between the lines." It only reports what is explicitly written.
+
 ---
 
 ## ❓ Troubleshooting
 
-- **"App closes immediately"**: Did you set `JWT_SECRET` in `.env`? It is required.
 - **"Sync failed"**: Did you share the Drive folder with the Service Account email?
 - **"Vertex AI error"**: Did you enable the API in Google Cloud Console?
 - **"Login failed"**: Check if you are using the correct email/password (alice@aikb.com / admin123).
