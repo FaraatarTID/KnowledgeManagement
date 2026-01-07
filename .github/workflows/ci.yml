@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, 'feature/**' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install & Test server
+        working-directory: ./server
+        run: |
+          npm ci
+          npm test
+
+      - name: Install & Build client
+        working-directory: ./client
+        run: |
+          npm ci
+          npm run build
+          npm run lint
