@@ -121,6 +121,10 @@ const authService = new AuthService();
 const userService = new UserService();
 const chatService = new ChatService();
 
+// Feature flags / runtime toggles
+const SUPPORT_LEGACY_CHAT = process.env.SUPPORT_LEGACY_CHAT !== 'false';
+console.log(`FeatureFlag: SUPPORT_LEGACY_CHAT=${SUPPORT_LEGACY_CHAT}`);
+
 console.log('✅ API Routes: Registering endpoints...');
 
 // SECURITY / RELIABILITY: Graceful Shutdown
