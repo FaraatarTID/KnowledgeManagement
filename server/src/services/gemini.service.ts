@@ -71,6 +71,13 @@ export class GeminiService {
       ? `\n\nConversation History:\n${history.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n')}`
       : '';
 
+    // SECURITY: Sanitize context to prevent "Golden Ticket" prompt injection
+    // We escape XML-like tags that could break out of the <context_data> block
+    const sanitizedContext = context.map(c => 
+      c.replace(/<\/context_data>/gi, '<\\/context_data>')
+       .replace(/<\/([^>]+)>/g, '<\\/$1>')
+    );
+
     const prompt = `You are a knowledgeable AI assistant helping employees find information in the company knowledge base.
 
 User Profile:
@@ -82,7 +89,7 @@ User Query: ${query}${historyText}
 
 Relevant Knowledge Base Context:
 <context_data>
-${context.join('\n\n')}
+${sanitizedContext.join('\n\n')}
 </context_data>
 
 Instructions:

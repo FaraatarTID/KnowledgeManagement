@@ -47,6 +47,12 @@ if (missingVars.length > 0) {
   if (!process.env.GCP_PROJECT_ID) process.env.GCP_PROJECT_ID = 'aikb-mock-project';
 }
 
+// SECURITY: Prevent mock project leak in production
+if (process.env.NODE_ENV === 'production' && process.env.GCP_PROJECT_ID === 'aikb-mock-project') {
+  console.error('❌ FATAL: Using "aikb-mock-project" in production is not allowed.');
+  throw new Error('Invalid GCP_PROJECT_ID for production environment.');
+}
+
 // --- MULTER SETUP (Manual Uploads) ---
 // SECURITY: File upload validation
 const ALLOWED_MIMETYPES = [
@@ -98,6 +104,22 @@ const authService = new AuthService();
 const userService = new UserService();
 
 console.log('✅ API Routes: Registering endpoints...');
+
+// SECURITY / RELIABILITY: Graceful Shutdown
+const shutdown = async () => {
+  console.log('\n--- SHUTDOWN INITIATED ---');
+  try {
+    await vectorService.flush();
+    console.log('✅ All data synced to disk.');
+    process.exit(0);
+  } catch (e) {
+    console.error('❌ Error during shutdown:', e);
+    process.exit(1);
+  }
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 // Public Ping
 router.get('/ping', (req, res) => {

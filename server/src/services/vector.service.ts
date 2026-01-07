@@ -50,17 +50,59 @@ export class VectorService {
 
   // Debounce save operation to prevent hitting disk on every chunk
   private saveTimeout: NodeJS.Timeout | null = null;
+  private pendingWrite: Promise<void> | null = null;
 
-  private async saveVectors() {
-    if (this.saveTimeout) clearTimeout(this.saveTimeout);
+  private async saveVectors(immediate: boolean = false) {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
+    }
 
-    this.saveTimeout = setTimeout(async () => {
+    const doWrite = async () => {
       try {
         await fs.promises.writeFile(this.DATA_FILE, JSON.stringify(this.vectors, null, 2));
       } catch (e) {
         console.error('VectorService: Failed to save vectors', e);
+      } finally {
+        this.pendingWrite = null;
       }
-    }, 1000) as unknown as NodeJS.Timeout; // 1 second debounce
+    };
+
+    if (immediate) {
+       // For metadata critical updates, we block
+       try {
+         fs.writeFileSync(this.DATA_FILE, JSON.stringify(this.vectors, null, 2));
+         console.log('VectorService: Flushed vectors to disk (sync).');
+       } catch (e) {
+         console.error('VectorService: Failed to sync flush vectors', e);
+       }
+       return;
+    }
+
+    if (!this.pendingWrite) {
+      this.saveTimeout = setTimeout(async () => {
+        this.pendingWrite = doWrite();
+        await this.pendingWrite;
+      }, 1000) as unknown as NodeJS.Timeout; // 1 second debounce
+    }
+  }
+
+  /**
+   * Explicitly flush pending changes to disk.
+   */
+  async flush() {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
+      this.pendingWrite = (async () => {
+        try {
+          await fs.promises.writeFile(this.DATA_FILE, JSON.stringify(this.vectors, null, 2));
+        } finally {
+          this.pendingWrite = null;
+        }
+      })();
+    }
+    if (this.pendingWrite) await this.pendingWrite;
   }
 
   async similaritySearch(params: {
@@ -171,7 +213,7 @@ export class VectorService {
     });
 
     if (updatedCount > 0) {
-      await this.saveVectors();
+      await this.saveVectors(true); // Immediate flush for critical metadata
       console.log(`VectorService: Updated metadata for ${updatedCount} chunks of document ${docId}.`);
     }
   }

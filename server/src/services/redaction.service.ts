@@ -22,9 +22,15 @@ export class RedactionService {
    * Basic PII detection and redaction.
    */
   redactPII(content: string): string {
-    // Very basic regex for emails and phone numbers for demonstration
-    let redacted = content.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[EMAIL REDACTED]');
-    redacted = redacted.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, '[PHONE REDACTED]');
+    // Robust email detection (handles common obfuscations like [at] or (dot))
+    let redacted = content.replace(/[a-zA-Z0-9._%+-]+(?:\s*(?:@|\[at\]|\(at\))\s*)[a-zA-Z0-9.-]+(?:\s*(?:\.|\[dot\]|\(dot\))\s*)[a-zA-Z]{2,}/gi, '[EMAIL REDACTED]');
+    
+    // Robust phone detection (supports various formats including international)
+    redacted = redacted.replace(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, '[PHONE REDACTED]');
+    
+    // Placeholder for National IDs / Passport numbers if applicable
+    // redacted = redacted.replace(/\b[A-Z]{1,2}\d{6,9}\b/g, '[ID REDACTED]');
+    
     return redacted;
   }
 }
