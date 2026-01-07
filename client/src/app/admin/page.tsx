@@ -61,7 +61,7 @@ function AdminContent() {
   const [editingDoc, setEditingDoc] = useState<any>(null);
   const [isUpdatingMetadata, setIsUpdatingMetadata] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [editForm, setEditForm] = useState({ title: '', category: '', sensitivity: '' });
+  const [editForm, setEditForm] = useState({ title: '', category: '', sensitivity: '', department: '' });
   const [systemConfig, setSystemConfig] = useState<{ categories: string[], departments: string[] }>({ categories: [], departments: [] });
   const [newCategory, setNewCategory] = useState('');
   const [newDepartment, setNewDepartment] = useState('');
@@ -320,7 +320,8 @@ function AdminContent() {
     setEditForm({
       title: doc.name || '',
       category: doc.category || 'General',
-      sensitivity: doc.sensitivity || 'INTERNAL'
+      sensitivity: doc.sensitivity || 'INTERNAL',
+      department: doc.department || 'General'
     });
   };
 
@@ -452,6 +453,7 @@ function AdminContent() {
                                <tr>
                                  <th scope="col" className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">Name</th>
                                  <th scope="col" className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">Category</th>
+                                 <th scope="col" className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">Department</th>
                                  <th scope="col" className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">Sensitivity</th>
                                  <th scope="col" className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">Status</th>
                                  <th scope="col" className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">Actions</th>
@@ -469,6 +471,11 @@ function AdminContent() {
                                      </div>
                                    </td>
                                    <td className="px-6 py-4 text-sm text-[#64748B]">{doc.category}</td>
+                                   <td className="px-6 py-4">
+                                     <span className={`px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-full`}>
+                                       {doc.department || 'General'}
+                                     </span>
+                                   </td>
                                    <td className="px-6 py-4">
                                      <span className={`px-2 py-1 text-[10px] font-bold rounded-full ${
                                        doc.sensitivity === 'CONFIDENTIAL' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
@@ -849,6 +856,19 @@ function AdminContent() {
                   <option value="INTERNAL">INTERNAL</option>
                   <option value="CONFIDENTIAL">CONFIDENTIAL</option>
                   <option value="RESTRICTED">RESTRICTED</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#64748B] uppercase tracking-wider mb-2">Target Department</label>
+                <select 
+                  value={editForm.department}
+                  onChange={(e) => setEditForm({...editForm, department: e.target.value})}
+                  className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                >
+                  {systemConfig.departments.map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
                 </select>
               </div>
 

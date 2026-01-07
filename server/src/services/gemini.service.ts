@@ -54,16 +54,23 @@ export class GeminiService {
     query: string;
     context: string[];
     userProfile: { name: string; department: string; role: string };
+    history?: { role: 'user' | 'model'; content: string }[];
   }) {
+    const { query, context, userProfile, history = [] } = params;
+
     if (this.isMock) {
+      const historySummary = history.length > 0 ? ` with ${history.length} previous messages` : '';
       return {
-        text: `[MOCK RESPONSE] Using AIKB in Demo Mode.\n\nSince no Google Cloud credentials were provided, I cannot generate a real AI response. However, I can confirm I received your query: "${params.query}"\n\nIn a real deployment, I would synthesize an answer from the ${params.context.length} documents provided.`,
+        text: `[MOCK RESPONSE] Query: "${query}"${historySummary}.\nContext: ${context.length} relevant snippets found.\n\nReady for production data.`,
         usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50, totalTokenCount: 150 }
       };
     }
-
-    const { query, context, userProfile } = params;
     
+    // Format conversation history
+    const historyText = history.length > 0
+      ? `\n\nConversation History:\n${history.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n')}`
+      : '';
+
     const prompt = `You are a knowledgeable AI assistant helping employees find information in the company knowledge base.
 
 User Profile:
@@ -71,7 +78,7 @@ User Profile:
 - Department: ${userProfile.department}
 - Role: ${userProfile.role}
 
-User Query: ${query}
+User Query: ${query}${historyText}
 
 Relevant Knowledge Base Context:
 <context_data>

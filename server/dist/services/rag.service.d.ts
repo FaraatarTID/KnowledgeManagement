@@ -14,6 +14,10 @@ export declare class RAGService {
             department: string;
             role: string;
         };
+        history?: {
+            role: 'user' | 'model';
+            content: string;
+        }[];
     }): Promise<{
         answer: string;
         sources: {

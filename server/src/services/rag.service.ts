@@ -19,8 +19,9 @@ export class RAGService {
     query: string;
     userId: string;
     userProfile: { name: string; department: string; role: string };
+    history?: { role: 'user' | 'model'; content: string }[];
   }) {
-    const { query, userId, userProfile } = params;
+    const { query, userId, userProfile, history = [] } = params;
 
     // 1. Generate query embedding
     const queryEmbedding = await this.geminiService.generateEmbedding(query);
@@ -69,11 +70,11 @@ export class RAGService {
       if (currentLength + text.length > MAX_CONTEXT_CHARS) {
         const remaining = MAX_CONTEXT_CHARS - currentLength;
         if (remaining > 0) {
-           context.push(text.substring(0, remaining) + '...[TRUNCATED]');
+           context.push(`SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${text.substring(0, remaining)}...[TRUNCATED]`);
         }
         break; 
       }
-      context.push(text);
+      context.push(`SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${text}`);
       currentLength += text.length;
     }
 
@@ -81,7 +82,8 @@ export class RAGService {
     const response = await this.geminiService.queryKnowledgeBase({
       query,
       context,
-      userProfile
+      userProfile,
+      history
     });
 
     // Handle Ghost Files

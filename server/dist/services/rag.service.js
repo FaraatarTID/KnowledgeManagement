@@ -14,7 +14,7 @@ export class RAGService {
         this.auditService = new AuditService();
     }
     async query(params) {
-        const { query, userId, userProfile } = params;
+        const { query, userId, userProfile, history = [] } = params;
         // 1. Generate query embedding
         const queryEmbedding = await this.geminiService.generateEmbedding(query);
         // 2. Vector similarity search with access control
@@ -55,18 +55,19 @@ export class RAGService {
             if (currentLength + text.length > MAX_CONTEXT_CHARS) {
                 const remaining = MAX_CONTEXT_CHARS - currentLength;
                 if (remaining > 0) {
-                    context.push(text.substring(0, remaining) + '...[TRUNCATED]');
+                    context.push(`SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${text.substring(0, remaining)}...[TRUNCATED]`);
                 }
                 break;
             }
-            context.push(text);
+            context.push(`SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${text}`);
             currentLength += text.length;
         }
         // 5. Generate response with Gemini
         const response = await this.geminiService.queryKnowledgeBase({
             query,
             context,
-            userProfile
+            userProfile,
+            history
         });
         // Handle Ghost Files
         // Filter out undefined IDs to ensure valid sources

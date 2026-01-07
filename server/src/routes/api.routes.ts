@@ -228,6 +228,15 @@ router.post('/sync', authMiddleware, async (req: any, res) => {
     }
 
     const result = await syncService.syncAll(process.env.GOOGLE_DRIVE_FOLDER_ID);
+    
+    // Record in History
+    await historyService.recordEvent({
+      event_type: 'UPDATED',
+      doc_id: 'global-sync',
+      doc_name: 'Knowledge Base Sync',
+      details: `Full cloud sync completed. Results: ${JSON.stringify(result)}`
+    });
+
     res.json(result);
   } catch (e: any) {
     console.error('Sync failed:', e);
@@ -253,8 +262,8 @@ router.post('/chat', authMiddleware, async (req: any, res) => {
         name: user.name,
         department: user.department,
         role: user.role
-      }
-      // Note: History is not yet processed by RAGService, but accepted for API compatibility
+      },
+      history
     });
 
     res.json(result);
@@ -499,15 +508,15 @@ router.patch('/documents/:id', authMiddleware, async (req: any, res) => {
 
   try {
     const { id } = req.params;
-    const { title, category, sensitivity } = req.body;
+    const { title, category, sensitivity, department } = req.body;
 
     // Validate metadata
-    if (!title && !category && !sensitivity) {
-      return res.status(400).json({ error: 'At least one metadata field (title, category or sensitivity) must be provided.' });
+    if (!title && !category && !sensitivity && !department) {
+      return res.status(400).json({ error: 'At least one metadata field (title, category, sensitivity or department) must be provided.' });
     }
 
     // 1. Update local index (VectorStore + Metadata Overrides)
-    await vectorService.updateDocumentMetadata(id, { title, category, sensitivity });
+    await vectorService.updateDocumentMetadata(id, { title, category, sensitivity, department });
     
     // 2. Attempt to Push Rename to Google Drive (Best Effort / Hybrid)
     let driveRenameStatus = 'skipped';
@@ -521,7 +530,7 @@ router.patch('/documents/:id', authMiddleware, async (req: any, res) => {
       event_type: 'UPDATED',
       doc_id: id,
       doc_name: title || 'Metadata Update',
-      details: `Metadata updated: ${JSON.stringify({ title, category, sensitivity })}. Drive Rename: ${driveRenameStatus}`
+      details: `Metadata updated: ${JSON.stringify({ title, category, sensitivity, department })}. Drive Rename: ${driveRenameStatus}`
     });
 
     res.json({ 
@@ -650,6 +659,16 @@ router.get('/stats', authMiddleware, async (req, res) => {
 
 router.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'aikb-api' });
+});
+
+router.get('/history', authMiddleware, async (req, res) => {
+  try {
+    const history = await historyService.getHistory();
+    res.json(history);
+  } catch (error) {
+    console.error('Failed to fetch history:', error);
+    res.status(500).json({ error: 'Failed to fetch activity log' });
+  }
 });
 
 router.post('/documents/:id/sync', authMiddleware, async (req: any, res) => {

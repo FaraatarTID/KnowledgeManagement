@@ -13,6 +13,10 @@ export declare class GeminiService {
             department: string;
             role: string;
         };
+        history?: {
+            role: 'user' | 'model';
+            content: string;
+        }[];
     }): Promise<{
         text: string;
         usageMetadata: import("@google-cloud/vertexai").UsageMetadata | undefined;

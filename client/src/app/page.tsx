@@ -98,18 +98,9 @@ export default function Home() {
             <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Live</span>
           </div>
           <div className="flex items-center gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" size={16} />
-              <input 
-                type="text" 
-                placeholder="Search resources..." 
-                className="pl-10 pr-4 py-2 bg-[#F1F5F9] border-none rounded-lg text-sm focus:ring-2 focus:ring-blue-500 w-64 transition-all"
-              />
-            </div>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 p-[2px]">
-              <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
-                <User size={20} className="text-[#64748B]" />
-              </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl">
+              <Bot size={14} className="text-blue-600" />
+              <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">Gemini 2.5 Flash</span>
             </div>
           </div>
         </header>
