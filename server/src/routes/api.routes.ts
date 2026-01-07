@@ -642,9 +642,24 @@ router.get('/documents', authMiddleware, async (req: any, res) => {
     // Also include manually uploaded files that might not be in the main Drive folder yet but are in vector store
     // (Implementation specific: this depends on how we track manual uploads vs syncs)
     
-    // Filter by department for non-admins
+    // Map sensitivity and roles to numeric levels for filtering
+    const sensitivityMap: Record<string, number> = { 'PUBLIC': 0, 'INTERNAL': 1, 'CONFIDENTIAL': 2, 'RESTRICTED': 3, 'EXECUTIVE': 4 };
+    const roleMap: Record<string, number> = { 'VIEWER': 1, 'EDITOR': 2, 'MANAGER': 3, 'ADMIN': 4 };
+    const userClearance = roleMap[user.role.toUpperCase()] || 1;
+
+    // Filter by department AND sensitivity for non-admins
     if (user.role === 'ADMIN') return res.json(documents);
-    res.json(documents.filter(d => !d.department || d.department === user.department || d.department === 'General'));
+    
+    res.json(documents.filter(d => {
+       const docSensitivity = (d.sensitivity || 'INTERNAL').toUpperCase();
+       const docLevel = sensitivityMap[docSensitivity] ?? 1;
+       
+       // Sensitivity check
+       if (userClearance < docLevel) return false;
+       
+       // Department check
+       return !d.department || d.department === user.department || d.department === 'General';
+    }));
 
   } catch (error: any) {
     console.error('Drive listing error:', error);
@@ -652,7 +667,7 @@ router.get('/documents', authMiddleware, async (req: any, res) => {
   }
 });
 
-router.get('/stats', authMiddleware, async (req, res) => {
+router.get('/stats', authMiddleware, requireRole('ADMIN', 'MANAGER'), async (req, res) => {
   try {
     const [users, vectorMeta, vectorHealth, geminiHealth, driveHealth, userHealth, resStats] = await Promise.all([
       userService.getAll(),

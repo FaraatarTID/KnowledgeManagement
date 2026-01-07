@@ -124,37 +124,41 @@ export class VectorService {
     // Perform exact Cosine Similarity
     const queryVec = params.embedding;
     
-    // Map with scores
+    // SECURITY: Map roles and sensitivity to numeric levels for robust comparison
     const sensitivityMap: Record<string, number> = { 'PUBLIC': 0, 'INTERNAL': 1, 'CONFIDENTIAL': 2, 'RESTRICTED': 3, 'EXECUTIVE': 4 };
     const roleMap: Record<string, number> = { 'VIEWER': 1, 'EDITOR': 2, 'MANAGER': 3, 'ADMIN': 4 };
     
-    const userRole = (params.filters?.role || 'VIEWER').toUpperCase();
-    const userClearance = roleMap[userRole] || 1;
-
-    // Filter first
-    let filteredVectors = this.vectors;
-    if (params.filters) {
-      filteredVectors = this.vectors.filter(vec => {
-        // 1. Sensitivity Clearance Check
-        const docSensitivity = (vec.metadata.sensitivity || 'INTERNAL').toUpperCase();
-        const docRequiredLevel = sensitivityMap[docSensitivity] ?? 1;
-
-        if (userClearance < docRequiredLevel) {
-          return false;
-        }
-
-        // 2. Department check (Admins bypass department check)
-        if (userRole !== 'ADMIN' && vec.metadata.department && params.filters?.department) {
-           const vecDept = vec.metadata.department.toLowerCase();
-           const userDept = params.filters.department.toLowerCase();
-           
-           if (vecDept !== userDept) {
-             return false;
-           }
-        }
-        return true;
-      });
+    // SECURITY: Fail-Closed. If no role/department provided, we return zero results.
+    if (!params.filters?.role || !params.filters?.department) {
+      console.warn('VectorService: Rejected search due to missing security filters.');
+      return [];
     }
+
+    const userRole = (params.filters.role).toUpperCase();
+    const userClearance = roleMap[userRole] || 1;
+    const userDept = params.filters.department.toLowerCase();
+
+    // Perform Hard Filtering
+    const filteredVectors = this.vectors.filter(vec => {
+      // 1. Sensitivity Clearance Check
+      const docSensitivity = (vec.metadata.sensitivity || 'INTERNAL').toUpperCase();
+      const docRequiredLevel = sensitivityMap[docSensitivity] ?? 1;
+
+      if (userClearance < docRequiredLevel) {
+        return false;
+      }
+
+      // 2. Department check (Admins bypass department check for global oversight)
+      if (userRole !== 'ADMIN') {
+         const vecDept = (vec.metadata.department || '').toLowerCase();
+         // If document has no department, it is considered "General" and accessible by the user's department.
+         // But if it DOES have a department, it MUST match.
+         if (vecDept && vecDept !== userDept) {
+            return false;
+         }
+      }
+      return true;
+    });
 
     // Map with scores
     const scored = filteredVectors.map(vec => {
