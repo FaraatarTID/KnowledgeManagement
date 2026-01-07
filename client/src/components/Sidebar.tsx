@@ -23,16 +23,22 @@ export default function Sidebar() {
   const activeTab = searchParams ? searchParams.get('tab') : null;
 
   useEffect(() => {
-    setIsMounted(true);
+    // Defer setting mounted and user to avoid synchronous setState inside effect
     const storedUser = localStorage.getItem('user');
+    let parsedUser: any = null;
     if (storedUser) {
       try {
-        setUser(JSON.parse(storedUser));
+        parsedUser = JSON.parse(storedUser);
       } catch (e) {
         console.error('Failed to parse user data:', e);
         localStorage.removeItem('user');
       }
     }
+
+    const raf = requestAnimationFrame(() => {
+      setIsMounted(true);
+      if (parsedUser) setUser(parsedUser);
+    });
 
     // Listen for cross-tab storage changes
     const handleStorageChange = (e: StorageEvent) => {
@@ -58,6 +64,7 @@ export default function Sidebar() {
     window.addEventListener('user-logout', handleLogoutEvent);
 
     return () => {
+      cancelAnimationFrame(raf);
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('user-logout', handleLogoutEvent);
     };

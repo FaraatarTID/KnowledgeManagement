@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import AIKB from '@/KM';
+import { toast } from '@/components/ToastContainer';
 
 // Mock storage
 jest.mock('@/hooks/useStorage', () => ({
@@ -226,7 +227,6 @@ describe('QueryAI Race Condition Prevention', () => {
     }, { timeout: 35000 });
 
     // Should show timeout error
-    const toast = require('@/components/ToastContainer').toast;
     expect(toast.error).toHaveBeenCalledWith('Request timed out. Please try again.');
   }, 40000);
 });
