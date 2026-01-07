@@ -20,42 +20,52 @@ describe('Chat API (Core Loop)', () => {
         }
     });
 
-    it('should respond to a chat message', async () => {
+    it('should respond to a chat query with documents', async () => {
+        const testDocuments = [
+            {
+                id: "test-doc-1",
+                title: "Test Document",
+                content: "This is a test document containing information about the project.",
+                category: "General",
+                createdAt: new Date().toISOString()
+            }
+        ];
+
         const res = await request(app)
             .post('/api/v1/chat')
             .set('Cookie', `token=${token}`)
             .send({ 
-                message: 'Hello, who are you?', 
-                history: [] 
+                query: 'What is this document about?', 
+                documents: testDocuments
             });
 
-        // If Mock Mode is active, it might answer "I am AIKB..."
-        // Or fail if Vertex AI key missing and not mocked?
-        // Logs said GeminiService initialized in MOCK MODE (Step 441).
-        
         expect(res.status).toBe(200);
-        expect(res.body).toHaveProperty('answer');
-        expect(typeof res.body.answer).toBe('string');
+        expect(res.body).toHaveProperty('content');
+        expect(typeof res.body.content).toBe('string');
     });
 
-    it('should maintain conversation history', async () => {
-        // Not strictly testing DB, just API accepting history param
+    it('should handle empty documents gracefully', async () => {
         const res = await request(app)
             .post('/api/v1/chat')
             .set('Cookie', `token=${token}`)
             .send({ 
-                message: 'What did I just ask?',
-                history: [{ role: 'user', content: 'Hello' }, { role: 'model', content: 'Hi' }]
+                query: 'What is this document about?', 
+                documents: []
             });
         
         expect(res.status).toBe(200);
+        expect(res.body.content).toContain('اطلاعاتی برای پاسخ');
     });
 
-    it('should reject unauthenticated chat', async () => {
+    it('should reject invalid request body', async () => {
         const res = await request(app)
             .post('/api/v1/chat')
-            .send({ message: 'Hack attempt' });
+            .set('Cookie', `token=${token}`)
+            .send({ 
+                query: 'What is this document about?' 
+                // Missing documents
+            });
         
-        expect(res.status).toBe(401);
+        expect(res.status).toBe(400);
     });
 });

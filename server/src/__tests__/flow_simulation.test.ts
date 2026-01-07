@@ -27,60 +27,52 @@ describe('End-to-End Chat Flow Simulation', () => {
         }
     });
 
-    it('Scenario 1: Verified Multi-turn Routing (History Flow)', async () => {
-        // First turn
-        const res1 = await request(app)
-            .post('/api/v1/chat')
-            .set('Cookie', `token=${adminToken}`)
-            .send({ 
-                message: 'Hello!',
-                history: [] 
-            });
-        
-        expect(res1.body.answer).toContain('Query: "Hello!"');
-        
-        // Second turn with history
-        const res2 = await request(app)
-            .post('/api/v1/chat')
-            .set('Cookie', `token=${adminToken}`)
-            .send({ 
-                message: 'Tell me more.',
-                history: [
-                    { role: 'user', content: 'Hello!' },
-                    { role: 'model', content: res1.body.answer }
-                ] 
-            });
-        
-        // Gemini mock should echo back that it received 2 history items
-        expect(res2.body.answer).toContain('with 2 previous messages');
-        expect(res2.body.answer).toContain('Query: "Tell me more."');
-        console.log('✅ Flow Verified: Post -> RAGService -> Gemini (History preserved)');
-    });
+    it('Scenario 1: Basic Chat with Documents', async () => {
+        const testDocuments = [
+            {
+                id: "doc-1",
+                title: "Company Policy",
+                content: "The company policy requires all employees to wear badges.",
+                category: "HR",
+                createdAt: new Date().toISOString()
+            }
+        ];
 
-    it('Scenario 2: Data Grounding (Context Routing)', async () => {
         const res = await request(app)
             .post('/api/v1/chat')
             .set('Cookie', `token=${adminToken}`)
             .send({ 
-                message: 'Check documentation.',
-                history: [] 
+                query: 'What is the company policy?',
+                documents: testDocuments
             });
         
-        // In mock mode, VectorService returns 2 docs by default
-        expect(res.body.answer).toContain('Context: 2 relevant snippets found.');
-        console.log('✅ Flow Verified: Retrieval triggered and context injected');
+        expect(res.status).toBe(200);
+        expect(res.body).toHaveProperty('content');
+        expect(typeof res.body.content).toBe('string');
     });
 
-    it('Scenario 3: Security Bound Routing', async () => {
-        // Currently we don't have a specific test for partial filtering in the mock,
-        // but this verifies the endpoint still functions correctly under different identities.
+    it('Scenario 2: Empty Documents Handling', async () => {
         const res = await request(app)
             .post('/api/v1/chat')
             .set('Cookie', `token=${employeeToken}`)
-            .send({ message: 'Can I see restricted files?' });
+            .send({ 
+                query: 'What is the capital of France?',
+                documents: []
+            });
         
         expect(res.status).toBe(200);
-        expect(res.body.answer).toBeDefined();
-        console.log('✅ Flow Verified: Role-based request routing functional');
+        expect(res.body.content).toContain('اطلاعاتی برای پاسخ');
+    });
+
+    it('Scenario 3: Invalid Request Body', async () => {
+        const res = await request(app)
+            .post('/api/v1/chat')
+            .set('Cookie', `token=${adminToken}`)
+            .send({ 
+                query: 'What is the company policy?' 
+                // Missing documents
+            });
+        
+        expect(res.status).toBe(400);
     });
 });

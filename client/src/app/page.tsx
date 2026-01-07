@@ -111,17 +111,22 @@ export default function Home() {
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-8 space-y-8 scroll-smooth">
+        <div 
+          className="flex-1 overflow-y-auto p-8 space-y-8 scroll-smooth" 
+          role="log" 
+          aria-live="polite" 
+          aria-label="Chat messages"
+        >
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-6 max-w-2xl mx-auto">
-              <div className="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mb-4">
+              <div className="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mb-4" aria-hidden="true">
                 <Bot className="text-blue-600" size={40} />
               </div>
               <h3 className="text-3xl font-bold text-[#0F172A]">How can I help you today?</h3>
               <p className="text-[#64748B] text-lg">
                 I can help you search through company documents, explain processes, or access technical specifications.
               </p>
-              <div className="grid grid-cols-2 gap-4 w-full pt-8">
+              <div className="grid grid-cols-2 gap-4 w-full pt-8" role="group" aria-label="Example questions">
                 {[
                   "What's our security policy?",
                   "How to set up Product Alpha?",
@@ -131,7 +136,15 @@ export default function Home() {
                   <button 
                     key={q}
                     onClick={() => setInput(q)}
-                    className="p-4 bg-white border border-[#E2E8F0] rounded-2xl text-left hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/5 transition-all group"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setInput(q);
+                      }
+                    }}
+                    className="p-4 bg-white border border-[#E2E8F0] rounded-2xl text-left hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/5 transition-all group focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    aria-label={`Use example question: ${q}`}
                   >
                     <p className="text-sm font-medium text-[#0F172A] group-hover:text-blue-600">{q}</p>
                     <ChevronRight size={16} className="text-[#94A3B8] mt-2" />
@@ -177,11 +190,11 @@ export default function Home() {
                 </div>
               ))}
               {isLoading && (
-                <div className="flex gap-6 animate-pulse">
-                  <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                <div className="flex gap-6 animate-pulse" role="status" aria-live="polite" aria-label="AI is thinking">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center" aria-hidden="true">
                     <Loader2 size={20} className="text-blue-600 animate-spin" />
                   </div>
-                  <div className="bg-white border border-blue-100 p-6 rounded-2xl w-full max-w-lg">
+                  <div className="bg-white border border-blue-100 p-6 rounded-2xl w-full max-w-lg" aria-busy="true">
                     <div className="h-4 bg-slate-100 rounded w-3/4 mb-4"></div>
                     <div className="h-4 bg-slate-100 rounded w-1/2"></div>
                   </div>
@@ -205,20 +218,24 @@ export default function Home() {
                 placeholder="Ask me anything..."
                 disabled={isLoading}
                 aria-label="Ask a question to the knowledge base"
+                aria-describedby="input-hint"
+                aria-busy={isLoading}
                 className="w-full px-8 py-6 bg-transparent border-none focus:ring-2 focus:ring-blue-500/20 rounded-[24px] text-lg text-[#0F172A] placeholder-[#94A3B8] disabled:cursor-not-allowed disabled:opacity-50"
               />
               <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
                 <button 
                   onClick={handleSend}
                   disabled={!input.trim() || isLoading}
-                  aria-label="Send message"
-                  className="bg-[#0F172A] text-white p-3 rounded-2xl hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:grayscale"
+                  aria-label={isLoading ? "Processing..." : !input.trim() ? "Type a message to send" : "Send message"}
+                  aria-disabled={isLoading || !input.trim()}
+                  className="bg-[#0F172A] text-white p-3 rounded-2xl hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
+                  title={isLoading ? "Processing..." : !input.trim() ? "Type a message to send" : "Send message"}
                 >
                   <Send size={24} />
                 </button>
               </div>
             </div>
-            <p className="text-center text-[10px] text-[#94A3B8] mt-4 font-bold uppercase tracking-[0.2em]">
+            <p id="input-hint" className="text-center text-[10px] text-[#94A3B8] mt-4 font-bold uppercase tracking-[0.2em]">
               Powered by Gemini 2.5 Flash-Lite · Security Level: Internal
             </p>
           </div>

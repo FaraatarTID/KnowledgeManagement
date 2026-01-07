@@ -18,13 +18,14 @@ import path from 'path';
 import fs from 'fs';
 
 import crypto from 'crypto';
+import { ChatService } from '../services/chat.service.js';
 
 const router = Router();
 
 
 
 // --- SERVER STARTUP VALIDATION ---
-const REQUIRED_ENV_VARS = ['GCP_PROJECT_ID', 'JWT_SECRET'];
+const REQUIRED_ENV_VARS = ['GCP_PROJECT_ID', 'JWT_SECRET', 'GOOGLE_CLOUD_PROJECT_ID'];
 const missingVars = REQUIRED_ENV_VARS.filter(key => !process.env[key]);
 
 if (missingVars.length > 0) {
@@ -64,6 +65,10 @@ const ALLOWED_MIMETYPES = [
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ];
+
+// SECURITY: Additional extension validation to prevent MIME spoofing
+const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.txt', '.md', '.xlsx', '.xls'];
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 const storage = multer.diskStorage({
@@ -83,17 +88,29 @@ const upload = multer({
   storage,
   limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (req, file, cb) => {
-    if (ALLOWED_MIMETYPES.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: PDF, Word, Excel, Text, Markdown`));
+    // SECURITY: Validate both MIME type AND file extension
+    const extension = path.extname(file.originalname).toLowerCase();
+    
+    if (!ALLOWED_EXTENSIONS.includes(extension)) {
+      return cb(new Error(`Invalid file extension: ${extension}. Allowed: ${ALLOWED_EXTENSIONS.join(', ')}`));
     }
+    
+    if (!ALLOWED_MIMETYPES.includes(file.mimetype)) {
+      return cb(new Error(`Invalid file type: ${file.mimetype}. Allowed types: PDF, Word, Excel, Text, Markdown`));
+    }
+
+    // SECURITY: Additional check for executable signatures
+    if (file.originalname.match(/\.(exe|bat|sh|js|py|zip|rar|7z)$/i)) {
+      return cb(new Error('Executable or archive files are not allowed'));
+    }
+
+    cb(null, true);
   }
 });
 
 // Services
-const geminiService = new GeminiService(process.env.GCP_PROJECT_ID || 'aikb-mock-project');
-const vectorService = new VectorService(process.env.GCP_PROJECT_ID || 'aikb-prod', 'us-central1');
+const geminiService = new GeminiService(process.env.GOOGLE_CLOUD_PROJECT_ID || 'aikb-mock-project');
+const vectorService = new VectorService(process.env.GOOGLE_CLOUD_PROJECT_ID || 'aikb-mock-project', process.env.GCP_REGION || 'us-central1');
 const auditService = new AuditService();
 const ragService = new RAGService(geminiService, vectorService);
 const driveService = new DriveService(process.env.GCP_KEY_FILE || 'key.json');
@@ -102,6 +119,7 @@ const historyService = new HistoryService();
 const configService = new ConfigService();
 const authService = new AuthService();
 const userService = new UserService();
+const chatService = new ChatService();
 
 console.log('✅ API Routes: Registering endpoints...');
 
@@ -284,30 +302,85 @@ router.post('/sync', authMiddleware, async (req: any, res) => {
 
 // --- CHAT ROUTES ---
 
-router.post('/chat', authMiddleware, async (req: any, res) => {
-  const { message, history } = req.body;
-  
-  if (!message) {
-    return res.status(400).json({ error: 'Message is required' });
+/**
+ * TRUE RAG IMPLEMENTATION
+ * Frontend sends ONLY the query
+ * Backend retrieves relevant documents from vector database
+ * This fixes the "Bandwidth Suicide" pattern
+ */
+router.post('/chat', authMiddleware, async (req: AuthRequest, res) => {
+  const { query } = req.body;
+
+  // SECURITY: Strict input validation
+  if (!query || typeof query !== 'string' || query.trim().length === 0) {
+    return res.status(400).json({ message: 'Invalid query. Must be a non-empty string.' });
+  }
+
+  // SECURITY: Rate limiting and input sanitization
+  if (query.length > 2000) {
+    return res.status(400).json({ message: 'Query too long. Maximum 2000 characters.' });
   }
 
   try {
-    const user = req.user;
-    const result = await ragService.query({
-      query: message,
-      userId: user.id,
-      userProfile: {
-        name: user.name,
-        department: user.department,
-        role: user.role
-      },
-      history
-    });
+    // Get user info from auth middleware
+    const userId = req.user?.id || 'anonymous';
+    const userProfile = req.user?.profile || { name: 'User', department: 'General', role: 'VIEWER' };
 
-    res.json(result);
+    // Use TRUE RAG - no documents in request body!
+    const aiResponse = await chatService.queryChat(query, userId, userProfile);
+    
+    res.json({ content: aiResponse });
   } catch (error) {
-    console.error('Chat API Error:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    console.error('Error in chat endpoint:', error);
+    
+    // Specific error handling
+    if (error.message.includes('embedding')) {
+      return res.status(500).json({ message: 'Failed to generate query embedding.' });
+    }
+    if (error.message.includes('vector')) {
+      return res.status(500).json({ message: 'Vector search failed. Please try again.' });
+    }
+    
+    res.status(500).json({ message: 'Failed to process chat request.', error: error.message });
+  }
+});
+
+/**
+ * @deprecated Legacy endpoint - will be removed after migration
+ * Kept for backward compatibility during transition period
+ */
+router.post('/chat/legacy', authMiddleware, async (req: AuthRequest, res) => {
+  const { query, documents } = req.body;
+
+  // SECURITY: Strict input validation
+  if (!query || typeof query !== 'string' || query.trim().length === 0) {
+    return res.status(400).json({ message: 'Invalid query. Must be a non-empty string.' });
+  }
+
+  if (!documents || !Array.isArray(documents)) {
+    return res.status(400).json({ message: 'Invalid documents. Must be an array.' });
+  }
+
+  // SECURITY: Limit document count to prevent DoS
+  if (documents.length > 100) {
+    return res.status(400).json({ message: 'Too many documents. Maximum 100 allowed.' });
+  }
+
+  // SECURITY: Validate document structure
+  const invalidDocs = documents.filter(doc => 
+    !doc || typeof doc.id !== 'string' || typeof doc.content !== 'string'
+  );
+
+  if (invalidDocs.length > 0) {
+    return res.status(400).json({ message: 'Invalid document structure. Each document must have id and content.' });
+  }
+
+  try {
+    const aiResponse = await chatService.queryChatLegacy(query, documents);
+    res.json({ content: aiResponse });
+  } catch (error) {
+    console.error('Error in legacy chat endpoint:', error);
+    res.status(500).json({ message: 'Failed to process chat request.', error: error.message });
   }
 });
 
@@ -747,6 +820,111 @@ router.post('/documents/:id/sync', authMiddleware, async (req: any, res) => {
   } catch (e: any) {
     console.error(`Targeted sync failed for ${id}:`, e);
     res.status(500).json({ error: 'Failed to re-index document' });
+  }
+});
+
+/**
+ * DOCUMENT SYNC ENDPOINT
+ * Receives documents from frontend and adds them to vector database
+ * This fixes the Logic Gap between frontend IndexedDB and backend Vector DB
+ */
+router.post('/documents/sync', authMiddleware, async (req: AuthRequest, res) => {
+  const { documents } = req.body;
+
+  // SECURITY: Validate input
+  if (!documents || !Array.isArray(documents)) {
+    return res.status(400).json({ message: 'Invalid documents format. Must be an array.' });
+  }
+
+  if (documents.length === 0) {
+    return res.status(400).json({ message: 'No documents provided.' });
+  }
+
+  // SECURITY: Limit document count
+  if (documents.length > 50) {
+    return res.status(400).json({ message: 'Too many documents. Maximum 50 per sync.' });
+  }
+
+  // SECURITY: Validate document structure
+  const invalidDocs = documents.filter(doc => 
+    !doc || 
+    typeof doc.id !== 'string' || 
+    typeof doc.title !== 'string' || 
+    typeof doc.content !== 'string' || 
+    typeof doc.category !== 'string'
+  );
+
+  if (invalidDocs.length > 0) {
+    return res.status(400).json({ message: 'Invalid document structure detected.' });
+  }
+
+  try {
+    const userId = req.user?.id || 'anonymous';
+    const userProfile = req.user?.profile || { name: 'User', department: 'General', role: 'VIEWER' };
+
+    // Process each document and add to vector database
+    const results = await Promise.allSettled(
+      documents.map(async (doc) => {
+        try {
+          // Generate embedding for the document
+          const embedding = await geminiService.generateEmbedding(
+            `${doc.title} ${doc.content} ${doc.category}`
+          );
+
+          // Add to vector database with metadata
+          await vectorService.addItem({
+            id: doc.id,
+            values: embedding,
+            metadata: {
+              docId: doc.id,
+              title: doc.title,
+              text: doc.content,
+              category: doc.category,
+              department: userProfile.department,
+              role: userProfile.role,
+              sensitivity: 'INTERNAL', // Default sensitivity
+              addedBy: userId,
+              addedAt: new Date().toISOString()
+            }
+          });
+
+          // Record in history
+          await historyService.recordEvent({
+            event_type: 'CREATED',
+            doc_id: doc.id,
+            doc_name: doc.title,
+            details: `Document synced to vector database by ${userProfile.name}`
+          });
+
+          return { id: doc.id, status: 'success' };
+        } catch (error) {
+          console.error(`Failed to sync document ${doc.id}:`, error);
+          return { id: doc.id, status: 'error', error: error.message };
+        }
+      })
+    );
+
+    // Count successes and failures
+    const successes = results.filter(r => r.status === 'fulfilled' && r.value.status === 'success').length;
+    const failures = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.status === 'error')).length;
+
+    res.json({
+      success: true,
+      message: `Synced ${successes} documents to vector database.`,
+      results: results.map(r => r.status === 'fulfilled' ? r.value : { status: 'error', error: 'Promise rejected' }),
+      stats: {
+        total: documents.length,
+        successes,
+        failures
+      }
+    });
+
+  } catch (error) {
+    console.error('Document sync failed:', error);
+    res.status(500).json({ 
+      message: 'Failed to sync documents to vector database.', 
+      error: error.message 
+    });
   }
 });
 

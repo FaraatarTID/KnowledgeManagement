@@ -96,6 +96,25 @@ export class RAGService {
       sensitivity: (r.metadata as any).sensitivity
     }));
 
+    // SECURITY: Handle empty context edge case before calling Gemini
+    if (context.length === 0) {
+      // This shouldn't happen due to the check above, but as a safety net
+      await this.auditService.log({
+        userId,
+        action: 'RAG_QUERY',
+        query,
+        granted: true,
+        reason: 'Context empty after filtering (edge case)'
+      });
+
+      return {
+        answer: "I couldn't find any documents in the knowledge base that match your query.",
+        sources: [],
+        usage: undefined,
+        integrity: { confidence: 'LOW', isVerified: false, reason: 'No context' }
+      };
+    }
+
     // 5. Generate response with Gemini
     const { text, usageMetadata } = await this.geminiService.queryKnowledgeBase({
       query,
@@ -132,18 +151,41 @@ export class RAGService {
 
   /**
    * Verifies the AI's reported quotes against the actual retrieved context.
+   * SECURITY: Sanitizes extracted quotes to prevent injection attacks.
    */
   private verifyIntegrity(aiText: string, searchContext: string[]): any {
-    const quotes = aiText.match(/\[QUOTE\]: "(.*?)"/g) || [];
-    const verifiedQuotes = quotes.map(q => {
-      const quoteText = q.replace('[QUOTE]: "', '').replace(/"$/, '');
+    // SECURITY: Sanitize function to prevent injection attacks
+    const sanitizeQuote = (text: string): string => {
+      return text
+        .replace(/[<>]/g, '') // Remove potential HTML/XML tags
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+        .substring(0, 500); // Limit length to prevent DoS
+    };
+
+    // SECURITY: Use non-greedy matching and validate structure
+    const quoteRegex = /\[QUOTE\]:\s*"([^"]{1,500})"/g;
+    const quotes = [];
+    let match;
+    while ((match = quoteRegex.exec(aiText)) !== null) {
+      quotes.push(match[1]);
+    }
+
+    const verifiedQuotes = quotes.map(rawQuote => {
+      const quoteText = sanitizeQuote(rawQuote);
+      
+      // SECURITY: Check for empty or suspiciously short quotes
+      if (quoteText.length < 3) {
+        return { quote: quoteText, verified: false, reason: 'Too short' };
+      }
+
       // Check if this quote exists in ANY of the source blocks
+      // Use exact string matching instead of regex for security
       const exists = searchContext.some(ctx => ctx.includes(quoteText));
       return { quote: quoteText, verified: exists };
     });
 
-    const confidenceMatch = aiText.match(/\[CONFIDENCE\]: (High|Medium|Low)/i);
-    const confidence = confidenceMatch ? confidenceMatch[1] : 'Unknown';
+    const confidenceMatch = aiText.match(/\[CONFIDENCE\]:\s*(High|Medium|Low)/i);
+    const confidence = confidenceMatch ? confidenceMatch[1].toUpperCase() : 'UNKNOWN';
 
     const hallucinatedQuoteCount = verifiedQuotes.filter(v => !v.verified).length;
     const isCompromised = hallucinatedQuoteCount > 0;
@@ -153,7 +195,11 @@ export class RAGService {
       isVerified: !isCompromised,
       hallucinatedQuoteCount,
       verifiedQuoteCount: verifiedQuotes.length - hallucinatedQuoteCount,
-      details: verifiedQuotes
+      details: verifiedQuotes,
+      // SECURITY: Add integrity score for automated monitoring
+      integrityScore: verifiedQuotes.length > 0 
+        ? (verifiedQuotes.length - hallucinatedQuoteCount) / verifiedQuotes.length 
+        : 0
     };
   }
 }

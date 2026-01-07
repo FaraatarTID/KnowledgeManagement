@@ -10,7 +10,7 @@ Before we start, make sure you have these installed on your computer:
 
 1.  **Node.js**: [Download Here](https://nodejs.org/en/download/prebuilt-installer). (Select the **LTS** version).
 2.  **Git**: [Download Here](https://git-scm.com/downloads). (Click "Next" through all options).
-3.  **A Google Account**: (Gmail works fine) for accessing Google Drive documents.
+3.  **A Google Account**: (Gmail works fine) for accessing Google Drive documents (optional for "Mock Mode").
 
 ---
 
@@ -36,11 +36,34 @@ Before we start, make sure you have these installed on your computer:
 4.  Once ready, **your browser will open automatically** to the login page.
 5.  If it doesn't open, manually go to `http://localhost:3000`.
 
+**Note**: The batch file starts two programs:
+*   **Backend Server** (Black window titled "AIKB-SERVER"): This is the brain of the app.
+*   **Frontend Client** (Black window titled "AIKB-CLIENT"): This is the user interface.
+
+Keep both windows open while using the app.
+
 ---
 
-## 🔑 Part 2: Getting Your "Secret Keys" (Free)
+## 🧪 Part 2: Testing in "Mock Mode" (No Keys Needed!)
 
-To make the AI work, we need to give it permission to read your Drive.
+Want to see the app work immediately without setting up Google Cloud? **Mock Mode** is perfect for this.
+
+1.  After running `run_app.bat`, the app is already in **Mock Mode** by default.
+2.  **Login**: Use any email/password (e.g., `test@test.com` / `password`).
+3.  **Add a Document**: Click "Add Document" and enter:
+    *   Title: "Office Rules"
+    *   Category: "HR"
+    *   Content: "The office is open from 9 AM to 5 PM. Lunch is at 1 PM."
+4.  **Ask a Question**: Go to the "Chat" tab and ask: "When is lunch?"
+5.  The AI will answer based on your document.
+
+**This is great for demos and testing!**
+
+---
+
+## 🔑 Part 3: Using Real AI (Google Cloud Setup)
+
+To use real AI with your actual Google Drive documents, follow these steps.
 
 ### Step A: Google Cloud API
 

@@ -14,14 +14,15 @@ export interface AuthRequest extends Request {
 }
 
 export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
-  // Try cookie first, then Authorization header (backward compatibility)
-  const token = (req as any).cookies?.token || req.headers.authorization?.split(' ')[1];
+  // SECURITY: Only accept tokens from httpOnly cookies to prevent XSS token theft
+  // Removed Authorization header fallback to enforce browser security features
+  const token = (req as any)?.cookies?.token;
 
   if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  // SECURITY: Fail if JWT_SECRET is not configured
+  // SECURITY: Fail fast if JWT_SECRET is not configured
   const secret = process.env.JWT_SECRET;
   if (!secret) {
     console.error('FATAL: JWT_SECRET environment variable is not set');
@@ -36,6 +37,8 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
     }
+    // SECURITY: Log invalid token attempts for security monitoring
+    console.warn(`Invalid token attempt from IP: ${req.ip}`);
     return res.status(401).json({ error: 'Invalid token' });
   }
 };

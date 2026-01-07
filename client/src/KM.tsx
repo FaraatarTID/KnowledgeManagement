@@ -1,147 +1,278 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Trash2, Send, BookOpen, MessageSquare, Loader2, X, FileText } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+import { Search, Plus, Trash2, Send, BookOpen, MessageSquare, Loader2, X, FileText, AlertTriangle } from 'lucide-react';
+import { useStorage } from '@/hooks/useStorage';
+import { useDebounce } from '@/hooks/useDebounce';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import { ToastContainer, toast } from '@/components/ToastContainer';
 
-export default function AIKB() {
+function AIKBContent() {
   const [documents, setDocuments] = useState([]);
   const [chatHistory, setChatHistory] = useState([]);
   const [currentQuery, setCurrentQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [rawSearchTerm, setRawSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('documents');
+  
   const chatEndRef = useRef(null);
+  const { loadData, saveDocuments, saveChatHistory } = useStorage();
+  
+  // Debounced search term (300ms delay)
+  const searchTerm = useDebounce(rawSearchTerm, 300);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatHistory]);
-
-  const loadData = async () => {
-    try {
-      const docsResult = await window.storage.get('aikb-documents');
-      const chatResult = await window.storage.get('aikb-chat-history');
-      
-      if (docsResult?.value) {
-        setDocuments(JSON.parse(docsResult.value));
-      }
-      if (chatResult?.value) {
-        setChatHistory(JSON.parse(chatResult.value));
-      }
-    } catch (error) {
-      console.log('Loading initial state');
-    }
-  };
-
-  const saveDocuments = async (docs) => {
-    try {
-      await window.storage.set('aikb-documents', JSON.stringify(docs));
-    } catch (error) {
-      console.error('Error saving:', error);
-    }
-  };
-
-  const saveChatHistory = async (history) => {
-    try {
-      await window.storage.set('aikb-chat-history', JSON.stringify(history));
-    } catch (error) {
-      console.error('Error saving chat:', error);
-    }
-  };
-
-  const addDocument = async (doc) => {
-    const newDoc = {
-      id: Date.now().toString(),
-      ...doc,
-      createdAt: new Date().toISOString()
-    };
-    const updatedDocs = [...documents, newDoc];
-    setDocuments(updatedDocs);
-    await saveDocuments(updatedDocs);
-    setShowAddDoc(false);
-  };
-
-  const deleteDocument = async (id) => {
-    const updatedDocs = documents.filter(doc => doc.id !== id);
-    setDocuments(updatedDocs);
-    await saveDocuments(updatedDocs);
-  };
-
-  const queryAI = async () => {
-    if (!currentQuery.trim() || documents.length === 0) {
-      alert(documents.length === 0 
-        ? 'لطفا ابتدا حداقل یک سند اضافه کنید'
-        : 'لطفا سوال خود را بنویسید');
-      return;
-    }
-
-    setIsLoading(true);
-
-    const context = documents.map((doc, idx) => 
-      `[سند ${idx + 1}: ${doc.title}]\nدسته‌بندی: ${doc.category}\nمحتوا: ${doc.content}\n`
-    ).join('\n---\n\n');
-
-    const prompt = `شما یک دستیار دانشی هستید که فقط بر اساس اسناد ارائه شده پاسخ می‌دهید.
-
-اسناد موجود:
-${context}
-
-سوال کاربر: ${currentQuery}
-
-دستورالعمل‌ها:
-- فقط بر اساس اسناد ارائه شده پاسخ دهید
-- حتما ذکر کنید از کدام سند(ها) استفاده کرده‌اید
-- اگر اطلاعات در اسناد نیست، صریحا بگویید
-- پاسخ را به زبان فارسی و واضح بدهید
-
-پاسخ:`;
+  // Sync existing documents to backend (for first-time load or recovery)
+  const syncDocumentsToBackend = useCallback(async (docsToSync: any[]) => {
+    if (docsToSync.length === 0) return;
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const response = await fetch(`${baseUrl}/documents/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 2000,
-          messages: [{ role: 'user', content: prompt }]
-        })
+        body: JSON.stringify({ documents: docsToSync }),
       });
 
-      const data = await response.json();
-      const aiResponse = data.content[0].text;
+      if (!response.ok) {
+        throw new Error('Backend sync failed');
+      }
 
-      const newHistory = [
-        ...chatHistory,
-        { type: 'user', content: currentQuery, timestamp: new Date().toISOString() },
-        { type: 'ai', content: aiResponse, timestamp: new Date().toISOString() }
-      ];
-
-      setChatHistory(newHistory);
-      await saveChatHistory(newHistory);
-      setCurrentQuery('');
+      const result = await response.json();
+      
+      if (result.stats && result.stats.successes > 0) {
+        toast.success(`Synced ${result.stats.successes} documents to AI search`);
+      }
+      
+      if (result.stats && result.stats.failures > 0) {
+        toast.error(`${result.stats.failures} documents failed to sync`);
+      }
     } catch (error) {
-      alert('خطا در ارتباط با AI: ' + error.message);
+      console.warn('Could not sync documents to backend:', error);
+      // Don't show error toast - this is background sync
+    }
+  }, []);
+
+  // Load data on mount with corruption recovery
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        const { documents: loadedDocs, chatHistory: loadedChat } = await loadData();
+        setDocuments(loadedDocs);
+        setChatHistory(loadedChat);
+        
+        if (loadedDocs.length === 0 && loadedChat.length === 0) {
+          toast.info('Welcome! Add some documents to get started.');
+        } else if (loadedDocs.length > 0) {
+          // Sync existing documents to backend in background
+          // Use a small delay to avoid blocking initial render
+          setTimeout(() => {
+            syncDocumentsToBackend(loadedDocs);
+          }, 1000);
+        }
+      } catch (error) {
+        toast.error('Failed to load data. Starting with empty state.');
+        setDocuments([]);
+        setChatHistory([]);
+      }
+    };
+
+    initializeData();
+  }, [loadData, syncDocumentsToBackend]);
+
+  // Auto-scroll to bottom of chat
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [chatHistory, activeTab]);
+
+  // Optimistic document addition with backend sync
+  const addDocument = useCallback(async (doc) => {
+    const newDoc = {
+      id: uuidv4(),
+      ...doc,
+      createdAt: new Date().toISOString()
+    };
+    
+    // Optimistic update
+    const updatedDocs = [...documents, newDoc];
+    setDocuments(updatedDocs);
+    
+    try {
+      // 1. Save to local IndexedDB
+      await saveDocuments(updatedDocs);
+      
+      // 2. Sync to backend Vector Database
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const response = await fetch(`${baseUrl}/documents/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ documents: [newDoc] }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to sync with backend');
+      }
+
+      const result = await response.json();
+      
+      if (result.stats && result.stats.failures > 0) {
+        toast.error(`Document saved locally, but ${result.stats.failures} failed to sync to AI`);
+      } else {
+        toast.success('Document added and synced for AI search');
+      }
+      
+      setShowAddDoc(false);
+      
+    } catch (error) {
+      console.error('Document sync error:', error);
+      
+      // Rollback on failure
+      setDocuments(documents);
+      
+      // Show appropriate error
+      if (error.message.includes('Failed to fetch')) {
+        toast.error('Document saved locally. Cannot connect to server for AI sync.');
+      } else {
+        toast.error(error.message || 'Failed to save document');
+      }
+    }
+  }, [documents, saveDocuments]);
+
+  // Optimistic document deletion
+  const deleteDocument = useCallback(async (id) => {
+    const docToDelete = documents.find(doc => doc.id === id);
+    if (!docToDelete) return;
+
+    // Optimistic update
+    const updatedDocs = documents.filter(doc => doc.id !== id);
+    setDocuments(updatedDocs);
+    
+    try {
+      await saveDocuments(updatedDocs);
+      toast.success('Document deleted');
+    } catch (error) {
+      // Rollback on failure
+      setDocuments(documents);
+      toast.error('Failed to delete document');
+    }
+  }, [documents, saveDocuments]);
+
+  // Debounced search with main thread protection
+  const filteredDocs = React.useMemo(() => {
+    if (!searchTerm.trim()) return documents;
+    
+    return documents.filter(doc => 
+      doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      doc.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      doc.category.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [documents, searchTerm]);
+
+  // Optimistic AI query with proper RAG architecture
+  const queryAI = useCallback(async () => {
+    if (!currentQuery.trim()) {
+      toast.error('Please enter a question');
+      return;
+    }
+
+    if (documents.length === 0) {
+      toast.error('Please add at least one document first');
+      return;
+    }
+
+    // Create optimistic user message
+    const userMsg = {
+      type: 'user',
+      content: currentQuery,
+      timestamp: new Date().toISOString()
+    };
+
+    // Optimistic UI update
+    const optimisticHistory = [...chatHistory, userMsg];
+    setChatHistory(optimisticHistory);
+    setCurrentQuery('');
+    setIsLoading(true);
+
+    try {
+      // CRITICAL FIX: Only send query, NOT documents
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const response = await fetch(`${baseUrl}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: currentQuery }), // FIXED: Removed documents
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Server error');
+      }
+
+      const data = await response.json();
+      const aiResponse = data.content;
+
+      // Add AI response
+      const aiMsg = {
+        type: 'ai',
+        content: aiResponse,
+        timestamp: new Date().toISOString()
+      };
+
+      const finalHistory = [...optimisticHistory, aiMsg];
+      setChatHistory(finalHistory);
+      
+      // Save to storage
+      await saveChatHistory(finalHistory);
+      
+      toast.success('Response received');
+
+    } catch (error) {
+      console.error('Error querying AI:', error);
+      
+      // Rollback on error
+      setChatHistory(chatHistory);
+      
+      // Show user-friendly error
+      if (error.message.includes('Failed to fetch')) {
+        toast.error('Cannot connect to server. Please check if backend is running.');
+      } else if (error.message.includes('413')) {
+        toast.error('Request too large. This should not happen with proper RAG.');
+      } else {
+        toast.error(error.message || 'Failed to get AI response');
+      }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentQuery, documents, chatHistory, saveChatHistory]);
 
-  const clearChat = async () => {
-    if (confirm('آیا مطمئن هستید که می‌خواهید تاریخچه چت را پاک کنید؟')) {
+  // Clear chat with confirmation
+  const clearChat = useCallback(async () => {
+    if (!confirm('Are you sure you want to clear the chat history?')) {
+      return;
+    }
+
+    try {
       setChatHistory([]);
-      await window.storage.delete('aikb-chat-history');
+      await saveChatHistory([]);
+      toast.success('Chat history cleared');
+    } catch (error) {
+      toast.error('Failed to clear chat history');
+    }
+  }, [saveChatHistory]);
+
+  // Handle Enter key in search
+  const handleSearchKeyPress = (e) => {
+    if (e.key === 'Enter' && !isLoading) {
+      queryAI();
     }
   };
-
-  const filteredDocs = documents.filter(doc => 
-    doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50" dir="rtl">
@@ -161,13 +292,27 @@ ${context}
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setShowAddDoc(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-all"
-            >
-              <Plus size={20} />
-              <span>افزودن سند</span>
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowAddDoc(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-all"
+              >
+                <Plus size={20} />
+                <span>افزودن سند</span>
+              </button>
+              {documents.length > 0 && (
+                <button
+                  onClick={() => syncDocumentsToBackend(documents)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all"
+                  title="Sync all documents to AI backend"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>همگام‌سازی</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -209,11 +354,17 @@ ${context}
               <input
                 type="text"
                 placeholder="جستجو در اسناد..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={rawSearchTerm}
+                onChange={(e) => setRawSearchTerm(e.target.value)}
+                onKeyPress={handleSearchKeyPress}
                 className="w-full pr-10 pl-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
+            {rawSearchTerm && (
+              <p className="text-xs text-gray-500 mt-1">
+                جستجوی اولیه: {rawSearchTerm} | نتایج: {filteredDocs.length}
+              </p>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -234,6 +385,7 @@ ${context}
                     <button
                       onClick={() => deleteDocument(doc.id)}
                       className="text-red-500 hover:text-red-700 transition-colors"
+                      title="Delete document"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -277,6 +429,10 @@ ${context}
                 <MessageSquare className="mx-auto text-gray-300" size={48} />
                 <p className="mt-4 text-gray-500">سوال خود را بپرسید</p>
                 <p className="text-sm text-gray-400 mt-2">من بر اساس اسناد موجود پاسخ می‌دهم</p>
+                <p className="text-xs text-gray-400 mt-4">
+                  <AlertTriangle className="inline w-4 h-4" /> 
+                  {' '}فقط پرسش خود را وارد کنید - سیستم به صورت خودکار اسناد را جستجو می‌کند
+                </p>
               </div>
             ) : (
               chatHistory.map((msg, idx) => (
@@ -341,11 +497,20 @@ function AddDocumentModal({ onClose, onAdd }) {
   const [category, setCategory] = useState('');
 
   const handleSubmit = () => {
-    if (title.trim() && content.trim() && category.trim()) {
-      onAdd({ title, content, category });
-      setTitle('');
-      setContent('');
-      setCategory('');
+    if (!title.trim() || !content.trim() || !category.trim()) {
+      toast.error('Please fill all fields');
+      return;
+    }
+
+    onAdd({ title, content, category });
+    setTitle('');
+    setContent('');
+    setCategory('');
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      handleSubmit();
     }
   };
 
@@ -354,7 +519,11 @@ function AddDocumentModal({ onClose, onAdd }) {
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-bold text-gray-800">افزودن سند جدید</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button 
+            onClick={onClose} 
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+            aria-label="Close modal"
+          >
             <X size={24} />
           </button>
         </div>
@@ -366,8 +535,10 @@ function AddDocumentModal({ onClose, onAdd }) {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              onKeyPress={handleKeyPress}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="مثال: راهنمای استفاده از سیستم"
+              autoFocus
             />
           </div>
 
@@ -377,6 +548,7 @@ function AddDocumentModal({ onClose, onAdd }) {
               type="text"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
+              onKeyPress={handleKeyPress}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="مثال: فنی، اداری، آموزشی"
             />
@@ -387,10 +559,12 @@ function AddDocumentModal({ onClose, onAdd }) {
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
+              onKeyPress={handleKeyPress}
               rows={10}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               placeholder="محتوای کامل سند را اینجا وارد کنید..."
             />
+            <p className="text-xs text-gray-500 mt-1">Ctrl+Enter برای ذخیره سریع</p>
           </div>
 
           <div className="flex gap-3 pt-4">
@@ -410,5 +584,14 @@ function AddDocumentModal({ onClose, onAdd }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Main wrapper with Error Boundary
+export default function AIKB() {
+  return (
+    <ErrorBoundary>
+      <AIKBContent />
+    </ErrorBoundary>
   );
 }

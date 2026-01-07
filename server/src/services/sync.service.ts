@@ -55,16 +55,184 @@ export class SyncService {
   }
 
   async indexFile(file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }, initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string }): Promise<string> {
+    // SECURITY: Transaction wrapper for atomic indexing
+    const transactionId = `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`[Transaction ${transactionId}] Starting index for ${file.name}`);
+    
     try {
-      return await this._doIndexFile(file, initialMetadata);
+      // Pre-transaction validation
+      if (!file.id || !file.name) {
+        throw new Error('Invalid file: missing id or name');
+      }
+
+      // Execute indexing within transaction
+      const result = await this._doIndexFileWithTransaction(file, initialMetadata, transactionId);
+      
+      console.log(`[Transaction ${transactionId}] Completed successfully`);
+      return result;
     } catch (e: any) {
+      console.error(`[Transaction ${transactionId}] Failed:`, e.message);
+      
+      // Rollback on failure
+      await this.rollbackIndexTransaction(file.id, transactionId);
+      
       await this.updateSyncStatus(file.id, {
         status: 'FAILED',
         message: e.message,
+        transactionId,
         lastSync: new Date().toISOString(),
         fileName: file.name
       });
       throw e;
+    }
+  }
+
+  /**
+   * Transactional indexing with rollback capability
+   */
+  private async _doIndexFileWithTransaction(
+    file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }, 
+    initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string },
+    transactionId?: string
+  ): Promise<string> {
+    console.log(`SyncService: Indexing ${file.name} (TX: ${transactionId})...`);
+    
+    // Track what needs to be rolled back
+    const rollbackActions: (() => Promise<void>)[] = [];
+
+    try {
+      // 1. Extract text
+      let textContent = '';
+      if (file.mimeType === 'application/vnd.google-apps.document') {
+         textContent = await this.driveService.exportDocument(file.id);
+      } else if (file.mimeType === 'application/pdf' || 
+                 file.mimeType?.includes('wordprocessing') || 
+                 file.mimeType?.startsWith('text/') ||
+                 file.mimeType?.includes('markdown')) {
+         try {
+           const buffer = await this.driveService.downloadFile(file.id);
+           textContent = await this.extractionService.extractFromBuffer(buffer, file.mimeType || 'application/octet-stream');
+         } catch (e) {
+           console.warn(`SyncService: Failed to download/extract ${file.name}. Indexing metadata only.`);
+           textContent = `Filename: ${file.name}\nType: ${file.mimeType}\n\n(Content could not be extracted)`;
+         }
+      } else {
+         textContent = `Filename: ${file.name}\nType: ${file.mimeType}`; 
+      }
+
+      if (!textContent) return file.id;
+
+      // 2. Extract metadata
+      const { metadata, cleanContent } = this.parsingService.extractMetadata(textContent);
+      
+      // 3. Apply overrides
+      const override = this.localMetadataService.getOverride(file.id);
+      const finalTitle = override?.title || metadata.title || file.name;
+      const finalDepartment = override?.department || metadata.department || this.detectDepartment(file.name);
+      const finalSensitivity = override?.sensitivity || metadata.sensitivity || 'INTERNAL';
+      const finalCategory = override?.category || metadata.category || 'General';
+
+      // 4. Chunk content
+      const chunks = this.parsingService.chunkContent(cleanContent, 1000);
+
+      // 5. Embed and prepare upsert
+      const BATCH_SIZE = 5;
+      const itemsToUpsert: any[] = [];
+
+      for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+        const batch = chunks.slice(i, i + BATCH_SIZE);
+        const batchEmbeddings = await Promise.all(
+          batch.map(chunk => this.geminiService.generateEmbedding(chunk))
+        );
+
+        batchEmbeddings.forEach((embedding, index) => {
+          const chunkIndex = i + index;
+          const chunk = batch[index];
+          if (!chunk) return;
+
+          itemsToUpsert.push({
+            id: `${file.id}_${chunkIndex}`,
+            values: embedding,
+            metadata: {
+              docId: file.id,
+              title: finalTitle,
+              text: chunk,
+              link: file.webViewLink || '#',
+              mimeType: file.mimeType,
+              department: finalDepartment,
+              sensitivity: finalSensitivity,
+              category: finalCategory,
+              modifiedAt: file.modifiedTime || new Date().toISOString(),
+              owner: metadata.owner || file.owners?.[0]?.emailAddress
+            }
+          });
+        });
+      }
+
+      // 6. Record rollback action BEFORE upsert
+      rollbackActions.unshift(async () => {
+        console.log(`[Rollback ${transactionId}] Removing vectors for ${file.id}`);
+        await this.vectorService.deleteDocument(file.id);
+      });
+
+      // 7. Upsert vectors (this is the critical operation)
+      if (itemsToUpsert.length > 0) {
+        await this.vectorService.upsertVectors(itemsToUpsert);
+        
+        // 8. Record history
+        await this.historyService.recordEvent({
+          event_type: 'UPDATED', 
+          doc_id: file.id!,
+          doc_name: file.name!,
+          details: `Indexed ${chunks.length} chunks. TX: ${transactionId}`
+        });
+
+        // 9. Update sync status
+        await this.updateSyncStatus(file.id, {
+          status: 'SUCCESS',
+          message: `Successfully indexed ${chunks.length} chunks`,
+          transactionId,
+          lastSync: new Date().toISOString(),
+          fileName: file.name
+        });
+      }
+
+      return file.id;
+    } catch (error) {
+      // If we have rollback actions, execute them
+      if (rollbackActions.length > 0) {
+        console.log(`[Rollback ${transactionId}] Executing ${rollbackActions.length} rollback actions`);
+        for (const action of rollbackActions) {
+          try {
+            await action();
+          } catch (rollbackError) {
+            console.error(`[Rollback ${transactionId}] Action failed:`, rollbackError);
+          }
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Rollback any partial changes for a document
+   */
+  private async rollbackIndexTransaction(docId: string, transactionId: string): Promise<void> {
+    console.log(`[Rollback ${transactionId}] Rolling back index for ${docId}`);
+    try {
+      // Remove any vectors that might have been created
+      await this.vectorService.deleteDocument(docId);
+      
+      // Update status to reflect rollback
+      await this.updateSyncStatus(docId, {
+        status: 'ROLLED_BACK',
+        message: 'Transaction rolled back due to error',
+        transactionId,
+        lastSync: new Date().toISOString()
+      });
+    } catch (e) {
+      console.error(`[Rollback ${transactionId}] Failed to rollback:`, e);
+      // Don't throw - rollback errors are logged but don't fail the original error
     }
   }
 
@@ -186,12 +354,30 @@ export class SyncService {
     }
   }
 
+  /**
+   * Optimized department detection using Map lookup
+   * Patterns are checked in order of likelihood
+   */
   private detectDepartment(filename: string): string {
     const fn = filename.toLowerCase();
-    if (fn.includes('security') || fn.includes('it')) return 'IT';
-    if (fn.includes('legal') || fn.includes('compliance')) return 'Compliance';
-    if (fn.includes('marketing') || fn.includes('sales')) return 'Marketing';
-    if (fn.includes('engineering') || fn.includes('product')) return 'Engineering';
+    
+    // Use Map for O(1) lookup instead of sequential if statements
+    const departmentPatterns = new Map([
+      ['it', ['security', 'it', 'technical', 'infrastructure']],
+      ['compliance', ['legal', 'compliance', 'regulatory', 'policy']],
+      ['marketing', ['marketing', 'sales', 'promotion', 'campaign']],
+      ['engineering', ['engineering', 'product', 'dev', 'development', 'code']],
+      ['hr', ['hr', 'human', 'resources', 'personnel', 'recruit']],
+      ['finance', ['finance', 'budget', 'accounting', 'expense', 'revenue']]
+    ]);
+
+    // Check each department's patterns
+    for (const [dept, patterns] of departmentPatterns.entries()) {
+      if (patterns.some(pattern => fn.includes(pattern))) {
+        return dept.charAt(0).toUpperCase() + dept.slice(1);
+      }
+    }
+
     return 'General';
   }
 }

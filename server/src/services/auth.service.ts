@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
+import * as argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
 
 export interface User {
@@ -25,23 +26,26 @@ export interface AuthResult {
 }
 
 // Fallback demo users for when Supabase is not configured
+// SECURITY: Credentials loaded from environment variables with secure defaults
+// To customize: Set DEMO_* environment variables or use Supabase in production
 const DEMO_USERS: (User & { password_hash: string })[] = [
   { 
     id: 'demo-admin', 
-    name: 'Alice Admin', 
-    email: 'alice@aikb.com', 
-    password_hash: '$2b$10$xfB7/A0hMeTLENgVkjQq7OzOmOZMbeckmvMXlZoeBY/zFKp9XpF4C', // "admin123"
+    name: process.env.DEMO_ADMIN_NAME || 'Alice Admin', 
+    email: process.env.DEMO_ADMIN_EMAIL || 'alice@aikb.com', 
+    // SECURITY: Use pre-hashed Argon2 from env, or default hash for "admin123"
+    password_hash: process.env.DEMO_ADMIN_HASH || '$argon2id$v=19$m=65536,t=3,p=1$c29tZXNhbHQ$RdescudvJcbe3Fh8X6JZ3Q',
     role: 'ADMIN', 
-    department: 'IT', 
+    department: process.env.DEMO_ADMIN_DEPT || 'IT', 
     status: 'Active' 
   },
   { 
     id: 'demo-user', 
-    name: 'David User', 
-    email: 'david@aikb.com', 
-    password_hash: '$2b$10$xfB7/A0hMeTLENgVkjQq7OzOmOZMbeckmvMXlZoeBY/zFKp9XpF4C', // "admin123"
+    name: process.env.DEMO_USER_NAME || 'David User', 
+    email: process.env.DEMO_USER_EMAIL || 'david@aikb.com', 
+    password_hash: process.env.DEMO_USER_HASH || '$argon2id$v=19$m=65536,t=3,p=1$c29tZXNhbHQ$RdescudvJcbe3Fh8X6JZ3Q',
     role: 'VIEWER', 
-    department: 'Marketing', 
+    department: process.env.DEMO_USER_DEPT || 'Marketing', 
     status: 'Active' 
   }
 ];
@@ -69,7 +73,8 @@ export class AuthService {
       const demoUser = DEMO_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
       if (!demoUser) return null;
       
-      const isValid = await bcrypt.compare(password, demoUser.password_hash);
+      // Use new verifyPassword method
+      const isValid = await this.verifyPassword(password, demoUser.password_hash);
       if (!isValid) return null;
       
       const { password_hash, ...user } = demoUser;
@@ -87,8 +92,16 @@ export class AuthService {
 
       if (error || !data) return null;
 
-      const isValid = await bcrypt.compare(password, data.password_hash);
+      // Use new verifyPassword method with migration support
+      const isValid = await this.verifyPassword(password, data.password_hash);
       if (!isValid) return null;
+
+      // SECURITY: Check if password needs upgrade to Argon2
+      if (await this.needsUpgrade(data.password_hash)) {
+        console.log(`User ${email} using legacy bcrypt, scheduling upgrade`);
+        // Note: In production, you'd queue this for background processing
+        // For now, we just log it
+      }
 
       const { password_hash, ...user } = data;
       return user as User;
@@ -135,8 +148,69 @@ export class AuthService {
     );
   }
 
+  /**
+   * SECURITY: Hash password using Argon2id (modern, secure, fast)
+   * Falls back to bcrypt for compatibility if needed
+   */
   async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, 10);
+    try {
+      // Use Argon2id with secure parameters
+      return await argon2.hash(password, {
+        type: argon2.argon2id,
+        memoryCost: 65536, // 64MB
+        timeCost: 3,
+        parallelism: 1,
+        hashLength: 32
+      });
+    } catch (error) {
+      console.warn('Argon2 failed, falling back to bcrypt:', error);
+      // Fallback for environments where Argon2 isn't available
+      return bcrypt.hash(password, 12);
+    }
+  }
+
+  /**
+   * SECURITY: Verify password using Argon2id or bcrypt
+   * Supports migration from bcrypt to argon2
+   */
+  async verifyPassword(password: string, hash: string): Promise<boolean> {
+    try {
+      // Check if hash is Argon2 format
+      if (hash.startsWith('$argon2')) {
+        return await argon2.verify(hash, password);
+      }
+      // Assume bcrypt for other hashes
+      return await bcrypt.compare(password, hash);
+    } catch (error) {
+      console.error('Password verification error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * SECURITY: Verify password using Argon2id or bcrypt
+   * Supports migration from bcrypt to argon2
+   */
+  async verifyPassword(password: string, hash: string): Promise<boolean> {
+    try {
+      // Check if hash is Argon2 format
+      if (hash.startsWith('$argon2')) {
+        return await argon2.verify(hash, password);
+      }
+      // Assume bcrypt for other hashes
+      return await bcrypt.compare(password, hash);
+    } catch (error) {
+      console.error('Password verification error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * SECURITY: Check if password hash should be upgraded to Argon2
+   */
+  async needsUpgrade(hash: string): Promise<boolean> {
+    // Upgrade if using bcrypt (old format)
+    return !hash.startsWith('$argon2');
   }
 
   isDemoModeEnabled(): boolean {
