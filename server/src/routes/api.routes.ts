@@ -16,6 +16,8 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
+import crypto from 'crypto';
+
 const router = Router();
 
 
@@ -37,7 +39,7 @@ if (missingVars.length > 0) {
   // SECURITY: JWT_SECRET is ALWAYS required - use a generated default for dev only
   if (!process.env.JWT_SECRET) {
     // Generate a random secret for development (logged for debugging)
-    const devSecret = require('crypto').randomBytes(32).toString('hex');
+    const devSecret = crypto.randomBytes(32).toString('hex');
     process.env.JWT_SECRET = devSecret;
     console.warn('⚠️ Generated temporary JWT_SECRET for dev session. Set JWT_SECRET env var for persistence.');
   }
@@ -65,7 +67,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     // Use crypto for secure random filename
-    const uniqueSuffix = Date.now() + '-' + require('crypto').randomBytes(8).toString('hex');
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(8).toString('hex');
     cb(null, uniqueSuffix + '-' + file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_'));
   }
 });
@@ -228,6 +230,35 @@ router.post('/sync', authMiddleware, async (req: any, res) => {
   } catch (e: any) {
     console.error('Sync failed:', e);
     res.status(500).json({ error: 'Sync failed' });
+  }
+});
+
+// --- CHAT ROUTES ---
+
+router.post('/chat', authMiddleware, async (req: any, res) => {
+  const { message, history } = req.body;
+  
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+
+  try {
+    const user = req.user;
+    const result = await ragService.query({
+      query: message,
+      userId: user.id,
+      userProfile: {
+        name: user.name,
+        department: user.department,
+        role: user.role
+      }
+      // Note: History is not yet processed by RAGService, but accepted for API compatibility
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Chat API Error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
