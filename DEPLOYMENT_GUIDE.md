@@ -164,3 +164,48 @@ sudo docker-compose up -d --build
 
 - **"502 Bad Gateway"**: Docker container crashed? Check logs: `sudo docker logs aikb-server`.
 - **"App exits immediately"**: Verify `JWT_SECRET` is set in `.env`.
+
+## 📊 Production Monitoring
+
+### Telemetry Events to Watch
+
+Monitor these log patterns for system health:
+
+```bash
+# Watch for query failures
+sudo docker logs -f aikb-server | grep "RAG_QUERY_FAILED"
+
+# Watch for sync failures
+sudo docker logs -f aikb-server | grep "SYNC_FAILED"
+
+# Watch for extraction failures
+sudo docker logs -f aikb-server | grep "EXTRACTION_FAILED"
+```
+
+### Key Metrics
+
+- **Query Success Rate**: Should be > 95%
+- **Sync Success Rate**: Should be > 98%
+- **Memory Usage**: Should be stable (no continuous growth)
+- **Response Time**: Should be < 5 seconds per query
+
+### Rollback Procedure
+
+If data corruption is detected:
+
+1. **Stop services**: `sudo docker-compose down`
+2. **Restore vector store**: `cp data/vectors.json.bak data/vectors.json`
+3. **Clear client caches**: Instruct users to clear browser cache
+4. **Restart**: `sudo docker-compose up -d`
+5. **Monitor**: Check logs for 30 minutes
+
+### Performance Tuning
+
+If sync is slow, adjust concurrency in `server/src/services/sync.service.ts`:
+
+```typescript
+const CONCURRENCY = 3; // Reduce to 2 if hitting rate limits
+const BATCH_SIZE = 5; // Reduce to 3 for slower networks
+```
+
+---

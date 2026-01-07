@@ -91,16 +91,36 @@ export const authApi = {
   
   logout: async () => {
     try {
-      await api.post('/auth/logout');
-    } catch (e) {
-      console.error('Logout failed', e);
-    } finally {
-      await atomicLocalStorageOperation(() => {
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('user');
-        }
+      await api.post('/auth/logout').catch(() => {
+        // Don't throw - we want to clean up regardless
+        console.warn('Backend logout failed, proceeding with local cleanup');
       });
+    } catch (e) {
+      console.error('Logout error', e);
+    } finally {
+      try {
+        await atomicLocalStorageOperation(() => {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('user');
+          }
+        });
+      } catch (cleanupError) {
+        console.error('Local storage cleanup failed:', cleanupError);
+        // Force clear as last resort
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.clear();
+          } catch (e) {
+            // Browser might be in a bad state
+            console.error('CRITICAL: Cannot clear localStorage', e);
+          }
+        }
+      }
+
+      // Dispatch logout event for cross-tab sync
       if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('user-logout'));
+        // Always redirect, even if cleanup failed
         window.location.href = '/login';
       }
     }

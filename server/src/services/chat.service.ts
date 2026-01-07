@@ -1,5 +1,6 @@
 import { GeminiService } from './gemini.service.js';
 import { VectorService } from './vector.service.js';
+import { HistoryService } from './history.service.js';
 
 interface Document {
   id: string;
@@ -12,6 +13,7 @@ interface Document {
 export class ChatService {
   private geminiService: GeminiService;
   private vectorService: VectorService;
+  private historyService: HistoryService;
 
   constructor() {
     const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID; 
@@ -22,6 +24,7 @@ export class ChatService {
     
     // Initialize vector service with mock mode support
     this.vectorService = new VectorService(projectId, 'us-central1');
+    this.historyService = new HistoryService();
   }
 
   /**
@@ -76,8 +79,29 @@ export class ChatService {
 
       return result.text;
 
-    } catch (error) {
-      console.error('Error in RAG query:', error);
+    } catch (error: any) {
+      const errorDetails = {
+        query,
+        userId,
+        userProfile: safeProfile,
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.error('RAG_QUERY_FAILED', JSON.stringify(errorDetails));
+      
+      // Log to history
+      try {
+        await this.historyService?.recordEvent({
+          event_type: 'RAG_QUERY_FAILED',
+          details: `Query failed: ${error.message}`,
+          metadata: errorDetails
+        });
+      } catch (e) {
+        // Ignore history logging errors to prevent cascading failures
+      }
+      
       throw new Error('Failed to process query with RAG');
     }
   }

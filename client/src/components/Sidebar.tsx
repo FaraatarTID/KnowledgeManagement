@@ -18,14 +18,49 @@ export default function Sidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [user, setUser] = useState<any>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   const activeTab = searchParams ? searchParams.get('tab') : null;
 
   useEffect(() => {
+    setIsMounted(true);
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error('Failed to parse user data:', e);
+        localStorage.removeItem('user');
+      }
     }
+
+    // Listen for cross-tab storage changes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'user') {
+        if (e.newValue) {
+          try {
+            setUser(JSON.parse(e.newValue));
+          } catch (err) {
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
+      }
+    };
+
+    // Listen for custom logout events
+    const handleLogoutEvent = () => {
+      setUser(null);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('user-logout', handleLogoutEvent);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('user-logout', handleLogoutEvent);
+    };
   }, []);
 
   const handleLogout = () => {
@@ -76,13 +111,50 @@ export default function Sidebar() {
     }
   ];
 
-  if (!user) return null;
-
   // Filter nav items based on user role
   const visibleItems = navItems.filter(item => {
     if (!item.adminOnly) return true;
-    return user.role === 'ADMIN' || user.role === 'MANAGER';
+    return user?.role === 'ADMIN' || user?.role === 'MANAGER';
   });
+
+  // Prevent hydration mismatch by showing skeleton before mount
+  if (!isMounted || !user) {
+    return (
+      <aside className="w-72 bg-white border-r border-[#E2E8F0] flex flex-col h-screen shrink-0">
+        <div className="p-6 border-b border-[#E2E8F0]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-[#2563EB] to-[#7C3AED] rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <Bot className="text-white" size={24} />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-[#0F172A] tracking-tight">AIKB</h1>
+              <p className="text-xs font-medium text-[#64748B]">Enterprise Knowledge</p>
+            </div>
+          </div>
+        </div>
+
+        <nav className="flex-1 p-4 space-y-2">
+          {/* Skeleton nav items */}
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl animate-pulse">
+              <div className="w-5 h-5 bg-gray-200 rounded"></div>
+              <div className="h-4 bg-gray-200 rounded w-24"></div>
+            </div>
+          ))}
+        </nav>
+
+        <div className="p-4 border-t border-[#E2E8F0]">
+          <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl mb-2 animate-pulse">
+            <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+            <div className="flex-1 space-y-2">
+              <div className="h-3 bg-gray-200 rounded w-20"></div>
+              <div className="h-2 bg-gray-200 rounded w-16"></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside className="w-72 bg-white border-r border-[#E2E8F0] flex flex-col h-screen shrink-0">

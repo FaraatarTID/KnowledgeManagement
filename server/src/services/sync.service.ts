@@ -104,7 +104,12 @@ export class SyncService {
       // 1. Extract text
       let textContent = '';
       if (file.mimeType === 'application/vnd.google-apps.document') {
-         textContent = await this.driveService.exportDocument(file.id);
+         try {
+           textContent = await this.driveService.exportDocument(file.id);
+         } catch (e: any) {
+           await this.logExtractionFailure(file, e, 'export');
+           textContent = `Filename: ${file.name}\nType: ${file.mimeType}\n\n(Content export failed: ${e.message})`;
+         }
       } else if (file.mimeType === 'application/pdf' || 
                  file.mimeType?.includes('wordprocessing') || 
                  file.mimeType?.startsWith('text/') ||
@@ -112,9 +117,9 @@ export class SyncService {
          try {
            const buffer = await this.driveService.downloadFile(file.id);
            textContent = await this.extractionService.extractFromBuffer(buffer, file.mimeType || 'application/octet-stream');
-         } catch (e) {
-           console.warn(`SyncService: Failed to download/extract ${file.name}. Indexing metadata only.`);
-           textContent = `Filename: ${file.name}\nType: ${file.mimeType}\n\n(Content could not be extracted)`;
+         } catch (e: any) {
+           await this.logExtractionFailure(file, e, 'download/extract');
+           textContent = `Filename: ${file.name}\nType: ${file.mimeType}\n\n(Content extraction failed: ${e.message})`;
          }
       } else {
          textContent = `Filename: ${file.name}\nType: ${file.mimeType}`; 
@@ -135,15 +140,24 @@ export class SyncService {
       // 4. Chunk content
       const chunks = this.parsingService.chunkContent(cleanContent, 1000);
 
-      // 5. Embed and prepare upsert
+      // 5. Embed and prepare upsert with concurrency control
       const BATCH_SIZE = 5;
+      const CONCURRENCY = 3; // Limit parallel API calls to prevent rate limits
       const itemsToUpsert: any[] = [];
 
+      // Process chunks in batches with concurrency control
       for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
         const batch = chunks.slice(i, i + BATCH_SIZE);
-        const batchEmbeddings = await Promise.all(
-          batch.map(chunk => this.geminiService.generateEmbedding(chunk))
-        );
+        
+        // Process this batch with concurrency limit
+        const batchEmbeddings: number[][] = [];
+        for (let j = 0; j < batch.length; j += CONCURRENCY) {
+          const concurrentChunk = batch.slice(j, j + CONCURRENCY);
+          const concurrentEmbeddings = await Promise.all(
+            concurrentChunk.map(chunk => this.geminiService.generateEmbedding(chunk))
+          );
+          batchEmbeddings.push(...concurrentEmbeddings);
+        }
 
         batchEmbeddings.forEach((embedding, index) => {
           const chunkIndex = i + index;
@@ -177,20 +191,46 @@ export class SyncService {
 
       // 7. Upsert vectors (this is the critical operation)
       if (itemsToUpsert.length > 0) {
-        await this.vectorService.upsertVectors(itemsToUpsert);
+        // Log progress
+        console.log(`[Transaction ${transactionId}] Upserting ${itemsToUpsert.length} vectors...`);
         
-        // 8. Record history
-        await this.historyService.recordEvent({
-          event_type: 'UPDATED', 
-          doc_id: file.id!,
-          doc_name: file.name!,
-          details: `Indexed ${chunks.length} chunks. TX: ${transactionId}`
-        });
+        try {
+          await this.vectorService.upsertVectors(itemsToUpsert);
+          
+          // 8. Record history
+          await this.historyService.recordEvent({
+            event_type: 'UPDATED', 
+            doc_id: file.id!,
+            doc_name: file.name!,
+            details: `Indexed ${chunks.length} chunks (${itemsToUpsert.length} vectors). TX: ${transactionId}`
+          });
 
-        // 9. Update sync status
+          // 9. Update sync status
+          await this.updateSyncStatus(file.id, {
+            status: 'SUCCESS',
+            message: `Successfully indexed ${chunks.length} chunks (${itemsToUpsert.length} vectors)`,
+            transactionId,
+            lastSync: new Date().toISOString(),
+            fileName: file.name
+          });
+        } catch (upsertError: any) {
+          console.error(`[Transaction ${transactionId}] Upsert failed:`, upsertError);
+          
+          // Record failure
+          await this.historyService.recordEvent({
+            event_type: 'SYNC_FAILED',
+            doc_id: file.id!,
+            doc_name: file.name!,
+            details: `Upsert failed: ${upsertError.message}. TX: ${transactionId}`
+          });
+
+          throw upsertError;
+        }
+      } else {
+        console.warn(`[Transaction ${transactionId}] No vectors generated for ${file.name}`);
         await this.updateSyncStatus(file.id, {
-          status: 'SUCCESS',
-          message: `Successfully indexed ${chunks.length} chunks`,
+          status: 'WARNING',
+          message: 'No content extracted or chunks generated',
           transactionId,
           lastSync: new Date().toISOString(),
           fileName: file.name
@@ -349,8 +389,29 @@ export class SyncService {
       
       data[docId] = { ...status, updatedAt: new Date().toISOString() };
       fs.writeFileSync(STATUS_FILE, JSON.stringify(data, null, 2));
-    } catch (e) {
-      console.error('SyncService: Failed to update sync status', e);
+      
+      // Log sync status for monitoring
+      if (status.status === 'SUCCESS') {
+        console.log('SYNC_SUCCESS', JSON.stringify({
+          docId,
+          fileName: status.fileName,
+          message: status.message,
+          transactionId: status.transactionId
+        }));
+      } else if (status.status === 'FAILED') {
+        console.error('SYNC_FAILED', JSON.stringify({
+          docId,
+          fileName: status.fileName,
+          error: status.message,
+          transactionId: status.transactionId
+        }));
+      }
+    } catch (e: any) {
+      console.error('SYNC_STATUS_UPDATE_FAILED', JSON.stringify({
+        docId,
+        error: e.message,
+        timestamp: new Date().toISOString()
+      }));
     }
   }
 
@@ -379,5 +440,48 @@ export class SyncService {
     }
 
     return 'General';
+  }
+
+  /**
+   * Log extraction failures with comprehensive telemetry
+   */
+  private async logExtractionFailure(file: { id: string, name: string, mimeType?: string }, error: any, operation: string) {
+    const errorDetails = {
+      fileId: file.id,
+      fileName: file.name,
+      mimeType: file.mimeType,
+      operation: operation,
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString(),
+      transactionId: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    };
+    
+    console.error('EXTRACTION_FAILED', JSON.stringify(errorDetails));
+    
+    // Log to history for admin review
+    await this.historyService.recordEvent({
+      event_type: 'EXTRACTION_FAILED',
+      doc_id: file.id,
+      doc_name: file.name,
+      details: `Extraction failed during ${operation}: ${error.message}. Metadata-only indexing.`
+    });
+
+    // Send alert to monitoring system in production
+    if (process.env.NODE_ENV === 'production' && process.env.ALERT_WEBHOOK_URL) {
+      try {
+        await fetch(process.env.ALERT_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            severity: 'WARNING',
+            category: 'EXTRACTION_FAILURE',
+            details: errorDetails
+          })
+        });
+      } catch (alertError) {
+        console.error('Failed to send alert:', alertError);
+      }
+    }
   }
 }

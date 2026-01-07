@@ -217,6 +217,30 @@ This system is built for **High-Fidelity Accuracy**. The AI agent is designed to
 - **Verbatim Technical Data**: The AI is strictly forbidden from changing technical keywords, acronyms, or numbers.
 - **Literalism**: The AI avoids "reading between the lines." It only reports what is explicitly written.
 
+### 8. Error Handling & Recovery
+
+The system includes robust error handling to prevent data loss:
+
+#### Request Timeouts
+- **30-Second Timeout**: If the AI takes longer than 30 seconds to respond, the request is cancelled
+- **User Message**: "Request timed out. Please try again."
+- **Action**: Retry the question or check if backend is running
+
+#### Sync Failures
+If document sync fails:
+- **Local Save**: Your document is always saved locally first
+- **Error Message**: "Document saved locally. Cannot connect to server for AI sync."
+- **Recovery**: The system will automatically retry sync when connection is restored
+
+#### Cross-Tab Synchronization
+- **Real-time Updates**: If you log out in another tab, this tab will automatically log out
+- **Storage Sync**: Changes to documents appear instantly across all open tabs
+
+#### What Users See During Errors
+- **Network Errors**: "Cannot connect to server. Please check if backend is running."
+- **Large Files**: "Request too large." (This shouldn't happen with proper RAG)
+- **General Errors**: Specific error message with actionable steps
+
 ---
 
 ## ❓ Troubleshooting

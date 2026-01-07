@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 /**
  * Debounce hook to delay value updates
  * Prevents expensive operations (like search) from running on every keystroke
+ * 
+ * SECURITY FIX: Proper cleanup to prevent memory leaks
  */
 export const useDebounce = <T>(value: T, delay: number): T => {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -25,20 +27,37 @@ export const useDebounce = <T>(value: T, delay: number): T => {
 /**
  * Debounced callback hook
  * Prevents function from being called too frequently
+ * 
+ * SECURITY FIX: Proper cleanup and stable reference
  */
 export const useDebouncedCallback = <T extends (...args: any[]) => void>(
   callback: T,
   delay: number
 ): T => {
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const callbackRef = useRef(callback);
 
-  return ((...args: any[]) => {
+  // Update callback reference without triggering re-renders
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  return useCallback((...args: Parameters<T>) => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
     
     timeoutRef.current = setTimeout(() => {
-      callback(...args);
+      callbackRef.current(...args);
     }, delay);
-  }) as T;
+  }, [delay]) as T;
 };

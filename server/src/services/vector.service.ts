@@ -3,6 +3,31 @@ import path from 'path';
 
 import { LocalMetadataService } from './localMetadata.service.js';
 
+/**
+ * Simple Mutex implementation for preventing race conditions
+ */
+class Mutex {
+  private queue: (() => void)[] = [];
+  private locked = false;
+
+  async acquire(): Promise<() => void> {
+    if (!this.locked) {
+      this.locked = true;
+      return () => {
+        this.locked = false;
+        if (this.queue.length > 0) {
+          const next = this.queue.shift()!;
+          next();
+        }
+      };
+    }
+
+    return new Promise(resolve => {
+      this.queue.push(resolve);
+    });
+  }
+}
+
 interface VectorItem {
   id: string;
   values: number[];
@@ -21,10 +46,8 @@ export class VectorService {
   private readonly DATA_FILE = path.join(process.cwd(), 'data', 'vectors.json');
   private localMetadataService: LocalMetadataService;
   
-  // SECURITY: Atomic write queue to prevent race conditions
-  private writeQueue: Promise<void> = Promise.resolve();
-  private isWriting = false;
-  private saveTimeout: NodeJS.Timeout | null = null;
+  // SECURITY: Mutex for atomic writes to prevent race conditions
+  private writeMutex = new Mutex();
 
   constructor(private projectId: string, private location: string) {
     this.localMetadataService = new LocalMetadataService();
@@ -45,8 +68,24 @@ export class VectorService {
       // If main file exists, use it
       if (fs.existsSync(this.DATA_FILE)) {
         const data = fs.readFileSync(this.DATA_FILE, 'utf-8');
-        this.vectors = JSON.parse(data);
-        console.log(`VectorService: Loaded ${this.vectors.length} vectors from disk.`);
+        try {
+          const parsed = JSON.parse(data);
+          // Validate structure
+          if (!Array.isArray(parsed)) {
+            throw new Error('Invalid vector store format: not an array');
+          }
+          // Validate each item has required structure
+          for (const item of parsed) {
+            if (!item.id || !item.values || !Array.isArray(item.values)) {
+              throw new Error('Invalid vector item structure');
+            }
+          }
+          this.vectors = parsed;
+          console.log(`VectorService: Loaded ${this.vectors.length} vectors from disk.`);
+        } catch (parseError) {
+          console.error('VectorService: Data corruption detected in main file', parseError);
+          throw parseError;
+        }
         
         // Clean up any orphaned temp/backup files
         if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
@@ -57,11 +96,19 @@ export class VectorService {
       // Recovery: If backup exists but main doesn't, restore from backup
       if (fs.existsSync(backupFile)) {
         console.warn('VectorService: Main file missing, recovering from backup');
-        fs.copyFileSync(backupFile, this.DATA_FILE);
-        const data = fs.readFileSync(this.DATA_FILE, 'utf-8');
-        this.vectors = JSON.parse(data);
-        fs.unlinkSync(backupFile);
-        return;
+        try {
+          fs.copyFileSync(backupFile, this.DATA_FILE);
+          const data = fs.readFileSync(this.DATA_FILE, 'utf-8');
+          const parsed = JSON.parse(data);
+          if (!Array.isArray(parsed)) throw new Error('Backup corrupted');
+          this.vectors = parsed;
+          fs.unlinkSync(backupFile);
+          console.log('VectorService: Recovery from backup successful');
+          return;
+        } catch (recoveryError) {
+          console.error('VectorService: Backup recovery failed', recoveryError);
+          // Continue to initialize new store
+        }
       }
 
       // Initialize new data directory
@@ -70,78 +117,69 @@ export class VectorService {
       fs.writeFileSync(this.DATA_FILE, '[]');
       console.log('VectorService: Initialized new vector store');
     } catch (e) {
-      console.error('VectorService: Failed to load vectors', e);
+      console.error('VectorService: Failed to load vectors, initializing empty store', e);
       // Initialize empty to prevent crashes
       this.vectors = [];
     }
   }
 
   /**
-   * Atomic write operation with queue to prevent race conditions
+   * Atomic write operation with mutex to prevent race conditions
    * Uses write-then-rename pattern for crash safety
    */
   private async saveVectorsAtomic(): Promise<void> {
-    // Chain this write to the queue
-    this.writeQueue = this.writeQueue.then(async () => {
-      if (this.isWriting) {
-        // Should not happen due to queue, but log if it does
-        console.warn('VectorService: Concurrent write attempted');
+    const release = await this.writeMutex.acquire();
+    
+    const tempFile = this.DATA_FILE + '.tmp';
+    const backupFile = this.DATA_FILE + '.bak';
+
+    try {
+      // 1. Write to temporary file
+      await fs.promises.writeFile(tempFile, JSON.stringify(this.vectors, null, 2), { flag: 'w' });
+
+      // 2. Verify write was successful by reading back
+      const verifyData = await fs.promises.readFile(tempFile, 'utf-8');
+      const parsed = JSON.parse(verifyData);
+      if (JSON.stringify(parsed) !== JSON.stringify(this.vectors)) {
+        throw new Error('Data corruption detected during write');
       }
-      
-      this.isWriting = true;
-      const tempFile = this.DATA_FILE + '.tmp';
-      const backupFile = this.DATA_FILE + '.bak';
 
-      try {
-        // 1. Write to temporary file
-        await fs.promises.writeFile(tempFile, JSON.stringify(this.vectors, null, 2), { flag: 'w' });
-
-        // 2. Verify write was successful by reading back
-        const verifyData = await fs.promises.readFile(tempFile, 'utf-8');
-        const parsed = JSON.parse(verifyData);
-        if (JSON.stringify(parsed) !== JSON.stringify(this.vectors)) {
-          throw new Error('Data corruption detected during write');
-        }
-
-        // 3. Create backup of existing file (if it exists)
-        if (fs.existsSync(this.DATA_FILE)) {
-          await fs.promises.copyFile(this.DATA_FILE, backupFile);
-        }
-
-        // 4. Atomic rename (guaranteed atomic on most filesystems)
-        await fs.promises.rename(tempFile, this.DATA_FILE);
-
-        // 5. Clean up backup after successful write
-        if (fs.existsSync(backupFile)) {
-          await fs.promises.unlink(backupFile);
-        }
-
-        console.log(`VectorService: Atomic write completed. Vectors: ${this.vectors.length}`);
-      } catch (error) {
-        console.error('VectorService: Atomic write failed', error);
-        // Attempt recovery from backup
-        if (fs.existsSync(backupFile)) {
-          console.warn('VectorService: Attempting recovery from backup');
-          try {
-            await fs.promises.copyFile(backupFile, this.DATA_FILE);
-            const recovered = await fs.promises.readFile(this.DATA_FILE, 'utf-8');
-            this.vectors = JSON.parse(recovered);
-            console.log('VectorService: Recovery successful');
-          } catch (recoveryError) {
-            console.error('VectorService: Recovery failed', recoveryError);
-          }
-        }
-        // Clean up temp file on error
-        if (fs.existsSync(tempFile)) {
-          await fs.promises.unlink(tempFile).catch(() => {});
-        }
-        throw error;
-      } finally {
-        this.isWriting = false;
+      // 3. Create backup of existing file (if it exists)
+      if (fs.existsSync(this.DATA_FILE)) {
+        await fs.promises.copyFile(this.DATA_FILE, backupFile);
       }
-    });
 
-    return this.writeQueue;
+      // 4. Atomic rename (guaranteed atomic on most filesystems)
+      await fs.promises.rename(tempFile, this.DATA_FILE);
+
+      // 5. Clean up backup after successful write
+      if (fs.existsSync(backupFile)) {
+        await fs.promises.unlink(backupFile);
+      }
+
+      console.log(`VectorService: Atomic write completed. Vectors: ${this.vectors.length}`);
+    } catch (error) {
+      console.error('VectorService: Atomic write failed', error);
+      // Attempt recovery from backup
+      if (fs.existsSync(backupFile)) {
+        console.warn('VectorService: Attempting recovery from backup');
+        try {
+          await fs.promises.copyFile(backupFile, this.DATA_FILE);
+          const recovered = await fs.promises.readFile(this.DATA_FILE, 'utf-8');
+          this.vectors = JSON.parse(recovered);
+          console.log('VectorService: Recovery successful');
+        } catch (recoveryError) {
+          console.error('VectorService: Recovery failed', recoveryError);
+        }
+      }
+      // Clean up temp file on error
+      if (fs.existsSync(tempFile)) {
+        await fs.promises.unlink(tempFile).catch(() => {});
+      }
+      throw error;
+    } finally {
+      release();
+    }
   }
 
   /**

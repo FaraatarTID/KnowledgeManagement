@@ -118,6 +118,35 @@ npm test
 
 This runs the **Vitest** suite to check authentication, API security, and basic routes.
 
+### 🔒 Code Quality & Security
+
+The project includes a **custom ESLint plugin** (`eslint-plugin-aikb`) that detects common anti-patterns:
+
+- **Stale Closures**: Prevents memory leaks in React hooks
+- **Silent Failures**: Ensures all errors are logged with telemetry
+- **Missing Cleanup**: Detects event listeners without proper removal
+- **Race Conditions**: Flags unsafe async patterns
+
+**Run the linter:**
+```bash
+cd client
+npm run lint
+```
+
+### 🧪 Integration Tests
+
+Race condition tests ensure the system handles concurrent operations safely:
+
+```bash
+# Server-side race condition tests
+cd server
+npm test -- race-conditions.test.ts
+
+# Client-side race condition tests  
+cd client
+npm test -- race-conditions.test.tsx
+```
+
 ---
 
 **Developed by Antigravity AI**

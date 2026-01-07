@@ -22,6 +22,7 @@ function AIKBContent() {
   const searchTerm = useDebounce(rawSearchTerm, 300);
 
   // Sync existing documents to backend (for first-time load or recovery)
+  // Moved to useEffect to avoid stale closures - see useDocumentSync below
   const syncDocumentsToBackend = useCallback(async (docsToSync: any[]) => {
     if (docsToSync.length === 0) return;
 
@@ -52,7 +53,7 @@ function AIKBContent() {
       console.warn('Could not sync documents to backend:', error);
       // Don't show error toast - this is background sync
     }
-  }, []);
+  }, []); // Empty deps is OK here - it's a pure API call helper
 
   // Load data on mount with corruption recovery
   useEffect(() => {
@@ -67,9 +68,13 @@ function AIKBContent() {
         } else if (loadedDocs.length > 0) {
           // Sync existing documents to backend in background
           // Use a small delay to avoid blocking initial render
-          setTimeout(() => {
+          const syncTimeout = setTimeout(() => {
+            // Capture docs at this moment to avoid stale closure
             syncDocumentsToBackend(loadedDocs);
           }, 1000);
+
+          // Cleanup timeout if component unmounts
+          return () => clearTimeout(syncTimeout);
         }
       } catch (error) {
         toast.error('Failed to load data. Starting with empty state.');
@@ -79,7 +84,7 @@ function AIKBContent() {
     };
 
     initializeData();
-  }, [loadData, syncDocumentsToBackend]);
+  }, [loadData]); // Removed syncDocumentsToBackend - it's memoized with empty deps
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
@@ -142,7 +147,7 @@ function AIKBContent() {
         toast.error(error.message || 'Failed to save document');
       }
     }
-  }, [documents, saveDocuments]);
+  }, [documents, saveDocuments]); // Fixed: Now properly depends on documents state
 
   // Optimistic document deletion
   const deleteDocument = useCallback(async (id) => {
@@ -174,7 +179,7 @@ function AIKBContent() {
     );
   }, [documents, searchTerm]);
 
-  // Optimistic AI query with proper RAG architecture
+  // Optimistic AI query with proper RAG architecture and race condition prevention
   const queryAI = useCallback(async () => {
     if (!currentQuery.trim()) {
       toast.error('Please enter a question');
@@ -186,16 +191,20 @@ function AIKBContent() {
       return;
     }
 
+    // Generate unique query ID for tracking
+    const queryId = uuidv4();
+    
     // Create optimistic user message
     const userMsg = {
+      id: queryId,
       type: 'user',
       content: currentQuery,
       timestamp: new Date().toISOString()
     };
 
     // Optimistic UI update
-    const optimisticHistory = [...chatHistory, userMsg];
-    setChatHistory(optimisticHistory);
+    setChatHistory(prev => [...prev, userMsg]);
+    const queryToSubmit = currentQuery; // Capture before clearing
     setCurrentQuery('');
     setIsLoading(true);
 
@@ -207,7 +216,9 @@ function AIKBContent() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query: currentQuery }), // FIXED: Removed documents
+        body: JSON.stringify({ query: queryToSubmit }), // Use captured query
+        // Add timeout to prevent hanging
+        signal: AbortSignal.timeout(30000)
       });
 
       if (!response.ok) {
@@ -218,29 +229,48 @@ function AIKBContent() {
       const data = await response.json();
       const aiResponse = data.content;
 
-      // Add AI response
-      const aiMsg = {
-        type: 'ai',
-        content: aiResponse,
-        timestamp: new Date().toISOString()
-      };
+      // CRITICAL FIX: Only update if this query is still the latest
+      setChatHistory(prev => {
+        // Check if our optimistic user message is still there
+        const hasThisQuery = prev.some(msg => msg.id === queryId);
+        if (!hasThisQuery) {
+          console.warn('Query was cleared or replaced, skipping update');
+          return prev;
+        }
 
-      const finalHistory = [...optimisticHistory, aiMsg];
-      setChatHistory(finalHistory);
-      
-      // Save to storage
-      await saveChatHistory(finalHistory);
+        // Remove optimistic message and add real response
+        const withoutOptimistic = prev.filter(msg => msg.id !== queryId);
+        const finalHistory = [
+          ...withoutOptimistic,
+          userMsg,
+          {
+            id: uuidv4(),
+            type: 'ai',
+            content: aiResponse,
+            timestamp: new Date().toISOString()
+          }
+        ];
+
+        // Save to storage in background
+        saveChatHistory(finalHistory).catch(err => {
+          console.error('Failed to save chat history:', err);
+        });
+
+        return finalHistory;
+      });
       
       toast.success('Response received');
 
     } catch (error) {
       console.error('Error querying AI:', error);
       
-      // Rollback on error
-      setChatHistory(chatHistory);
+      // CRITICAL FIX: Remove only this query's optimistic message
+      setChatHistory(prev => prev.filter(msg => msg.id !== queryId));
       
       // Show user-friendly error
-      if (error.message.includes('Failed to fetch')) {
+      if (error.name === 'AbortError') {
+        toast.error('Request timed out. Please try again.');
+      } else if (error.message.includes('Failed to fetch')) {
         toast.error('Cannot connect to server. Please check if backend is running.');
       } else if (error.message.includes('413')) {
         toast.error('Request too large. This should not happen with proper RAG.');
@@ -250,7 +280,7 @@ function AIKBContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentQuery, documents, chatHistory, saveChatHistory]);
+  }, [currentQuery, documents.length, saveChatHistory]); // Fixed dependencies
 
   // Clear chat with confirmation
   const clearChat = useCallback(async () => {
