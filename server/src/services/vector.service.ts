@@ -48,12 +48,19 @@ export class VectorService {
     }
   }
 
-  private saveVectors() {
-    try {
-      fs.writeFileSync(this.DATA_FILE, JSON.stringify(this.vectors, null, 2));
-    } catch (e) {
-      console.error('VectorService: Failed to save vectors', e);
-    }
+  // Debounce save operation to prevent hitting disk on every chunk
+  private saveTimeout: NodeJS.Timeout | null = null;
+
+  private async saveVectors() {
+    if (this.saveTimeout) clearTimeout(this.saveTimeout);
+
+    this.saveTimeout = setTimeout(async () => {
+      try {
+        await fs.promises.writeFile(this.DATA_FILE, JSON.stringify(this.vectors, null, 2));
+      } catch (e) {
+        console.error('VectorService: Failed to save vectors', e);
+      }
+    }, 1000) as unknown as NodeJS.Timeout; // 1 second debounce
   }
 
   async similaritySearch(params: {
@@ -77,7 +84,10 @@ export class VectorService {
       filteredVectors = this.vectors.filter(vec => {
         // If vector has a department, it MUST match the user's department UNLESS user is ADMIN
         if (vec.metadata.department && params.filters?.department) {
-           if (params.filters.role !== 'ADMIN' && vec.metadata.department !== params.filters.department) {
+           const vecDept = vec.metadata.department.toLowerCase();
+           const userDept = params.filters.department.toLowerCase();
+           
+           if (params.filters.role !== 'ADMIN' && vecDept !== userDept) {
              return false;
            }
         }
@@ -103,7 +113,7 @@ export class VectorService {
   async deleteDocument(docId: string) {
     if (this.isMock) return;
     this.vectors = this.vectors.filter(v => v.metadata.docId !== docId);
-    this.saveVectors();
+    await this.saveVectors();
     console.log(`VectorService: Deleted all chunks for document ${docId}.`);
   }
 
@@ -146,7 +156,7 @@ export class VectorService {
     });
 
     if (updatedCount > 0) {
-      this.saveVectors();
+      await this.saveVectors();
       console.log(`VectorService: Updated metadata for ${updatedCount} chunks of document ${docId}.`);
     }
   }
@@ -175,7 +185,7 @@ export class VectorService {
     this.vectors.push(...newItems);
     
     // Persist
-    this.saveVectors();
+    await this.saveVectors();
     console.log(`VectorService: Upserted ${vectors.length} vectors. Total: ${this.vectors.length}`);
   }
 

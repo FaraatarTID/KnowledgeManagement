@@ -111,6 +111,20 @@ export class DriveService {
     return response.data as string;
   }
 
+  async downloadFile(fileId: string): Promise<Buffer> {
+    if (this.isMock || !this.drive) return Buffer.from('Mock binary content');
+    try {
+      const response = await this.drive.files.get({
+        fileId: fileId,
+        alt: 'media'
+      }, { responseType: 'arraybuffer' });
+      return Buffer.from(response.data as ArrayBuffer);
+    } catch (e) {
+      console.error(`DriveService: Failed to download file ${fileId}`, e);
+      throw e;
+    }
+  }
+
   async watchFolder(folderId: string, webhookUrl: string) {
     if (this.isMock || !this.drive) return { id: 'mock-channel', resourceId: 'mock-resource' };
     const channel = await this.drive.files.watch({

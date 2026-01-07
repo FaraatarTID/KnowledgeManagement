@@ -4,11 +4,13 @@ import { GeminiService } from './gemini.service.js';
 import { ParsingService } from './parsing.service.js';
 import { HistoryService } from './history.service.js';
 import { LocalMetadataService } from './localMetadata.service.js';
+import { ExtractionService } from './extraction.service.js';
 
 export class SyncService {
   private parsingService: ParsingService;
   private historyService: HistoryService;
   private localMetadataService: LocalMetadataService;
+  private extractionService: ExtractionService;
 
   constructor(
     private driveService: DriveService,
@@ -18,6 +20,7 @@ export class SyncService {
     this.parsingService = new ParsingService();
     this.historyService = new HistoryService();
     this.localMetadataService = new LocalMetadataService();
+    this.extractionService = new ExtractionService();
   }
 
   async syncAll(folderId: string) {
@@ -56,8 +59,20 @@ export class SyncService {
     let textContent = '';
     if (file.mimeType === 'application/vnd.google-apps.document') {
        textContent = await this.driveService.exportDocument(file.id);
+    } else if (file.mimeType === 'application/pdf' || 
+               file.mimeType?.includes('wordprocessing') || 
+               file.mimeType?.startsWith('text/') ||
+               file.mimeType?.includes('markdown')) {
+       // Download and extract using ExtractionService
+       try {
+         const buffer = await this.driveService.downloadFile(file.id);
+         textContent = await this.extractionService.extractFromBuffer(buffer, file.mimeType || 'application/octet-stream');
+       } catch (e) {
+         console.warn(`SyncService: Failed to download/extract ${file.name}. Indexing metadata only.`);
+         textContent = `Filename: ${file.name}\nType: ${file.mimeType}\n\n(Content could not be extracted)`;
+       }
     } else {
-       // For binary files (PDF/Word), index Title + Type
+       // For OTHER binary files, index Title + Type
        textContent = `Filename: ${file.name}\nType: ${file.mimeType}`; 
     }
 

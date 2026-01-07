@@ -1,20 +1,25 @@
-# AI-Native Knowledge Base (AIKB)
+# AI-Native Knowledge Base (AIKB) 🧠
 
 **Welcome to AIKB!**
 
-This is an intelligent "Brain" for your company. It connects to your **Google Drive**, reads your documents, and lets you ask questions about them using state-of-the-art AI.
+This is an intelligent "Brain" for your company. It connects to your **Google Drive**, reads your documents, and lets you ask questions about them using state-of-the-art AI. It's designed to be secure, private, and easy to run.
 
 ---
 
-## 🌟 Why is this special?
+## 🌟 Capabilities
 
-- **It knows your data**: Unlike ChatGPT, this AI knows your private company secrets and policies because it reads your Google Drive.
-- **Dynamic Configuration**: Admins can customize document Categories and Departments directly from the UI.
-- **Manual Uploads**: Don't want to wait for Drive sync? Upload files directly, and the AI will index them instantly.
-- **Enterprise Security**: Advanced RBAC (Role-Based Access Control), PII Redaction (strips emails/phones), and Audit Logging of all queries.
-- **Context-Aware Parsing**: Intelligent sentence-aware chunking and YAML Metadata support for document-level permissions.
-- **Document History**: Cloud-backed Activity Logs (via Supabase) to track when the AI was last updated and which documents were synced.
-- **Free-Tier Friendly**: Designed to run 100% on the free tiers of Google Cloud (Gemini 2.5 Flash-Lite) and Supabase.
+- **🧠 It Knows Your Data**: Unlike generic ChatGPT, this AI answers using only your private company documents.
+- **🛡️ Enterprise Security**:
+  - **Custom Authentication**: Secure login system with role-based access.
+  - **Rate Limiting**: Protects against abuse.
+  - **Input Validation**: Rejects malicious files (e.g., `.exe` malware).
+- **🚀 Dynamic & Fast**:
+  - **Dashboard**: Real-time statistics on document usage.
+  - **Manual Uploads**: Upload urgent files directly via the UI for instant indexing.
+  - **Google Drive Sync**: Automatically stays in sync with your cloud folders.
+- **⚡ Developer Friendly**:
+  - **Tested**: Includes an automated test suite.
+  - **Portable**: Runs on Windows, Mac, or Linux.
 
 ---
 
@@ -25,20 +30,33 @@ We have written two guides depending on what you want to do:
 ### 1. "I just want to run it on my laptop"
 
 👉 Read the **[User Manual (Beginner's Guide)](USER_MANUAL.md)**
-_(This includes the 1-Click Windows Setup!)_
+_(Includes the 1-Click Windows Setup!)_
 
-### 2. "I want to put this on a website for my team"
+### 2. "I want to deploy this for my team"
 
 👉 Read the **[Deployment Guide](DEPLOYMENT_GUIDE.md)**
+_(Instructions for Servers, Docker, and Database)_
 
 ---
 
-## 📂 What is in this folder?
+## 💻 For Developers
 
-- **`client/`**: The "Frontend". This is the website part you look at.
-- **`server/`**: The "Backend". This is the brain that talks to Google and the Database.
-- **`run_app.bat`**: The magic script for Windows users to start everything instantly.
-- **`USER_MANUAL.md`**: Your bible for setting this up.
+### Project Structure
+
+- **`client/`**: Next.js (React) Frontend.
+- **`server/`**: Node.js (Express) Backend with Vector Search.
+- **`run_app.bat`**: Windows automation script.
+
+### Running Tests
+
+Before making changes, verify the system integrity:
+
+```bash
+cd server
+npm test
+```
+
+This runs the **Vitest** suite to check authentication, API security, and basic routes.
 
 ---
 

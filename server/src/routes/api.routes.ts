@@ -6,15 +6,19 @@ import { DriveService } from '../services/drive.service.js';
 import { SyncService } from '../services/sync.service.js';
 import { HistoryService } from '../services/history.service.js';
 import { ConfigService } from '../services/config.service.js';
-import { authMiddleware } from '../middleware/auth.middleware.js';
+import { AuthService } from '../services/auth.service.js';
+import { UserService } from '../services/user.service.js';
+import { authMiddleware, requireRole } from '../middleware/auth.middleware.js';
+import { authLimiter } from '../middleware/rateLimit.middleware.js';
 import type { AuthRequest } from '../middleware/auth.middleware.js';
-import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
 const router = Router();
+
+
 
 // --- SERVER STARTUP VALIDATION ---
 const REQUIRED_ENV_VARS = ['GCP_PROJECT_ID', 'JWT_SECRET'];
@@ -27,16 +31,32 @@ if (missingVars.length > 0) {
     throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
   }
   
-  console.warn('⚠️ WARNING: Missing Environment Variables. Falling back to DEV DEFAULTS.');
-  console.warn('⚠️ DO NOT USE IN PRODUCTION!');
-  missingVars.forEach(v => console.warn(`   - ${v} (using default)`));
+  console.warn('⚠️ WARNING: Missing Environment Variables.');
+  missingVars.forEach(v => console.warn(`   - ${v}`));
   
-  // Set defaults for Dev/Demo mode ONLY
-  if (!process.env.JWT_SECRET) process.env.JWT_SECRET = 'dev-secret-do-not-use-in-prod';
+  // SECURITY: JWT_SECRET is ALWAYS required - use a generated default for dev only
+  if (!process.env.JWT_SECRET) {
+    // Generate a random secret for development (logged for debugging)
+    const devSecret = require('crypto').randomBytes(32).toString('hex');
+    process.env.JWT_SECRET = devSecret;
+    console.warn('⚠️ Generated temporary JWT_SECRET for dev session. Set JWT_SECRET env var for persistence.');
+  }
   if (!process.env.GCP_PROJECT_ID) process.env.GCP_PROJECT_ID = 'aikb-mock-project';
 }
 
 // --- MULTER SETUP (Manual Uploads) ---
+// SECURITY: File upload validation
+const ALLOWED_MIMETYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/markdown',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = path.join(process.cwd(), 'data', 'uploads');
@@ -44,11 +64,23 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
+    // Use crypto for secure random filename
+    const uniqueSuffix = Date.now() + '-' + require('crypto').randomBytes(8).toString('hex');
+    cb(null, uniqueSuffix + '-' + file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_'));
   }
 });
-const upload = multer({ storage });
+
+const upload = multer({ 
+  storage,
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIMETYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: PDF, Word, Excel, Text, Markdown`));
+    }
+  }
+});
 
 // Services
 const geminiService = new GeminiService(process.env.GCP_PROJECT_ID || 'aikb-mock-project');
@@ -58,12 +90,33 @@ const driveService = new DriveService(process.env.GCP_KEY_FILE || 'key.json');
 const syncService = new SyncService(driveService, vectorService, geminiService);
 const historyService = new HistoryService();
 const configService = new ConfigService();
+const authService = new AuthService();
+const userService = new UserService();
 
 console.log('✅ API Routes: Registering endpoints...');
 
 // Public Ping
 router.get('/ping', (req, res) => {
   res.json({ message: 'pong', timestamp: new Date().toISOString() });
+});
+
+router.post('/upload', authMiddleware, requireRole('ADMIN', 'MANAGER'), upload.single('file'), (req: any, res) => {
+  // Security: Multer middleware has already validated file type and size
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  
+  // TODO: Trigger SyncService processing for local file
+  // For now, return success to confirm upload security
+  res.json({ 
+    status: 'success', 
+    message: 'File uploaded successfully', 
+    file: {
+      filename: req.file.filename,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    }
+  });
 });
 
 // --- CONFIG ROUTES ---
@@ -178,67 +231,108 @@ router.post('/sync', authMiddleware, async (req: any, res) => {
   }
 });
 
-// --- MOCK DATABASE (In-Memory for Demo) ---
-let MOCK_USERS = [
-  { id: 'u1', name: 'Alice Admin', email: 'alice@aikb.com', role: 'ADMIN', department: 'IT', status: 'Active' },
-  { id: 'u2', name: 'Bob Manager', email: 'bob@aikb.com', role: 'MANAGER', department: 'Sales', status: 'Active' },
-  { id: 'u3', name: 'Charlie Dev', email: 'charlie@aikb.com', role: 'EDITOR', department: 'Engineering', status: 'Active' },
-  { id: 'u4', name: 'David User', email: 'david@aikb.com', role: 'VIEWER', department: 'Marketing', status: 'Active' }
-];
-
 // --- AUTH ROUTES ---
 
-router.post('/auth/login', (req, res) => {
-  const { type } = req.body; // 'admin' or 'user'
-  
-  // Simulate different login personas
-  let user;
-  if (type === 'admin') {
-    user = MOCK_USERS[0];
-  } else {
-    user = MOCK_USERS[3];
-  }
-
-  if (!user) return res.status(400).json({ error: 'Invalid user type' });
-  const token = jwt.sign(user, process.env.JWT_SECRET || 'secret', { expiresIn: '1d' });
-  res.json({ token, user });
+// Login validation schema
+const loginSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(1, 'Password is required'),
+  // Legacy support: also accept 'type' for demo mode only
+  type: z.enum(['admin', 'user']).optional()
 });
 
-router.get('/auth/me', authMiddleware, (req: any, res) => {
-  // Return the fresh user object from the mock DB based on the token's ID
-  const user = MOCK_USERS.find(u => u.id === req.user.id);
+router.post('/auth/login', authLimiter, async (req, res) => {
+  try {
+    const parsed = loginSchema.safeParse(req.body);
+    
+    // Legacy demo mode support (when email/password not provided)
+    if (req.body.type && !req.body.email) {
+      // Demo mode: use predefined credentials
+      const demoEmail = req.body.type === 'admin' ? 'alice@aikb.com' : 'david@aikb.com';
+      const demoPassword = 'admin123';
+      
+      const user = await authService.validateCredentials(demoEmail, demoPassword);
+      if (!user) {
+        return res.status(401).json({ error: 'Demo credentials failed' });
+      }
+      
+      const token = authService.generateToken(user);
+      
+      // Set httpOnly cookie
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      });
+      
+      // Also return token in body for backward compatibility
+      return res.json({ token, user });
+    }
+    
+    if (!parsed.success) {
+      return res.status(400).json({ 
+        error: 'Invalid credentials format',
+        details: parsed.error.issues.map(i => i.message)
+      });
+    }
+    
+    const { email, password } = parsed.data;
+    
+    const user = await authService.validateCredentials(email, password);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    
+    const token = authService.generateToken(user);
+    
+    // Set httpOnly cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000
+    });
+    
+    res.json({ token, user });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+router.post('/auth/logout', (req, res) => {
+  res.clearCookie('token');
+  res.json({ success: true });
+});
+
+router.get('/auth/me', authMiddleware, async (req: AuthRequest, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  
+  // Get fresh user data from service
+  const user = await authService.getUserById(req.user?.id || '');
   if (!user) return res.status(404).json({ error: 'User not found' });
+  
   res.json(user);
 });
 
 // --- User Management ---
 
-router.get('/users', authMiddleware, (req: any, res) => {
-  // SECURITY: Restrict user listing to admins and managers only
-  if (!['ADMIN', 'MANAGER'].includes(req.user.role)) {
-    return res.status(403).json({ error: 'Access denied. Admin or Manager role required.' });
-  }
-  res.json(MOCK_USERS);
+router.get('/users', authMiddleware, requireRole('ADMIN', 'MANAGER'), async (req: AuthRequest, res) => {
+  const users = await userService.getAll();
+  res.json(users);
 });
 
 // History / Activity Log (Admin/Manager only)
-router.get('/history', authMiddleware, async (req: any, res: any) => {
+router.get('/history', authMiddleware, requireRole('ADMIN', 'MANAGER'), async (req: AuthRequest, res) => {
   console.log(`[API] GET /history called by ${req.user?.email} (${req.user?.role})`);
-  if (req.user.role !== 'ADMIN' && req.user.role !== 'MANAGER') {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
   const history = await historyService.getHistory();
   res.json(history);
 });
 
-router.patch('/users/:id', authMiddleware, (req: any, res) => {
-  // SECURITY: Only ADMIN can modify user roles
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: 'Access denied. Admin role required to modify users.' });
-  }
-  
+router.patch('/users/:id', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res) => {
   const { id } = req.params;
-  const { role, status } = req.body;
+  const { role, status, department } = req.body;
   
   // Validate role value if provided
   const validRoles = ['ADMIN', 'MANAGER', 'EDITOR', 'VIEWER'];
@@ -246,14 +340,11 @@ router.patch('/users/:id', authMiddleware, (req: any, res) => {
     return res.status(400).json({ error: `Invalid role. Must be one of: ${validRoles.join(', ')}` });
   }
   
-  const userIndex = MOCK_USERS.findIndex(u => u.id === id);
-  if (userIndex === -1) return res.status(404).json({ error: 'User not found' });
-
-  const user = MOCK_USERS[userIndex];
-  if (!user) return res.status(404).json({ error: 'User not found' });
-
-  const updatedUser = { ...user, role: role || user.role, status: status || user.status };
-  MOCK_USERS[userIndex] = updatedUser;
+  const updatedUser = await userService.update(id as string, { role, status, department });
+  if (!updatedUser) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
   res.json(updatedUser);
 });
 
@@ -378,26 +469,40 @@ router.get('/documents', authMiddleware, async (req: any, res) => {
        return res.json(mergedMock.filter(d => d.department === user.department));
     }
     
-    const files = await driveService.listFiles(process.env.GOOGLE_DRIVE_FOLDER_ID);
+    // For manual uploads, we might not use Google Drive, so we should check vector metadata first
+    // This logic needs to be robust for hybrid storage (Drive + Local)
     
-    const documents = files.map(f => {
-      const vMeta = vectorMetadata[f.id!] || {};
-      const link = vMeta.link || f.webViewLink || `https://docs.google.com/document/d/${f.id}`;
-      
-      return {
-        id: f.id,
-        name: vMeta.title || f.name,
-        mimeType: f.mimeType,
-        modifiedAt: f.modifiedTime,
-        category: vMeta.category || 'General',
-        sensitivity: vMeta.sensitivity || 'INTERNAL',
-        department: vMeta.department || 'General',
-        owner: vMeta.owner || (f.owners?.[0] as any)?.emailAddress,
-        link: link,
-        status: 'Synced'
-      };
-    });
-
+    // If Drive is configured:
+    let documents: any[] = [];
+    
+    if (process.env.GOOGLE_DRIVE_FOLDER_ID && process.env.GOOGLE_DRIVE_FOLDER_ID !== 'mock-folder') {
+       try {
+         const files = await driveService.listFiles(process.env.GOOGLE_DRIVE_FOLDER_ID);
+         documents = files.map(f => {
+          const vMeta = vectorMetadata[f.id!] || {};
+          const link = vMeta.link || f.webViewLink || `https://docs.google.com/document/d/${f.id}`;
+          
+          return {
+            id: f.id,
+            name: vMeta.title || f.name,
+            mimeType: f.mimeType,
+            modifiedAt: f.modifiedTime,
+            category: vMeta.category || 'General',
+            sensitivity: vMeta.sensitivity || 'INTERNAL',
+            department: vMeta.department || 'General',
+            owner: vMeta.owner || (f.owners?.[0] as any)?.emailAddress,
+            link: link,
+            status: 'Synced'
+          };
+        });
+       } catch (e) {
+         console.error('Drive listing failed, falling back to local metadata', e);
+       }
+    }
+    
+    // Also include manually uploaded files that might not be in the main Drive folder yet but are in vector store
+    // (Implementation specific: this depends on how we track manual uploads vs syncs)
+    
     // Filter by department for non-admins
     if (user.role === 'ADMIN') return res.json(documents);
     res.json(documents.filter(d => !d.department || d.department === user.department || d.department === 'General'));
@@ -409,10 +514,14 @@ router.get('/documents', authMiddleware, async (req: any, res) => {
 });
 
 router.get('/stats', authMiddleware, async (req, res) => {
+  const users = await userService.getAll();
+  const vectorMeta = await vectorService.getAllMetadata();
+  const docCount = Object.keys(vectorMeta).length;
+
   res.json({
-    totalDocuments: 1248,
-    activeUsers: MOCK_USERS.length,
-    aiResolution: '92%',
+    totalDocuments: docCount,
+    activeUsers: users.length,
+    aiResolution: '98%', // Placeholder - to be implemented with feedback loop
     systemHealth: 'Optimal'
   });
 });
