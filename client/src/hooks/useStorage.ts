@@ -1,8 +1,8 @@
 import { get, set, del } from 'idb-keyval';
 
 interface StorageData {
-  documents: any[];
-  chatHistory: any[];
+  documents: unknown[];
+  chatHistory: unknown[];
   timestamp: number;
 }
 
@@ -17,19 +17,26 @@ export const useStorage = () => {
    */
   const loadData = async (): Promise<StorageData> => {
     const startTime = Date.now();
-    
+
+    // Hoist these so recovery logic in the catch block can inspect backupResult
+    let docsResult: unknown | undefined;
+    let chatResult: unknown | undefined;
+    let backupResult: unknown | undefined;
+
     try {
-      const [docsResult, chatResult, backupResult] = await Promise.all([
+      const results = await Promise.all([
         get('aikb-documents'),
         get('aikb-chat-history'),
         get('aikb-backup')
       ]);
 
-      let documents: any[] = [];
-      let chatHistory: any[] = [];
+      [docsResult, chatResult, backupResult] = results;
+
+      let documents: unknown[] = [];
+      let chatHistory: unknown[] = [];
 
       // Parse documents with validation
-      if (docsResult) {
+      if (typeof docsResult === 'string') {
         try {
           const parsed = JSON.parse(docsResult);
           if (Array.isArray(parsed)) {
@@ -37,10 +44,11 @@ export const useStorage = () => {
           } else {
             throw new Error('Invalid document format: not an array');
           }
-        } catch (e: any) {
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : 'unknown';
           console.error('STORAGE_CORRUPTION', JSON.stringify({
             type: 'documents',
-            error: e.message,
+            error: msg,
             timestamp: new Date().toISOString()
           }));
           throw new Error('DOCUMENTS_CORRUPTED');
@@ -48,7 +56,7 @@ export const useStorage = () => {
       }
 
       // Parse chat history with validation
-      if (chatResult) {
+      if (typeof chatResult === 'string') {
         try {
           const parsed = JSON.parse(chatResult);
           if (Array.isArray(parsed)) {
@@ -56,10 +64,11 @@ export const useStorage = () => {
           } else {
             throw new Error('Invalid chat format: not an array');
           }
-        } catch (e: any) {
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : 'unknown';
           console.error('STORAGE_CORRUPTION', JSON.stringify({
             type: 'chatHistory',
-            error: e.message,
+            error: msg,
             timestamp: new Date().toISOString()
           }));
           throw new Error('CHAT_CORRUPTED');
@@ -75,21 +84,22 @@ export const useStorage = () => {
 
       return { documents, chatHistory, timestamp: Date.now() };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'unknown';
       console.warn('STORAGE_LOAD_FAILED', JSON.stringify({
-        error: error.message,
+        error: msg,
         timestamp: new Date().toISOString()
       }));
 
       // Attempt recovery from backup
-      if (backupResult) {
+      if (typeof backupResult === 'string') {
         try {
           const backup = JSON.parse(backupResult);
           const recoveredData = {
             documents: Array.isArray(backup.docs) ? backup.docs : [],
             chatHistory: Array.isArray(backup.chat) ? backup.chat : [],
             timestamp: backup.timestamp || Date.now()
-          };
+          } as StorageData;
 
           // Validate recovered data
           if (!Array.isArray(recoveredData.documents) || !Array.isArray(recoveredData.chatHistory)) {
@@ -106,9 +116,10 @@ export const useStorage = () => {
           }));
 
           return recoveredData;
-        } catch (backupError: any) {
+        } catch (backupError: unknown) {
+          const bmsg = backupError instanceof Error ? backupError.message : 'unknown';
           console.error('STORAGE_RECOVERY_FAILED', JSON.stringify({
-            error: backupError.message,
+            error: bmsg,
             timestamp: new Date().toISOString()
           }));
         }
@@ -120,7 +131,7 @@ export const useStorage = () => {
         await del('aikb-chat-history');
         await del('aikb-backup');
         console.warn('STORAGE_CLEARED_ALL');
-      } catch (cleanupError) {
+      } catch (cleanupError: unknown) {
         console.error('STORAGE_CLEANUP_FAILED', cleanupError);
       }
 

@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 /**
  * Debounce hook to delay value updates
  * Prevents expensive operations (like search) from running on every keystroke
- * 
+ *
  * SECURITY FIX: Proper cleanup to prevent memory leaks
  */
 export const useDebounce = <T>(value: T, delay: number): T => {

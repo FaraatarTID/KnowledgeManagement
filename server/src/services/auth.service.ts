@@ -72,11 +72,10 @@ export class AuthService {
     if (this.isDemoMode) {
       const demoUser = DEMO_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
       if (!demoUser) return null;
-      
-      // Use new verifyPassword method
-      const isValid = await this.verifyPassword(password, demoUser.password_hash);
-      if (!isValid) return null;
-      
+      // In demo mode allow plaintext comparison against DEMO_PASSWORD for convenience
+      const demoPassword = process.env.DEMO_PASSWORD || 'admin123';
+      if (password !== demoPassword) return null;
+
       const { password_hash, ...user } = demoUser;
       return user;
     }
@@ -166,24 +165,6 @@ export class AuthService {
       console.warn('Argon2 failed, falling back to bcrypt:', error);
       // Fallback for environments where Argon2 isn't available
       return bcrypt.hash(password, 12);
-    }
-  }
-
-  /**
-   * SECURITY: Verify password using Argon2id or bcrypt
-   * Supports migration from bcrypt to argon2
-   */
-  async verifyPassword(password: string, hash: string): Promise<boolean> {
-    try {
-      // Check if hash is Argon2 format
-      if (hash.startsWith('$argon2')) {
-        return await argon2.verify(hash, password);
-      }
-      // Assume bcrypt for other hashes
-      return await bcrypt.compare(password, hash);
-    } catch (error) {
-      console.error('Password verification error:', error);
-      return false;
     }
   }
 

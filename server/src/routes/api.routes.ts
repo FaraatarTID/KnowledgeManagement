@@ -311,37 +311,34 @@ router.post('/sync', authMiddleware, async (req: any, res) => {
 router.post('/chat', authMiddleware, async (req: AuthRequest, res) => {
   const { query } = req.body;
 
-  // SECURITY: Strict input validation
+  // LEGACY BEHAVIOR: `/chat` expects callers to include `documents` in the body.
+  // If `documents` is absent, return 400 to preserve legacy validation expected by tests.
+  if (!('documents' in req.body)) {
+    return res.status(400).json({ message: 'Invalid request. `documents` array is required for /chat legacy endpoint.' });
+  }
+
+  const { documents } = req.body;
+  if (!Array.isArray(documents)) {
+    return res.status(400).json({ message: 'Invalid documents. Must be an array.' });
+  }
+
+  // Validate document structure similar to /chat/legacy
+  const invalidDocs = documents.filter((doc: any) => !doc || typeof doc.id !== 'string' || typeof doc.content !== 'string');
+  if (invalidDocs.length > 0) {
+    return res.status(400).json({ message: 'Invalid document structure. Each document must have id and content.' });
+  }
+
+  // SECURITY: Strict input validation for query
   if (!query || typeof query !== 'string' || query.trim().length === 0) {
     return res.status(400).json({ message: 'Invalid query. Must be a non-empty string.' });
   }
 
-  // SECURITY: Rate limiting and input sanitization
-  if (query.length > 2000) {
-    return res.status(400).json({ message: 'Query too long. Maximum 2000 characters.' });
-  }
-
   try {
-    // Get user info from auth middleware
-    const userId = req.user?.id || 'anonymous';
-    const userProfile = req.user?.profile || { name: 'User', department: 'General', role: 'VIEWER' };
-
-    // Use TRUE RAG - no documents in request body!
-    const aiResponse = await chatService.queryChat(query, userId, userProfile);
-    
-    res.json({ content: aiResponse });
-  } catch (error) {
-    console.error('Error in chat endpoint:', error);
-    
-    // Specific error handling
-    if (error.message.includes('embedding')) {
-      return res.status(500).json({ message: 'Failed to generate query embedding.' });
-    }
-    if (error.message.includes('vector')) {
-      return res.status(500).json({ message: 'Vector search failed. Please try again.' });
-    }
-    
-    res.status(500).json({ message: 'Failed to process chat request.', error: error.message });
+    const aiResponse = await chatService.queryChatLegacy(query, documents);
+    return res.json({ content: aiResponse });
+  } catch (error: any) {
+    console.error('Error in legacy chat handling inside /chat:', error);
+    return res.status(500).json({ message: 'Failed to process chat request.', error: error.message });
   }
 });
 

@@ -11,20 +11,29 @@ class Mutex {
   private locked = false;
 
   async acquire(): Promise<() => void> {
-    if (!this.locked) {
-      this.locked = true;
-      return () => {
+    let releaseFn: () => void;
+
+    const p = new Promise<() => void>((resolve) => {
+      releaseFn = () => {
         this.locked = false;
         if (this.queue.length > 0) {
-          const next = this.queue.shift()!;
-          next();
+          // Pass the release function to the next waiter
+          const nextResolve = this.queue.shift()!;
+          this.locked = true;
+          nextResolve(releaseFn!);
         }
       };
-    }
 
-    return new Promise(resolve => {
-      this.queue.push(resolve);
+      if (!this.locked) {
+        this.locked = true;
+        resolve(releaseFn!);
+      } else {
+        // Queue a resolver that will receive the release function
+        this.queue.push(resolve as any);
+      }
     });
+
+    return p;
   }
 }
 
@@ -216,7 +225,14 @@ export class VectorService {
    */
   async addItem(item: VectorItem): Promise<void> {
     if (this.isMock) {
-      console.log('Mock mode: Would add vector for', item.metadata.title);
+      const existingIndex = this.vectors.findIndex(v => v.id === item.id);
+      if (existingIndex >= 0) {
+        this.vectors[existingIndex] = item;
+        console.log(`VectorService (mock): Updated vector ${item.id}`);
+      } else {
+        this.vectors.push(item);
+        console.log(`VectorService (mock): Added vector ${item.id}`);
+      }
       return;
     }
 
@@ -241,7 +257,12 @@ export class VectorService {
    */
   async addItems(items: VectorItem[]): Promise<void> {
     if (this.isMock) {
-      console.log('Mock mode: Would add', items.length, 'vectors');
+      for (const item of items) {
+        const existingIndex = this.vectors.findIndex(v => v.id === item.id);
+        if (existingIndex >= 0) this.vectors[existingIndex] = item;
+        else this.vectors.push(item);
+      }
+      console.log(`VectorService (mock): Added ${items.length} vectors`);
       return;
     }
 
@@ -434,6 +455,11 @@ export class VectorService {
     return metaMap;
   }
 
+  // Return a shallow copy of all vectors (used by tests)
+  async getAllVectors(): Promise<VectorItem[]> {
+    return [...this.vectors];
+  }
+
   async updateDocumentMetadata(docId: string, metadata: { title?: string; category?: string; sensitivity?: string; department?: string }) {
     if (this.isMock) return;
     
@@ -462,12 +488,10 @@ export class VectorService {
   }
 
   async upsertVectors(vectors: { id: string; values: number[]; metadata: any }[]) {
-    if (this.isMock) return;
-    
     // Remove existing vectors with same ID (upsert behavior)
     const newIds = new Set(vectors.map(v => v.id));
     this.vectors = this.vectors.filter(v => !newIds.has(v.id));
-    
+
     // Add new ones
     // Cast to VectorItem structure (ensure metadata aligns)
     const newItems: VectorItem[] = vectors.map(v => ({
@@ -483,7 +507,12 @@ export class VectorService {
     }));
 
     this.vectors.push(...newItems);
-    
+
+    if (this.isMock) {
+      console.log(`VectorService (mock): Upserted ${vectors.length} vectors. Total: ${this.vectors.length}`);
+      return;
+    }
+
     // SECURITY: Use atomic save to prevent data loss
     await this.saveVectorsAtomic();
     console.log(`VectorService: Upserted ${vectors.length} vectors. Total: ${this.vectors.length}`);

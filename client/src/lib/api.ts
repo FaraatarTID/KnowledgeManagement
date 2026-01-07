@@ -16,24 +16,39 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    // If 401, redirect to login unless we are already there
-    if (error.response?.status === 401) {
-       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-         // Clear user data (browser handles cookie)
-         localStorage.removeItem('user');
-         window.location.href = '/login?expired=true';
-       }
-    } else if (error.response?.status === 500) {
-      console.error('Server Error', error);
-      // Optional: Dispatch a global 'toast' event here for "System Hiccup, please try again"
+  (err: unknown) => {
+    // Narrow to AxiosError when possible
+    if (axios.isAxiosError(err)) {
+      const error = err;
+      // If 401, redirect to login unless we are already there
+      if (error.response?.status === 401) {
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          // Clear user data (browser handles cookie)
+          localStorage.removeItem('user');
+          window.location.href = '/login?expired=true';
+        }
+      } else if (error.response?.status === 500) {
+        console.error('Server Error', error);
+        // Optional: Dispatch a global 'toast' event here for "System Hiccup, please try again"
+      }
+    } else {
+      console.error('Unknown network error', err);
     }
-    return Promise.reject(error);
+
+    return Promise.reject(err);
   }
 );
 
 // SECURITY: Mutex lock to prevent race conditions in localStorage operations
 let localStorageMutex: Promise<void> = Promise.resolve();
+
+// User type used across client for auth responses
+export interface User {
+  id: string;
+  email?: string;
+  role?: 'ADMIN' | 'MANAGER' | 'VIEWER' | string;
+  [key: string]: unknown;
+}
 
 /**
  * Atomic localStorage operation with mutex
@@ -46,8 +61,8 @@ async function atomicLocalStorageOperation<T>(
   await localStorageMutex;
   
   // Create new promise for this operation
-  let resolve: (value: void) => void;
-  localStorageMutex = new Promise(r => resolve = r);
+  let resolve: ((value: void) => void) | undefined;
+  localStorageMutex = new Promise<void>(r => { resolve = r; });
   
   try {
     const result = operation();
@@ -60,7 +75,7 @@ async function atomicLocalStorageOperation<T>(
 
 export const authApi = {
   // Request deduplication cache
-  _pendingGetMe: null as Promise<any> | null,
+  _pendingGetMe: null as Promise<User | null> | null,
 
   // Updated to accept type for role simulation (legacy/demo support)
   // Real auth will use email/password in body, but keeping signature compatible for now
@@ -126,7 +141,7 @@ export const authApi = {
     }
   },
   
-  getMe: async () => {
+  getMe: async (): Promise<User | null> => {
     // SECURITY: Request deduplication - return existing promise if pending
     if (authApi._pendingGetMe) {
       return authApi._pendingGetMe;
@@ -134,14 +149,15 @@ export const authApi = {
 
     authApi._pendingGetMe = api.get('/auth/me')
       .then(async (response) => {
-        if (response.data) {
+        const data = response.data as User | null;
+        if (data) {
           await atomicLocalStorageOperation(() => {
             if (typeof window !== 'undefined') {
-              localStorage.setItem('user', JSON.stringify(response.data));
+              localStorage.setItem('user', JSON.stringify(data));
             }
           });
         }
-        return response.data;
+        return data;
       })
       .finally(() => {
         authApi._pendingGetMe = null;

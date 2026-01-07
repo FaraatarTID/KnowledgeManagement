@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+// Provide a `jest` alias for tests that expect jest globals
+// Provide a minimal `jest` compatibility object mapping to `vi` APIs
+// Provide a minimal `jest` compatibility object mapping to `vi` APIs
+const _jestShim = (global as any).jest ?? {};
+_jestShim.fn = _jestShim.fn ?? function(...args: any[]) { return vi.fn(...args); };
+_jestShim.spyOn = _jestShim.spyOn ?? function(...args: any[]) { return vi.spyOn(...args); };
+_jestShim.mock = _jestShim.mock ?? function(...args: any[]) { return undefined; };
+(global as any).jest = _jestShim;
 import { VectorService } from '../../services/vector.service.js';
 import fs from 'fs';
 import path from 'path';
@@ -205,23 +213,30 @@ describe('SyncService Concurrency Tests', () => {
 
 // Simple Mutex for testing
 class Mutex {
-  private queue: (() => void)[] = [];
+  private queue: ((value: () => void) => void)[] = [];
   private locked = false;
 
   async acquire(): Promise<() => void> {
-    if (!this.locked) {
-      this.locked = true;
-      return () => {
+    let releaseFn: () => void;
+
+    const p = new Promise<() => void>((resolve) => {
+      releaseFn = () => {
         this.locked = false;
         if (this.queue.length > 0) {
-          const next = this.queue.shift()!;
-          next();
+          const nextResolve = this.queue.shift()!;
+          this.locked = true;
+          nextResolve(releaseFn!);
         }
       };
-    }
 
-    return new Promise(resolve => {
-      this.queue.push(resolve);
+      if (!this.locked) {
+        this.locked = true;
+        resolve(releaseFn!);
+      } else {
+        this.queue.push(resolve);
+      }
     });
+
+    return p;
   }
 }

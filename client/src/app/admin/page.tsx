@@ -79,43 +79,41 @@ function AdminContent() {
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'VIEWER', department: 'General' });
 
   useEffect(() => {
-    // Check auth
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    
-    if (!token || !userStr) {
-      router.push('/login');
-      return;
-    }
+    // Verify session using server-side cookie/token via authApi.getMe
+    const init = async () => {
+      try {
+        const freshUser = await authApi.getMe();
+        if (!freshUser) {
+          // No session
+          router.push('/login');
+          return;
+        }
 
-    try {
-      const user = JSON.parse(userStr);
-      setCurrentUser(user);
-      // Simple RBAC check
-      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
-        alert('Access Denied. You need Admin privileges.');
-        router.push('/');
-        return;
-      }
-      setIsAuthChecking(false);
-    } catch (e) {
-      router.push('/login');
-      return;
-    }
+        setCurrentUser(freshUser);
+        if (freshUser.role !== 'ADMIN' && freshUser.role !== 'MANAGER') {
+          alert('Access Denied. You need Admin privileges.');
+          router.push('/');
+          return;
+        }
+        // Sync local copy
+        localStorage.setItem('user', JSON.stringify(freshUser));
+        setIsAuthChecking(false);
 
-    // Verify session with server to catch role changes (Scenario B)
-    verifySession().then(() => {
-      // Auto-sync after verifying session
-      const userStr = localStorage.getItem('user');
-      if (userStr) {
-        const u = JSON.parse(userStr);
-        if (u.role === 'ADMIN') {
+        // Auto-sync for admins
+        if (freshUser.role === 'ADMIN') {
           console.log('Admin detected: Triggering auto-sync...');
           handleSyncNow();
         }
+
+        // Fetch admin data
+        fetchData();
+      } catch (e) {
+        console.error('Admin auth verify failed', e);
+        router.push('/login');
       }
-    });
-    fetchData();
+    };
+
+    init();
   }, [activeTab]);
 
   const verifySession = async () => {

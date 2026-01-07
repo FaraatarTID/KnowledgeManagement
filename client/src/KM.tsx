@@ -7,15 +7,15 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { ToastContainer, toast } from '@/components/ToastContainer';
 
 function AIKBContent() {
-  const [documents, setDocuments] = useState([]);
-  const [chatHistory, setChatHistory] = useState([]);
+  const [documents, setDocuments] = useState<unknown[]>([]);
+  const [chatHistory, setChatHistory] = useState<unknown[]>([]);
   const [currentQuery, setCurrentQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
   const [rawSearchTerm, setRawSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('documents');
   
-  const chatEndRef = useRef(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
   const { loadData, saveDocuments, saveChatHistory } = useStorage();
   
   // Debounced search term (300ms delay)
@@ -94,7 +94,7 @@ function AIKBContent() {
   }, [chatHistory, activeTab]);
 
   // Optimistic document addition with backend sync
-  const addDocument = useCallback(async (doc) => {
+  const addDocument = useCallback(async (doc: Record<string, unknown>) => {
     const newDoc = {
       id: uuidv4(),
       ...doc,
@@ -134,28 +134,30 @@ function AIKBContent() {
       
       setShowAddDoc(false);
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Document sync error:', error);
-      
+
       // Rollback on failure
       setDocuments(documents);
-      
+
+      const msg = error instanceof Error ? error.message : String(error);
+
       // Show appropriate error
-      if (error.message.includes('Failed to fetch')) {
+      if (msg.includes('Failed to fetch')) {
         toast.error('Document saved locally. Cannot connect to server for AI sync.');
       } else {
-        toast.error(error.message || 'Failed to save document');
+        toast.error(msg || 'Failed to save document');
       }
     }
   }, [documents, saveDocuments]); // Fixed: Now properly depends on documents state
 
   // Optimistic document deletion
-  const deleteDocument = useCallback(async (id) => {
-    const docToDelete = documents.find(doc => doc.id === id);
+  const deleteDocument = useCallback(async (id: string) => {
+    const docToDelete = (documents as any[]).find(doc => doc.id === id);
     if (!docToDelete) return;
 
     // Optimistic update
-    const updatedDocs = documents.filter(doc => doc.id !== id);
+    const updatedDocs = (documents as any[]).filter(doc => doc.id !== id);
     setDocuments(updatedDocs);
     
     try {
@@ -172,10 +174,10 @@ function AIKBContent() {
   const filteredDocs = React.useMemo(() => {
     if (!searchTerm.trim()) return documents;
     
-    return documents.filter(doc => 
-      doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.category.toLowerCase().includes(searchTerm.toLowerCase())
+    return (documents as any[]).filter(doc => 
+      String(doc.title).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      String(doc.content).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      String(doc.category).toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [documents, searchTerm]);
 
@@ -231,15 +233,16 @@ function AIKBContent() {
 
       // CRITICAL FIX: Only update if this query is still the latest
       setChatHistory(prev => {
+        const p = prev as any[];
         // Check if our optimistic user message is still there
-        const hasThisQuery = prev.some(msg => msg.id === queryId);
+        const hasThisQuery = p.some((msg: any) => msg.id === queryId);
         if (!hasThisQuery) {
           console.warn('Query was cleared or replaced, skipping update');
           return prev;
         }
 
         // Remove optimistic message and add real response
-        const withoutOptimistic = prev.filter(msg => msg.id !== queryId);
+        const withoutOptimistic = p.filter((msg: any) => msg.id !== queryId);
         const finalHistory = [
           ...withoutOptimistic,
           userMsg,
@@ -252,7 +255,7 @@ function AIKBContent() {
         ];
 
         // Save to storage in background
-        saveChatHistory(finalHistory).catch(err => {
+        saveChatHistory(finalHistory).catch((err: unknown) => {
           console.error('Failed to save chat history:', err);
         });
 
@@ -261,21 +264,24 @@ function AIKBContent() {
       
       toast.success('Response received');
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error querying AI:', error);
-      
+
       // CRITICAL FIX: Remove only this query's optimistic message
-      setChatHistory(prev => prev.filter(msg => msg.id !== queryId));
-      
+      setChatHistory(prev => (prev as any[]).filter((msg: any) => msg.id !== queryId));
+
+      const errName = (error as any)?.name;
+      const emsg = error instanceof Error ? error.message : String(error);
+
       // Show user-friendly error
-      if (error.name === 'AbortError') {
+      if (errName === 'AbortError') {
         toast.error('Request timed out. Please try again.');
-      } else if (error.message.includes('Failed to fetch')) {
+      } else if (emsg.includes('Failed to fetch')) {
         toast.error('Cannot connect to server. Please check if backend is running.');
-      } else if (error.message.includes('413')) {
+      } else if (emsg.includes('413')) {
         toast.error('Request too large. This should not happen with proper RAG.');
       } else {
-        toast.error(error.message || 'Failed to get AI response');
+        toast.error(emsg || 'Failed to get AI response');
       }
     } finally {
       setIsLoading(false);
@@ -298,8 +304,8 @@ function AIKBContent() {
   }, [saveChatHistory]);
 
   // Handle Enter key in search
-  const handleSearchKeyPress = (e) => {
-    if (e.key === 'Enter' && !isLoading) {
+  const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {        
+    if (e.key === 'Enter' && !isLoading) {     
       queryAI();
     }
   };
@@ -318,7 +324,7 @@ function AIKBContent() {
                   سیستم مدیریت دانش هوشمند
                 </h1>
                 <p className="text-sm text-gray-500">
-                  {documents.length} سند | {chatHistory.filter(m => m.type === 'user').length} پرسش
+                  {documents.length} سند | {(chatHistory as any[]).filter((m: any) => m.type === 'user').length} پرسش
                 </p>
               </div>
             </div>
@@ -369,7 +375,7 @@ function AIKBContent() {
             }`}
           >
             <MessageSquare className="inline ml-2" size={18} />
-            چت ({chatHistory.filter(m => m.type === 'user').length})
+            چت ({(chatHistory as any[]).filter((m: any) => m.type === 'user').length})
           </button>
         </div>
       </div>
@@ -465,7 +471,7 @@ function AIKBContent() {
                 </p>
               </div>
             ) : (
-              chatHistory.map((msg, idx) => (
+              (chatHistory as any[]).map((msg: any, idx: number) => (  
                 <div key={idx} className={`flex ${msg.type === 'user' ? 'justify-start' : 'justify-end'}`}>
                   <div className={`max-w-[80%] rounded-lg p-4 ${
                     msg.type === 'user'
@@ -521,7 +527,7 @@ function AIKBContent() {
   );
 }
 
-function AddDocumentModal({ onClose, onAdd }) {
+function AddDocumentModal({ onClose, onAdd }: { onClose: () => void; onAdd: (doc: Record<string, unknown>) => void }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState('');
@@ -538,8 +544,8 @@ function AddDocumentModal({ onClose, onAdd }) {
     setCategory('');
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && e.ctrlKey) {
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && (e as React.KeyboardEvent).ctrlKey) {      
       handleSubmit();
     }
   };
