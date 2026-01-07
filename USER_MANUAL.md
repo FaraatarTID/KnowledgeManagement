@@ -109,22 +109,64 @@ SUPABASE_SERVICE_ROLE_KEY=your-key
 - **Employee Login**: Simulates a regular user. They can only see documents in their department.
 - **Admin Console**: Simulates an administrator. They can see all documents and trigger syncs.
 
-### 2. How to Sync Documents
+### 2. How to Add Resources (Sync & Upload)
 
 1. Log in as an **Admin**.
 2. Go to the **Dashboard** or **Library**.
-3. Click the **Sync** or **Refresh** button.
-4. The server will now read your Drive folder, redact any PII (emails/phones), and index them for the AI.
+3. Click the **Add Resource** button (Top Right).
+4. **Choose your Method**:
+   - **Google Drive Sync**: Best for batch-importing entire folders.
+   - **Manual Upload**: Best for single documents you want indexed _right now_.
+5. If manually uploading, select the **Department** and **Category** from the dropdowns and click **Upload**. The file will be saved to your Google Drive and indexed by the AI instantly.
 
-### 3. The Activity Log (New!)
+### 3. Managing Settings (Categories & Departments)
+
+Admins can tailor the system to their organization:
 
 1. Go to the **Admin Console**.
-2. Click on **Activity Log** in the sidebar.
-3. You can see a chronological history of every time a document was created or updated in the AI's memory. This is great for verifying that your latest edits in Drive have actually been "learned" by the AI.
+2. Click on the **Settings** tab.
+3. Use the **Categories** and **Departments** managers to add or remove items.
+4. These items will immediately appear in all dropdowns throughout the app (Edit Metadata, User Management, etc.).
+
+### 4. The Activity Log (New!)
+
+1.  Go to the **Admin Console**.
+2.  Click on **Activity Log** in the sidebar.
+3.  You can see a chronological history of every time a document was created or updated in the AI's memory. This is great for verifying that your latest edits in Drive have actually been "learned" by the AI.
+
+### Managing Documents
+
+Once documents are indexed, Admins and Managers can manage them via the **Admin Console -> Library** tab:
+
+1.  **Edit Metadata**: Click the **Edit (Pencil)** icon to change:
+    - **Title**: Renames the document in the AIKB (and attempts to update the file name in Google Drive).
+    - **Category**: Update the organizational category.
+    - **Sensitivity**: Change the data sensitivity level.
+2.  **Sync Stability**: Changes made in the AIKB are "Sync-Stable." This means if you rename a document or change its category in the AIKB, subsequent Google Drive syncs will **not** revert your changes. The AIKB local record acts as the source of truth for metadata once manually edited.
+3.  **Delete document**: Click the **Trash** icon to remove a document from the AI index.
+
+---
+
+## 🛡️ Part 5: Roles & Privileges
+
+The system uses Role-Based Access Control (RBAC) to ensure security.
+
+| Feature                | Admin | Manager | Editor | Viewer |
+| :--------------------- | :---: | :-----: | :----: | :----: |
+| **Chat with AI**       |  ✅   |   ✅    |   ✅   |   ✅   |
+| **View Own Dept Docs** |  ✅   |   ✅    |   ✅   |   ✅   |
+| **View All Dept Docs** |  ✅   |   ❌    |   ❌   |   ❌   |
+| **Add/Sync Resources** |  ✅   |   ❌    |   ❌   |   ❌   |
+| **Edit Doc Metadata**  |  ✅   |   ✅    |   ❌   |   ❌   |
+| **Manage Settings**    |  ✅   |   ❌    |   ❌   |   ❌   |
+| **Manage Users**       |  ✅   |   ❌    |   ❌   |   ❌   |
+| **View Activity Log**  |  ✅   |   ✅    |   ❌   |   ❌   |
+
+---
 
 ### 🎖️ Advanced: Document Metadata (YAML)
 
-Add this to the very top of your documents to control access:
+Add this to the very top of your documents **before syncing** to pre-define access:
 
 ```yaml
 ---

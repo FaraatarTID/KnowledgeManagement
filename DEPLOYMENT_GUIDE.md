@@ -70,6 +70,9 @@ _(Do NOT copy `node_modules` folders, they are huge and unneeded)_
     JWT_SECRET=... # Generate a long random string
     SUPABASE_URL=...
     SUPABASE_SERVICE_ROLE_KEY=...
+    GOOGLE_DRIVE_FOLDER_ID=... # Required for Manual Uploads
+    GCP_PROJECT_ID=...
+    GCP_KEY_FILE=gcp-key.json
     ```
 
 2.  **Initialize the Database**:

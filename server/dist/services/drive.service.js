@@ -1,5 +1,7 @@
 import { google, drive_v3 } from 'googleapis';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
 export class DriveService {
     drive = null;
     isMock = false;
@@ -8,8 +10,8 @@ export class DriveService {
             const auth = new google.auth.GoogleAuth({
                 keyFile: authKeyPath,
                 scopes: [
-                    'https://www.googleapis.com/auth/drive.readonly',
-                    'https://www.googleapis.com/auth/drive.metadata.readonly'
+                    'https://www.googleapis.com/auth/drive', // Upgraded to full access for renaming
+                    'https://www.googleapis.com/auth/drive.file'
                 ]
             });
             this.drive = google.drive({ version: 'v3', auth });
@@ -19,12 +21,56 @@ export class DriveService {
             this.isMock = true;
         }
     }
+    async uploadFile(folderId, fileName, filePath, mimeType) {
+        if (this.isMock || !this.drive) {
+            const mockId = `mock-upload-${Date.now()}`;
+            console.log(`DriveService [MOCK]: Uploaded ${fileName} to folder ${folderId}. Assigned ID: ${mockId}`);
+            return mockId;
+        }
+        try {
+            const response = await this.drive.files.create({
+                requestBody: {
+                    name: fileName,
+                    parents: [folderId]
+                },
+                media: {
+                    mimeType: mimeType,
+                    body: fs.createReadStream(filePath)
+                },
+                fields: 'id'
+            });
+            return response.data.id || '';
+        }
+        catch (e) {
+            console.error(`DriveService: Failed to upload file ${fileName}`, e);
+            throw e;
+        }
+    }
+    async renameFile(fileId, newName) {
+        if (this.isMock || !this.drive) {
+            console.log(`DriveService [MOCK]: Renamed ${fileId} to ${newName}`);
+            return true;
+        }
+        try {
+            await this.drive.files.update({
+                fileId: fileId,
+                requestBody: {
+                    name: newName
+                }
+            });
+            return true;
+        }
+        catch (e) {
+            console.error(`DriveService: Failed to rename file ${fileId}`, e);
+            return false;
+        }
+    }
     async listFiles(folderId) {
         if (this.isMock || !this.drive) {
             console.log('DriveService: Recurring mock files for listFiles');
             return [
-                { id: 'mock-1', name: 'Mock Project Plan.pdf', mimeType: 'application/pdf', modifiedTime: new Date().toISOString() },
-                { id: 'mock-2', name: 'Mock Budget 2024.xlsx', mimeType: 'application/vnd.google-apps.spreadsheet', modifiedTime: new Date().toISOString() }
+                { id: 'mock-1', name: 'Mock Project Plan.pdf', mimeType: 'application/pdf', modifiedTime: new Date().toISOString(), webViewLink: 'https://docs.google.com/document/d/mock-1' },
+                { id: 'mock-2', name: 'Mock Budget 2024.xlsx', mimeType: 'application/vnd.google-apps.spreadsheet', modifiedTime: new Date().toISOString(), webViewLink: 'https://docs.google.com/spreadsheets/d/mock-2' }
             ];
         }
         let allFiles = [];

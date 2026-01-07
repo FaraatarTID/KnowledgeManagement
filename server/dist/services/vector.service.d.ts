@@ -4,6 +4,7 @@ export declare class VectorService {
     private isMock;
     private vectors;
     private readonly DATA_FILE;
+    private localMetadataService;
     constructor(projectId: string, location: string);
     private loadVectors;
     private saveVectors;
@@ -36,6 +37,20 @@ export declare class VectorService {
         };
     }[]>;
     deleteDocument(docId: string): Promise<void>;
+    getAllMetadata(): Promise<Record<string, {
+        category?: string;
+        sensitivity?: string;
+        department?: string;
+        title?: string;
+        owner?: string;
+        link?: string;
+    }>>;
+    updateDocumentMetadata(docId: string, metadata: {
+        title?: string;
+        category?: string;
+        sensitivity?: string;
+        department?: string;
+    }): Promise<void>;
     upsertVectors(vectors: {
         id: string;
         values: number[];

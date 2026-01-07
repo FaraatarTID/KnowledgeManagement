@@ -1,14 +1,17 @@
 import fs from 'fs';
 import path from 'path';
+import { LocalMetadataService } from './localMetadata.service.js';
 export class VectorService {
     projectId;
     location;
     isMock = false;
     vectors = [];
     DATA_FILE = path.join(process.cwd(), 'data', 'vectors.json');
+    localMetadataService;
     constructor(projectId, location) {
         this.projectId = projectId;
         this.location = location;
+        this.localMetadataService = new LocalMetadataService();
         if (projectId.includes('mock')) {
             this.isMock = true;
             console.log('VectorService initialized in MOCK MODE.');
@@ -84,6 +87,46 @@ export class VectorService {
         this.vectors = this.vectors.filter(v => v.metadata.docId !== docId);
         this.saveVectors();
         console.log(`VectorService: Deleted all chunks for document ${docId}.`);
+    }
+    async getAllMetadata() {
+        const metaMap = {};
+        this.vectors.forEach(v => {
+            if (v.metadata.docId && !metaMap[v.metadata.docId]) {
+                metaMap[v.metadata.docId] = {
+                    category: v.metadata.category,
+                    sensitivity: v.metadata.sensitivity,
+                    department: v.metadata.department,
+                    title: v.metadata.title,
+                    owner: v.metadata.owner,
+                    link: v.metadata.link
+                };
+            }
+        });
+        return metaMap;
+    }
+    async updateDocumentMetadata(docId, metadata) {
+        if (this.isMock)
+            return;
+        // Save to local metadata overrides to ensure it's "sticky" through syncs
+        this.localMetadataService.setOverride(docId, metadata);
+        let updatedCount = 0;
+        this.vectors = this.vectors.map(v => {
+            if (v.metadata.docId === docId) {
+                updatedCount++;
+                return {
+                    ...v,
+                    metadata: {
+                        ...v.metadata,
+                        ...metadata
+                    }
+                };
+            }
+            return v;
+        });
+        if (updatedCount > 0) {
+            this.saveVectors();
+            console.log(`VectorService: Updated metadata for ${updatedCount} chunks of document ${docId}.`);
+        }
     }
     async upsertVectors(vectors) {
         if (this.isMock)

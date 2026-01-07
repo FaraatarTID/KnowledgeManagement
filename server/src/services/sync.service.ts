@@ -3,10 +3,12 @@ import { VectorService } from './vector.service.js';
 import { GeminiService } from './gemini.service.js';
 import { ParsingService } from './parsing.service.js';
 import { HistoryService } from './history.service.js';
+import { LocalMetadataService } from './localMetadata.service.js';
 
 export class SyncService {
   private parsingService: ParsingService;
   private historyService: HistoryService;
+  private localMetadataService: LocalMetadataService;
 
   constructor(
     private driveService: DriveService,
@@ -15,6 +17,7 @@ export class SyncService {
   ) {
     this.parsingService = new ParsingService();
     this.historyService = new HistoryService();
+    this.localMetadataService = new LocalMetadataService();
   }
 
   async syncAll(folderId: string) {
@@ -35,87 +38,81 @@ export class SyncService {
       if (file.mimeType?.includes('folder')) continue;
 
       try {
-        console.log(`SyncService: Processing ${file.name}...`);
-        
-        // 3. Extract text
-        let textContent = '';
-        if (file.mimeType === 'application/vnd.google-apps.document') {
-           textContent = await this.driveService.exportDocument(file.id);
-        } else {
-           // For binary files (PDF/Word), index Title + Type
-           // Note: Full PDF parsing requires pdf-parse library
-           textContent = `Filename: ${file.name}\nType: ${file.mimeType}`; 
-        }
-
-        if (!textContent) continue;
-
-        // 4. Extract metadata from YAML frontmatter (if present)
-        const { metadata, cleanContent } = this.parsingService.extractMetadata(textContent);
-        
-        // Use metadata department if available, otherwise detect from filename
-        const department = metadata.department || this.detectDepartment(file.name);
-        const sensitivity = metadata.sensitivity || 'INTERNAL';
-        const category = metadata.category || 'General';
-
-        // 5. Chunk using ParsingService (paragraph-aware) or fallback
-        const chunks = metadata.title 
-          ? this.parsingService.chunkContent(cleanContent, 1000)
-          : this.chunkText(cleanContent, 1000);
-
-        // 6. Embed & Prepare Upsert
-        for (let i = 0; i < chunks.length; i++) {
-          const chunk = chunks[i];
-          if (!chunk) continue;
-          const embedding = await this.geminiService.generateEmbedding(chunk);
-          
-          itemsToUpsert.push({
-            id: `${file.id}_${i}`,
-            values: embedding,
-            metadata: {
-              docId: file.id,
-              title: metadata.title || file.name,
-              text: chunk,
-              link: file.webViewLink,
-              mimeType: file.mimeType,
-              department,
-              sensitivity,
-              category,
-              modifiedAt: file.modifiedTime,
-              owner: metadata.owner || file.owners?.[0]?.emailAddress
-            }
-          });
-        }
-
-        // 7. Record History Event
-        // Check if this doc was already in vector store to decide CREATED vs UPDATED
-        // (Simple heuristic: if processing succeeds, it's an update or new sync)
-        await this.historyService.recordEvent({
-          event_type: 'UPDATED', // Defaulting to updated for simplicity in this pass
-          doc_id: file.id!,
-          doc_name: file.name!,
-          details: `Synced ${chunks.length} chunks. Last modified in Drive: ${file.modifiedTime}`
-        });
-        
+        await this.indexFile(file as any);
         processedRequestCount++;
-        
-        // Batch upsert every 20 chunks to save progress
-        if (itemsToUpsert.length >= 20) {
-           await this.vectorService.upsertVectors(itemsToUpsert);
-           itemsToUpsert.length = 0; // Clear
-        }
-
       } catch (e) {
         console.error(`SyncService: Failed to process ${file.name}`, e);
       }
     }
 
-    // Final batch
+    console.log('SyncService: Sync complete.');
+    return { status: 'success', processed: processedRequestCount };
+  }
+
+  async indexFile(file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }) {
+    console.log(`SyncService: Indexing ${file.name}...`);
+    
+    // 3. Extract text
+    let textContent = '';
+    if (file.mimeType === 'application/vnd.google-apps.document') {
+       textContent = await this.driveService.exportDocument(file.id);
+    } else {
+       // For binary files (PDF/Word), index Title + Type
+       textContent = `Filename: ${file.name}\nType: ${file.mimeType}`; 
+    }
+
+    if (!textContent) return;
+
+    // 4. Extract metadata from YAML frontmatter (if present)
+    const { metadata, cleanContent } = this.parsingService.extractMetadata(textContent);
+    
+    // 4.5 Apply Local Overrides (Stability Feature)
+    const override = this.localMetadataService.getOverride(file.id);
+    const finalTitle = override?.title || metadata.title || file.name;
+    const finalDepartment = override?.department || metadata.department || this.detectDepartment(file.name);
+    const finalSensitivity = override?.sensitivity || metadata.sensitivity || 'INTERNAL';
+    const finalCategory = override?.category || metadata.category || 'General';
+
+    // 5. Chunk using ParsingService (paragraph-aware) or fallback
+    const chunks = this.parsingService.chunkContent(cleanContent, 1000);
+
+    const itemsToUpsert: any[] = [];
+
+    // 6. Embed & Prepare Upsert
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      if (!chunk) continue;
+      const embedding = await this.geminiService.generateEmbedding(chunk);
+      
+      itemsToUpsert.push({
+        id: `${file.id}_${i}`,
+        values: embedding,
+        metadata: {
+          docId: file.id,
+          title: finalTitle,
+          text: chunk,
+          link: file.webViewLink || '#',
+          mimeType: file.mimeType,
+          department: finalDepartment,
+          sensitivity: finalSensitivity,
+          category: finalCategory,
+          modifiedAt: file.modifiedTime || new Date().toISOString(),
+          owner: metadata.owner || file.owners?.[0]?.emailAddress
+        }
+      });
+    }
+
+    // 7. Record History Event
+    await this.historyService.recordEvent({
+      event_type: 'UPDATED', 
+      doc_id: file.id!,
+      doc_name: file.name!,
+      details: `Indexed ${chunks.length} chunks.`
+    });
+
     if (itemsToUpsert.length > 0) {
        await this.vectorService.upsertVectors(itemsToUpsert);
     }
-
-    console.log('SyncService: Sync complete.');
-    return { status: 'success', processed: processedRequestCount };
   }
 
   private detectDepartment(filename: string): string {

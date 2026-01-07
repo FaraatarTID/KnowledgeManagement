@@ -9,6 +9,8 @@ This is an intelligent "Brain" for your company. It connects to your **Google Dr
 ## 🌟 Why is this special?
 
 - **It knows your data**: Unlike ChatGPT, this AI knows your private company secrets and policies because it reads your Google Drive.
+- **Dynamic Configuration**: Admins can customize document Categories and Departments directly from the UI.
+- **Manual Uploads**: Don't want to wait for Drive sync? Upload files directly, and the AI will index them instantly.
 - **Enterprise Security**: Advanced RBAC (Role-Based Access Control), PII Redaction (strips emails/phones), and Audit Logging of all queries.
 - **Context-Aware Parsing**: Intelligent sentence-aware chunking and YAML Metadata support for document-level permissions.
 - **Document History**: Cloud-backed Activity Logs (via Supabase) to track when the AI was last updated and which documents were synced.
