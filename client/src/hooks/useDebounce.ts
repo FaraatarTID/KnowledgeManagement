@@ -30,7 +30,7 @@ export const useDebounce = <T>(value: T, delay: number): T => {
  * 
  * SECURITY FIX: Proper cleanup and stable reference
  */
-export const useDebouncedCallback = <T extends (...args: any[]) => void>(
+export const useDebouncedCallback = <T extends (...args: unknown[]) => void>(
   callback: T,
   delay: number
 ): T => {

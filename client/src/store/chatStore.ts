@@ -6,7 +6,7 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  sources?: any[];
+  sources?: unknown[];
 }
 
 interface ChatStore {

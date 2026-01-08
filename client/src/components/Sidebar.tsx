@@ -17,7 +17,7 @@ export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<Record<string, unknown> | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
   const activeTab = searchParams ? searchParams.get('tab') : null;
@@ -25,7 +25,7 @@ export default function Sidebar() {
   useEffect(() => {
     // Defer setting mounted and user to avoid synchronous setState inside effect
     const storedUser = localStorage.getItem('user');
-    let parsedUser: any = null;
+    let parsedUser: Record<string, unknown> | null = null;
     if (storedUser) {
       try {
         parsedUser = JSON.parse(storedUser);
@@ -198,11 +198,11 @@ export default function Sidebar() {
       <div className="p-4 border-t border-[#E2E8F0]">
         <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl mb-2">
           <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs shadow-sm">
-            {user?.name?.charAt(0) || 'U'}
+            {String(user?.name ?? 'U').charAt(0)}
           </div>
           <div className="overflow-hidden">
-            <p className="text-sm font-semibold text-[#0F172A] truncate">{user?.name || 'User'}</p>
-            <p className="text-xs text-[#64748B] truncate font-medium">{user?.role || 'Viewer'}</p>
+            <p className="text-sm font-semibold text-[#0F172A] truncate">{String(user?.name ?? 'User')}</p>
+            <p className="text-xs text-[#64748B] truncate font-medium">{String(user?.role ?? 'Viewer')}</p>
           </div>
         </div>
         <button 

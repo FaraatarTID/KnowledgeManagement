@@ -4,11 +4,14 @@ import { Search, Plus, Trash2, Send, BookOpen, MessageSquare, Loader2, X, FileTe
 import { useStorage } from '@/hooks/useStorage';
 import { useDebounce } from '@/hooks/useDebounce';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { ToastContainer, toast } from '@/components/ToastContainer';
+import { toast } from '@/components/ToastContainer';
 
 function AIKBContent() {
-  const [documents, setDocuments] = useState<unknown[]>([]);
-  const [chatHistory, setChatHistory] = useState<unknown[]>([]);
+  type Doc = { id: string; title?: string; content?: string; category?: string; createdAt?: string };
+  type ChatMsg = { id: string; type: 'user' | 'ai'; content: string; timestamp: string; sources?: { id: string; title?: string }[] };
+
+  const [documents, setDocuments] = useState<Doc[]>([]);
+  const [chatHistory, setChatHistory] = useState<ChatMsg[]>([]);
   const [currentQuery, setCurrentQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
@@ -23,7 +26,7 @@ function AIKBContent() {
 
   // Sync existing documents to backend (for first-time load or recovery)
   // Moved to useEffect to avoid stale closures - see useDocumentSync below
-  const syncDocumentsToBackend = useCallback(async (docsToSync: any[]) => {
+  const syncDocumentsToBackend = useCallback(async (docsToSync: Doc[]) => {
     if (docsToSync.length === 0) return;
 
     try {
@@ -59,23 +62,53 @@ function AIKBContent() {
   useEffect(() => {
     const initializeData = async () => {
       try {
-        const { documents: loadedDocs, chatHistory: loadedChat } = await loadData();
-        setDocuments(loadedDocs);
-        setChatHistory(loadedChat);
-        
-        if (loadedDocs.length === 0 && loadedChat.length === 0) {
-          toast.info('Welcome! Add some documents to get started.');
-        } else if (loadedDocs.length > 0) {
-          // Sync existing documents to backend in background
-          // Use a small delay to avoid blocking initial render
-          const syncTimeout = setTimeout(() => {
-            // Capture docs at this moment to avoid stale closure
-            syncDocumentsToBackend(loadedDocs);
-          }, 1000);
+          const { documents: loadedDocs, chatHistory: loadedChat } = await loadData();
 
-          // Cleanup timeout if component unmounts
-          return () => clearTimeout(syncTimeout);
-        }
+          // Normalize loaded data (storage returns `unknown[]`) into typed arrays
+          const normalizeDoc = (d: unknown): Doc => {
+            const obj = (d as Record<string, unknown>) || {};
+            return {
+              id: typeof obj.id === 'string' && obj.id ? obj.id : uuidv4(),
+              title: typeof obj.title === 'string' ? obj.title : String(obj.title ?? ''),
+              content: typeof obj.content === 'string' ? obj.content : String(obj.content ?? ''),
+              category: typeof obj.category === 'string' ? obj.category : String(obj.category ?? ''),
+              createdAt: typeof obj.createdAt === 'string' ? obj.createdAt : new Date().toISOString(),
+            };
+          };
+
+          const normalizeMsg = (m: unknown): ChatMsg => {
+            const obj = (m as Record<string, unknown>) || {};
+            return {
+              id: typeof obj.id === 'string' && obj.id ? obj.id : uuidv4(),
+              type: obj.type === 'ai' ? 'ai' : 'user',
+              content: typeof obj.content === 'string' ? obj.content : String(obj.content ?? ''),
+              timestamp: typeof obj.timestamp === 'string' ? obj.timestamp : new Date().toISOString(),
+              sources: Array.isArray(obj.sources) ? (obj.sources as unknown[]).map(s => {
+                const si = s as Record<string, unknown>;
+                return { id: String(si?.id ?? ''), title: String(si?.title ?? '') };
+              }) : undefined,
+            };
+          };
+
+          const safeDocs = Array.isArray(loadedDocs) ? loadedDocs.map(normalizeDoc) : [];
+          const safeChat = Array.isArray(loadedChat) ? loadedChat.map(normalizeMsg) : [];
+
+          setDocuments(safeDocs);
+          setChatHistory(safeChat);
+
+          if (safeDocs.length === 0 && safeChat.length === 0) {
+            toast.info('Welcome! Add some documents to get started.');
+          } else if (safeDocs.length > 0) {
+            // Sync existing documents to backend in background
+            // Use a small delay to avoid blocking initial render
+            const syncTimeout = setTimeout(() => {
+              // Capture docs at this moment to avoid stale closure
+              syncDocumentsToBackend(safeDocs);
+            }, 1000);
+
+            // Cleanup timeout if component unmounts
+            return () => clearTimeout(syncTimeout);
+          }
       } catch (error) {
         toast.error('Failed to load data. Starting with empty state.');
         setDocuments([]);
@@ -94,7 +127,7 @@ function AIKBContent() {
   }, [chatHistory, activeTab]);
 
   // Optimistic document addition with backend sync
-  const addDocument = useCallback(async (doc: Record<string, unknown>) => {
+  const addDocument = useCallback(async (doc: Omit<Doc, 'id' | 'createdAt'>) => {
     const newDoc = {
       id: uuidv4(),
       ...doc,
@@ -153,11 +186,11 @@ function AIKBContent() {
 
   // Optimistic document deletion
   const deleteDocument = useCallback(async (id: string) => {
-    const docToDelete = (documents as any[]).find(doc => doc.id === id);
+    const docToDelete = documents.find(doc => doc.id === id);
     if (!docToDelete) return;
 
     // Optimistic update
-    const updatedDocs = (documents as any[]).filter(doc => doc.id !== id);
+    const updatedDocs = documents.filter(doc => doc.id !== id);
     setDocuments(updatedDocs);
     
     try {
@@ -173,11 +206,12 @@ function AIKBContent() {
   // Debounced search with main thread protection
   const filteredDocs = React.useMemo(() => {
     if (!searchTerm.trim()) return documents;
-    
-    return (documents as any[]).filter(doc => 
-      String(doc.title).toLowerCase().includes(searchTerm.toLowerCase()) ||
-      String(doc.content).toLowerCase().includes(searchTerm.toLowerCase()) ||
-      String(doc.category).toLowerCase().includes(searchTerm.toLowerCase())
+
+    const q = searchTerm.toLowerCase();
+    return documents.filter(doc => 
+      String(doc.title || '').toLowerCase().includes(q) ||
+      String(doc.content || '').toLowerCase().includes(q) ||
+      String(doc.category || '').toLowerCase().includes(q)
     );
   }, [documents, searchTerm]);
 
@@ -197,7 +231,7 @@ function AIKBContent() {
     const queryId = uuidv4();
     
     // Create optimistic user message
-    const userMsg = {
+    const userMsg: ChatMsg = {
       id: queryId,
       type: 'user',
       content: currentQuery,
@@ -233,25 +267,25 @@ function AIKBContent() {
 
       // CRITICAL FIX: Only update if this query is still the latest
       setChatHistory(prev => {
-        const p = prev as any[];
+        const p = prev as ChatMsg[];
         // Check if our optimistic user message is still there
-        const hasThisQuery = p.some((msg: any) => msg.id === queryId);
+        const hasThisQuery = p.some((msg) => msg.id === queryId);
         if (!hasThisQuery) {
           console.warn('Query was cleared or replaced, skipping update');
           return prev;
         }
 
         // Remove optimistic message and add real response
-        const withoutOptimistic = p.filter((msg: any) => msg.id !== queryId);
-        const finalHistory = [
+        const withoutOptimistic = p.filter((msg) => msg.id !== queryId);
+        const finalHistory: ChatMsg[] = [
           ...withoutOptimistic,
           userMsg,
           {
             id: uuidv4(),
             type: 'ai',
-            content: aiResponse,
+            content: String(aiResponse ?? ''),
             timestamp: new Date().toISOString()
-          }
+          } as ChatMsg
         ];
 
         // Save to storage in background
@@ -268,9 +302,9 @@ function AIKBContent() {
       console.error('Error querying AI:', error);
 
       // CRITICAL FIX: Remove only this query's optimistic message
-      setChatHistory(prev => (prev as any[]).filter((msg: any) => msg.id !== queryId));
+      setChatHistory(prev => prev.filter((msg) => msg.id !== queryId));
 
-      const errName = (error as any)?.name;
+      const errName = error instanceof Error ? error.name : undefined;
       const emsg = error instanceof Error ? error.message : String(error);
 
       // Show user-friendly error
@@ -324,7 +358,7 @@ function AIKBContent() {
                   سیستم مدیریت دانش هوشمند
                 </h1>
                 <p className="text-sm text-gray-500">
-                  {documents.length} سند | {(chatHistory as any[]).filter((m: any) => m.type === 'user').length} پرسش
+                  {documents.length} سند | {chatHistory.filter((m) => m.type === 'user').length} پرسش
                 </p>
               </div>
             </div>
@@ -375,7 +409,7 @@ function AIKBContent() {
             }`}
           >
             <MessageSquare className="inline ml-2" size={18} />
-            چت ({(chatHistory as any[]).filter((m: any) => m.type === 'user').length})
+            چت ({chatHistory.filter((m) => m.type === 'user').length})
           </button>
         </div>
       </div>
@@ -432,7 +466,7 @@ function AIKBContent() {
                       {doc.category}
                     </span>
                     <span className="text-gray-400">
-                      {new Date(doc.createdAt).toLocaleDateString('fa-IR')}
+                      {new Date(doc.createdAt ?? Date.now()).toLocaleDateString('fa-IR')}
                     </span>
                   </div>
                 </div>
@@ -471,7 +505,7 @@ function AIKBContent() {
                 </p>
               </div>
             ) : (
-              (chatHistory as any[]).map((msg: any, idx: number) => (  
+              chatHistory.map((msg, idx: number) => (  
                 <div key={idx} className={`flex ${msg.type === 'user' ? 'justify-start' : 'justify-end'}`}>
                   <div className={`max-w-[80%] rounded-lg p-4 ${
                     msg.type === 'user'

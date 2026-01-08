@@ -51,14 +51,14 @@ function AdminContent() {
     }
   }, [searchParams]);
   
-  const [documents, setDocuments] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
+  const [documents, setDocuments] = useState<Record<string, unknown>[]>([]);
+  const [users, setUsers] = useState<Record<string, unknown>[]>([]);
+  const [history, setHistory] = useState<unknown[]>([]);
+  const [stats, setStats] = useState<Record<string, unknown> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [editingDoc, setEditingDoc] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<Record<string, unknown> | null>(null);
+  const [editingDoc, setEditingDoc] = useState<Record<string, unknown> | null>(null);
   const [isUpdatingMetadata, setIsUpdatingMetadata] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', category: '', sensitivity: '', department: '' });
@@ -77,6 +77,23 @@ function AdminContent() {
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'VIEWER', department: 'General' });
+
+  // Helper to safely extract error messages from unknown errors
+  const extractErrorMessage = (err: unknown, fallback = 'An error occurred'): string => {
+    if (typeof err !== 'object' || err === null) return fallback;
+    const e = err as Record<string, unknown>;
+    const resp = e['response'];
+    if (typeof resp === 'object' && resp !== null) {
+      const r = resp as Record<string, unknown>;
+      const data = r['data'];
+      if (typeof data === 'object' && data !== null) {
+        const d = data as Record<string, unknown>;
+        const msg = d['error'];
+        if (typeof msg === 'string') return msg;
+      }
+    }
+    return fallback;
+  };
 
   useEffect(() => {
     // Verify session using server-side cookie/token via authApi.getMe
@@ -107,10 +124,10 @@ function AdminContent() {
 
         // Fetch admin data
         fetchData();
-      } catch (e) {
-        console.error('Admin auth verify failed', e);
-        router.push('/login');
-      }
+      } catch (error: unknown) {
+          console.error('Admin auth verify failed', error);
+          router.push('/login');
+        }
     };
 
     init();
@@ -151,7 +168,7 @@ function AdminContent() {
 
       const configRes = await api.get('/config');
       setSystemConfig(configRes.data);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to fetch admin data', error);
     } finally {
       setIsLoading(false);
@@ -165,7 +182,7 @@ function AdminContent() {
     try {
       await api.patch(`/users/${userId}`, { role: newRole });
       // Optimistic update
-      setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u));
+      setUsers(prev => prev.map(u => String(u['id']) === userId ? { ...u, role: newRole } : u));
     } catch (e) {
       alert('Failed to update role');
     }
@@ -212,7 +229,7 @@ function AdminContent() {
   const handleDepartmentChange = async (userId: string, newDept: string) => {
     try {
       await api.patch(`/users/${userId}`, { department: newDept });
-      setUsers(users.map(u => u.id === userId ? { ...u, department: newDept } : u));
+      setUsers(prev => prev.map(u => String(u['id']) === userId ? { ...u, department: newDept } : u));
     } catch (e) {
       alert('Failed to update department');
     }
@@ -256,8 +273,8 @@ function AdminContent() {
       setIsAddUserModalOpen(false);
       setUserForm({ name: '', email: '', password: '', role: 'VIEWER', department: 'General' });
       alert('User created successfully');
-    } catch (e: any) {
-      alert(e.response?.data?.error || 'Failed to create user');
+    } catch (error: unknown) {
+      alert(extractErrorMessage(error, 'Failed to create user'));
     } finally {
       setIsCreatingUser(false);
     }
@@ -269,7 +286,7 @@ function AdminContent() {
     }
     try {
       await api.delete(`/users/${userId}`);
-      setUsers(users.filter(u => u.id !== userId));
+      setUsers(prev => prev.filter(u => String(u['id']) !== userId));
       alert('User deleted successfully');
     } catch (e) {
       alert('Failed to delete user');
@@ -312,14 +329,14 @@ function AdminContent() {
     }
   };
 
-  const openEditModal = (doc: any) => {
+  const openEditModal = (doc: Record<string, unknown>) => {
     console.log('Admin: Opening Edit Modal for doc:', doc);
     setEditingDoc(doc);
     setEditForm({
-      title: doc.name || '',
-      category: doc.category || 'General',
-      sensitivity: doc.sensitivity || 'INTERNAL',
-      department: doc.department || 'General'
+      title: String(doc['name'] ?? ''),
+      category: String(doc['category'] ?? 'General'),
+      sensitivity: String(doc['sensitivity'] ?? 'INTERNAL'),
+      department: String(doc['department'] ?? 'General')
     });
   };
 
@@ -338,7 +355,7 @@ function AdminContent() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-[#0F172A]">Knowledge Control Center</h1>
-            <p className="text-xs text-[#64748B]">Welcome back, {currentUser?.name}</p>
+            <p className="text-xs text-[#64748B]">Welcome back, {String(currentUser?.['name'] ?? '')}</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -394,7 +411,7 @@ function AdminContent() {
                                  </div>
                                </div>
                                <p className="text-sm font-medium text-[#64748B]">{stat.label}</p>
-                               <p className="text-2xl font-bold text-[#0F172A] mt-1">{stat.value}</p>
+                               <p className="text-2xl font-bold text-[#0F172A] mt-1">{String(stat.value ?? '')}</p>
                              </div>
                            ))}
                          </div>
@@ -404,18 +421,24 @@ function AdminContent() {
                             <h3 className="font-bold text-[#0F172A] mb-4">Recent Knowledge Updates</h3>
                             <div className="space-y-4">
                                {history.length > 0 ? (
-                                 history.slice(0, 5).map((entry: any, i: number) => (
-                                   <div key={entry.id || i} className="flex items-center gap-3 text-sm text-[#64748B]">
+                                 history.slice(0, 5).map((entry: unknown, i: number) => {
+                                   const e = (entry as Record<string, unknown>) || {};
+                                   const eventType = String(e['event_type'] ?? 'UNKNOWN');
+                                   const docName = String(e['doc_name'] ?? 'Unknown');
+                                   const createdAt = e['created_at'] ? String(e['created_at']) : undefined;
+                                   return (
+                                   <div key={String(e['id'] ?? i)} className="flex items-center gap-3 text-sm text-[#64748B]">
                                       <div className={`p-1.5 rounded-lg ${
-                                        entry.event_type === 'CREATED' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'
+                                        eventType === 'CREATED' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'
                                       }`}>
                                         <Clock size={14} />
                                       </div>
-                                      <span className="font-medium text-[#0F172A]">{entry.doc_name}</span>
-                                      <span className="text-xs">{entry.event_type}</span>
-                                      <span className="ml-auto text-xs">{new Date(entry.created_at).toLocaleTimeString()}</span>
+                                      <span className="font-medium text-[#0F172A]">{docName}</span>
+                                      <span className="text-xs">{eventType}</span>
+                                      <span className="ml-auto text-xs">{createdAt ? new Date(createdAt).toLocaleTimeString() : ''}</span>
                                    </div>
-                                 ))
+                                   );
+                                 })
                                ) : (
                                   <div className="flex items-center gap-3 text-sm text-[#64748B]">
                                      <Clock size={16} />
@@ -458,47 +481,55 @@ function AdminContent() {
                                </tr>
                              </thead>
                              <tbody className="divide-y divide-[#E2E8F0]">
-                               {documents.map((doc) => (
-                                 <tr key={doc.id} className="hover:bg-[#F8FAFC]">
+                               {documents.map((doc) => {
+                                 const d = (doc as Record<string, unknown>) || {};
+                                 const id = String(d['id'] ?? Math.random());
+                                 const name = String(d['name'] ?? 'Untitled');
+                                 const category = String(d['category'] ?? '');
+                                 const department = String(d['department'] ?? 'General');
+                                 const sensitivity = String(d['sensitivity'] ?? 'INTERNAL');
+                                 const status = String(d['status'] ?? '');
+                                 return (
+                                 <tr key={id} className="hover:bg-[#F8FAFC]">
                                    <td className="px-6 py-4">
                                      <div className="flex items-center gap-3">
                                        <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
                                          <FileText size={16} />
                                        </div>
-                                       <span className="text-sm font-semibold text-[#0F172A]">{doc.name}</span>
+                                       <span className="text-sm font-semibold text-[#0F172A]">{name}</span>
                                      </div>
                                    </td>
-                                   <td className="px-6 py-4 text-sm text-[#64748B]">{doc.category}</td>
+                                   <td className="px-6 py-4 text-sm text-[#64748B]">{category}</td>
                                    <td className="px-6 py-4">
                                      <span className={`px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-full`}>
-                                       {doc.department || 'General'}
+                                       {department}
                                      </span>
                                    </td>
                                    <td className="px-6 py-4">
                                      <span className={`px-2 py-1 text-[10px] font-bold rounded-full ${
-                                       doc.sensitivity === 'CONFIDENTIAL' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                                       sensitivity === 'CONFIDENTIAL' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
                                      }`}>
-                                       {doc.sensitivity}
+                                       {sensitivity}
                                      </span>
                                    </td>
                                    <td className="px-6 py-4">
                                      <span className={`px-2 py-1 text-[10px] font-bold rounded-full ${
-                                       doc.status === 'Synced' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                                       status === 'Synced' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
                                      }`}>
-                                       {doc.status}
+                                       {status}
                                      </span>
                                    </td>
                                     <td className="px-6 py-4">
                                       <div className="flex items-center gap-2">
                                         <button 
-                                          onClick={() => openEditModal(doc)}
+                                          onClick={() => openEditModal(d)}
                                           className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
                                           title="Edit Metadata"
                                         >
                                           <Edit2 size={16} />
                                         </button>
                                         <button 
-                                          onClick={() => handleRowSync(doc.id)}
+                                          onClick={() => handleRowSync(id)}
                                           className="p-2 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-lg transition-colors"
                                           title="Sync this document"
                                         >
@@ -508,7 +539,7 @@ function AdminContent() {
                                           onClick={() => {
                                              if(window.confirm('Are you sure you want to delete this document? This cannot be undone.')) {
                                                alert('Document deleted (simulated)');
-                                               setDocuments(documents.filter(d => d.id !== doc.id));
+                                               setDocuments(prev => prev.filter(d => String((d as Record<string, unknown>)['id']) !== id));
                                              }
                                           }}
                                           className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
@@ -519,7 +550,8 @@ function AdminContent() {
                                       </div>
                                     </td>
                                  </tr>
-                               ))}
+                                 );
+                               })}
                              </tbody>
                            </table>
                          ) : (
@@ -558,21 +590,26 @@ function AdminContent() {
                              </tr>
                            </thead>
                            <tbody className="divide-y divide-[#E2E8F0]">
-                             {users.map((u: any) => (
-                               <tr key={u.id} className="hover:bg-[#F8FAFC] transition-colors">
+                             {users.map((u) => {
+                               const userObj = (u as Record<string, unknown>) || {};
+                               const uname = String(userObj['name'] ?? 'User');
+                               const uemail = String(userObj['email'] ?? '');
+                               const uid = String(userObj['id'] ?? Math.random());
+                               return (
+                               <tr key={uid} className="hover:bg-[#F8FAFC] transition-colors">
                                  <td className="px-6 py-4">
                                    <div className="flex items-center gap-3">
                                      <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                                       {u.name.charAt(0)}
+                                       {uname.charAt(0)}
                                      </div>
-                                     <span className="text-sm font-semibold text-[#0F172A]">{u.name}</span>
+                                     <span className="text-sm font-semibold text-[#0F172A]">{uname}</span>
                                    </div>
                                  </td>
-                                 <td className="px-6 py-4 text-sm text-[#64748B]">{u.email}</td>
+                                 <td className="px-6 py-4 text-sm text-[#64748B]">{uemail}</td>
                                  <td className="px-6 py-4">
                                    <select 
-                                     value={u.department}
-                                     onChange={(e) => handleDepartmentChange(u.id, e.target.value)}
+                                     value={String(userObj['department'] ?? '')}
+                                     onChange={(e) => handleDepartmentChange(uid, e.target.value)}
                                      className="bg-white border border-[#E2E8F0] text-sm rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"
                                    >
                                      {systemConfig.departments.map(dept => (
@@ -581,9 +618,9 @@ function AdminContent() {
                                    </select>
                                  </td>
                                  <td className="px-6 py-4">
-                                   <select 
-                                     value={u.role}
-                                     onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                                     <select 
+                                     value={String(userObj['role'] ?? 'VIEWER')}
+                                     onChange={(e) => handleRoleChange(uid, e.target.value)}
                                      className="bg-white border border-[#E2E8F0] text-sm rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"
                                    >
                                      <option value="ADMIN">ADMIN</option>
@@ -593,22 +630,22 @@ function AdminContent() {
                                    </select>
                                  </td>
                                  <td className="px-6 py-4">
-                                   <span className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded-full">
-                                     {u.status}
+                                     <span className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded-full">
+                                     {String(userObj['status'] ?? '')}
                                    </span>
                                  </td>
                                  <td className="px-6 py-4 text-right">
                                    <div className="flex items-center justify-end gap-2">
                                      <button 
-                                       onClick={() => handleResetPassword(u.id)}
+                                       onClick={() => handleResetPassword(uid)}
                                        className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
                                        title="Reset Password"
                                      >
                                        <ShieldCheck size={16} />
                                      </button>
                                      <button 
-                                       onClick={() => handleDeleteUser(u.id)}
-                                       disabled={u.email === currentUser?.email}
+                                       onClick={() => handleDeleteUser(uid)}
+                                       disabled={String(userObj['email'] ?? '') === String(currentUser?.['email'] ?? '')}
                                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30"
                                        title="Delete User"
                                      >
@@ -617,7 +654,9 @@ function AdminContent() {
                                    </div>
                                  </td>
                                </tr>
-                             ))}
+                               );
+                             })}
+                             
                            </tbody>
                         </table>
                       </div>
@@ -634,36 +673,44 @@ function AdminContent() {
                        <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm overflow-hidden">
                          {history.length > 0 ? (
                            <div className="divide-y divide-[#E2E8F0]">
-                             {history.map((event: any, i: number) => (
-                               <div key={event.id || i} className="p-6 hover:bg-[#F8FAFC] transition-colors">
-                                 <div className="flex items-start gap-4">
-                                   <div className={`mt-1 p-2 rounded-lg ${
-                                     event.event_type === 'CREATED' ? 'bg-green-50 text-green-600' :
-                                     event.event_type === 'UPDATED' ? 'bg-blue-50 text-blue-600' :
-                                     'bg-red-50 text-red-600'
-                                   }`}>
-                                      <Clock size={16} />
-                                   </div>
-                                   <div className="flex-1">
-                                      <div className="flex items-center justify-between mb-1">
-                                        <h4 className="font-bold text-[#0F172A]">{event.doc_name}</h4>
-                                        <span className="text-xs text-[#64748B]">{new Date(event.created_at).toLocaleString()}</span>
-                                      </div>
-                                      <p className="text-sm text-[#64748B] mb-2">{event.details || 'Document processed and indexed.'}</p>
-                                      <div className="flex items-center gap-4">
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                          event.event_type === 'CREATED' ? 'bg-green-100 text-green-700' :
-                                          event.event_type === 'UPDATED' ? 'bg-blue-100 text-blue-700' :
-                                          'bg-red-100 text-red-700'
-                                        }`}>
-                                          {event.event_type}
-                                        </span>
-                                        <span className="text-[10px] text-[#94A3B8]">ID: {event.doc_id}</span>
-                                      </div>
+                             {history.map((event: unknown, i: number) => {
+                                 const ev = (event as Record<string, unknown>) || {};
+                                 const et = String(ev['event_type'] ?? 'UNKNOWN');
+                                 const docName = String(ev['doc_name'] ?? 'Unknown');
+                                 const created = ev['created_at'] ? String(ev['created_at']) : undefined;
+                                 const details = String(ev['details'] ?? 'Document processed and indexed.');
+                                 const docId = String(ev['doc_id'] ?? '');
+                                 return (
+                                 <div key={String(ev['id'] ?? i)} className="p-6 hover:bg-[#F8FAFC] transition-colors">
+                                   <div className="flex items-start gap-4">
+                                     <div className={`mt-1 p-2 rounded-lg ${
+                                       et === 'CREATED' ? 'bg-green-50 text-green-600' :
+                                       et === 'UPDATED' ? 'bg-blue-50 text-blue-600' :
+                                       'bg-red-50 text-red-600'
+                                     }`}>
+                                        <Clock size={16} />
+                                     </div>
+                                     <div className="flex-1">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <h4 className="font-bold text-[#0F172A]">{docName}</h4>
+                                          <span className="text-xs text-[#64748B]">{created ? new Date(created).toLocaleString() : ''}</span>
+                                        </div>
+                                        <p className="text-sm text-[#64748B] mb-2">{details}</p>
+                                        <div className="flex items-center gap-4">
+                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                            et === 'CREATED' ? 'bg-green-100 text-green-700' :
+                                            et === 'UPDATED' ? 'bg-blue-100 text-blue-700' :
+                                            'bg-red-100 text-red-700'
+                                          }`}>
+                                            {et}
+                                          </span>
+                                          <span className="text-[10px] text-[#94A3B8]">ID: {docId}</span>
+                                        </div>
+                                     </div>
                                    </div>
                                  </div>
-                               </div>
-                             ))}
+                                 );
+                               })}
                            </div>
                          ) : (
                            <div className="p-20 text-center">
@@ -802,9 +849,9 @@ function AdminContent() {
                 <p className="text-xs text-[#64748B] font-medium mt-1">Update title and classification</p>
               </div>
               <div className="flex items-center gap-3">
-                {editingDoc.link && (
+                {typeof editingDoc['link'] === 'string' && (
                   <a 
-                    href={editingDoc.link} 
+                    href={String(editingDoc['link'])} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-blue-100"

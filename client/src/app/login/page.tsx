@@ -31,9 +31,19 @@ export default function LoginPage() {
     try {
       await authApi.login({ email, password });
       router.push('/');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Login failed', error);
-      const msg = error.response?.data?.error || 'Login failed. Please check your credentials.';
+      let msg = 'Login failed. Please check your credentials.';
+      if (typeof error === 'object' && error !== null) {
+        const e = error as Record<string, unknown>;
+        const resp = e['response'];
+        if (typeof resp === 'object' && resp !== null) {
+          const data = (resp as Record<string, unknown>)['data'];
+          if (typeof data === 'object' && data !== null && typeof (data as Record<string, unknown>)['error'] === 'string') {
+            msg = String((data as Record<string, unknown>)['error']);
+          }
+        }
+      }
       setErrorMsg(msg);
     } finally {
       setIsLoading(false);

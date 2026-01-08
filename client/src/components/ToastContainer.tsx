@@ -96,10 +96,10 @@ export const ToastContainer: React.FC = () => {
       setToasts(prev => [...prev, event.detail]);
     };
 
-    window.addEventListener('toast' as any, handleToast as EventListener);
-    
+    window.addEventListener('toast', handleToast as EventListener);
+
     return () => {
-      window.removeEventListener('toast' as any, handleToast as EventListener);
+      window.removeEventListener('toast', handleToast as EventListener);
     };
   }, []);
 

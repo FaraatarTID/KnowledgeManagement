@@ -28,7 +28,7 @@ export default function Home() {
   const { messages, isLoading, addMessage, setLoading } = useChatStore();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<Record<string, unknown> | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -74,10 +74,19 @@ export default function Home() {
       addMessage({ 
         role: 'assistant', 
         content: data.answer || "I'm sorry, I couldn't process your request.",
-        sources: data.sources?.map((s: any) => ({ 
-          id: s.id || s.docId, 
-          title: s.metadata?.title || s.docId || 'Unknown Source' 
-        }))
+        sources: Array.isArray(data.sources)
+          ? data.sources.map((s: unknown) => {
+              if (typeof s === 'object' && s !== null) {
+                const so = s as Record<string, unknown>;
+                const id = typeof so.id === 'string' ? so.id : (typeof so.docId === 'string' ? so.docId : 'unknown');
+                const title = typeof so.metadata === 'object' && so.metadata !== null && typeof (so.metadata as Record<string, unknown>).title === 'string'
+                  ? (so.metadata as Record<string, unknown>).title as string
+                  : (typeof so.docId === 'string' ? so.docId : 'Unknown Source');
+                return { id, title };
+              }
+              return { id: 'unknown', title: 'Unknown Source' };
+            })
+          : undefined
       });
     } catch (error) {
       console.error('Query failed', error);
@@ -175,12 +184,18 @@ export default function Home() {
                     </div>
                     {msg.sources && (
                       <div className="flex gap-2 mt-2">
-                        {msg.sources.map((s: any) => (
-                          <div key={s.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-lg border border-blue-100">
-                            <FileText size={12} />
-                            <span>{s.title}</span>
-                          </div>
-                        ))}
+                        {Array.isArray(msg.sources) && msg.sources.map((s: unknown) => {
+                          if (typeof s === 'object' && s !== null) {
+                            const so = s as Record<string, unknown>;
+                            return (
+                              <div key={String(so.id ?? Math.random())} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-lg border border-blue-100">
+                                <FileText size={12} />
+                                <span>{String(so.title ?? 'Unknown')}</span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
                       </div>
                     )}
                     <span className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-widest mt-1">

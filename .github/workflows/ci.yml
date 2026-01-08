@@ -9,6 +9,8 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      SUPPORT_LEGACY_CHAT: 'false'
     strategy:
       matrix:
         node-version: [18.x]

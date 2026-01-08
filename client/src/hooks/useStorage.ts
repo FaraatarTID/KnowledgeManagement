@@ -143,7 +143,7 @@ export const useStorage = () => {
    * Save documents with atomic backup
    * SECURITY FIX: Add telemetry and error handling
    */
-  const saveDocuments = async (documents: any[]) => {
+  const saveDocuments = async (documents: unknown[]) => {
     const startTime = Date.now();
     try {
       const json = JSON.stringify(documents);
@@ -162,10 +162,11 @@ export const useStorage = () => {
         count: documents.length,
         duration: `${Date.now() - startTime}ms`
       }));
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
       console.error('STORAGE_SAVE_FAILED', JSON.stringify({
         type: 'documents',
-        error: error.message,
+        error: msg,
         timestamp: new Date().toISOString()
       }));
       throw error;
@@ -176,7 +177,7 @@ export const useStorage = () => {
    * Save chat history with atomic backup
    * SECURITY FIX: Add telemetry and error handling
    */
-  const saveChatHistory = async (chatHistory: any[]) => {
+  const saveChatHistory = async (chatHistory: unknown[]) => {
     const startTime = Date.now();
     try {
       const json = JSON.stringify(chatHistory);
@@ -195,10 +196,11 @@ export const useStorage = () => {
         count: chatHistory.length,
         duration: `${Date.now() - startTime}ms`
       }));
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
       console.error('STORAGE_SAVE_FAILED', JSON.stringify({
         type: 'chatHistory',
-        error: error.message,
+        error: msg,
         timestamp: new Date().toISOString()
       }));
       throw error;

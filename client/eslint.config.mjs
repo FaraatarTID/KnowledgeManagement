@@ -5,10 +5,10 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // Relax strict no-explicit-any rule temporarily to make incremental fixes practical
+  // Re-enable strict no-explicit-any to improve typings incrementally
   {
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off'
+      '@typescript-eslint/no-explicit-any': 'error'
     }
   },
   // Override default ignores of eslint-config-next.
