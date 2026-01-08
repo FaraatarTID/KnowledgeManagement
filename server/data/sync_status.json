@@ -188,5 +188,53 @@
     "lastSync": "2026-01-08T07:00:00.088Z",
     "fileName": "test.pdf",
     "updatedAt": "2026-01-08T07:00:00.090Z"
+  },
+  "manual-1767857936166": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1767857936166-w92xcdqtn",
+    "lastSync": "2026-01-08T07:38:56.208Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-08T07:38:56.209Z"
+  },
+  "manual-1767857936181": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1767857936182-b9405ex6m",
+    "lastSync": "2026-01-08T07:38:56.223Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-08T07:38:56.224Z"
+  },
+  "manual-1767858097474": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1767858097475-p8gdtuuex",
+    "lastSync": "2026-01-08T07:41:37.528Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-08T07:41:37.529Z"
+  },
+  "manual-1767858097509": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1767858097510-jsux34ccv",
+    "lastSync": "2026-01-08T07:41:37.576Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-08T07:41:37.577Z"
+  },
+  "manual-1767858189050": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1767858189051-359qerups",
+    "lastSync": "2026-01-08T07:43:09.104Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-08T07:43:09.105Z"
+  },
+  "manual-1767858189059": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1767858189060-j88m7v8gt",
+    "lastSync": "2026-01-08T07:43:09.107Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-08T07:43:09.108Z"
   }
 }

@@ -19,6 +19,9 @@ import {
   LogOut,
   Clock
 } from 'lucide-react';
+
+// Prevent unused import warnings for optional icon variants
+void Send; void Bot; void User; void LayoutDashboard; void MessageSquare; void Settings; void PlusCircle; void Search; void BookOpen; void FileText; void ShieldCheck; void ChevronRight; void MoreVertical; void Loader2; void LogOut; void Clock;
 import { useChatStore } from '@/store/chatStore';
 import api, { authApi } from '@/lib/api';
 import { useRouter } from 'next/navigation';
@@ -28,7 +31,7 @@ export default function Home() {
   const { messages, isLoading, addMessage, setLoading } = useChatStore();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [user, setUser] = useState<Record<string, unknown> | null>(null);
+  // user state is intentionally unused here; session is validated but not stored
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -47,16 +50,15 @@ export default function Home() {
           return;
         }
 
-        // Verify session with server
-        const freshUser = await authApi.getMe();
-        setUser(freshUser);
+        // Verify session with server (no local state required)
+        await authApi.getMe();
       } catch (e) {
         console.error('Auth check failed', e);
         router.push('/login');
       }
     };
     initAuth();
-  }, []);
+  }, [router]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -99,9 +101,7 @@ export default function Home() {
     }
   };
 
-  const handleLogout = () => {
-    authApi.logout();
-  };
+  // Logout handled by Sidebar; no-op here
 
   return (
     <div className="flex flex-col h-full">

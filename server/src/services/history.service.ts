@@ -1,11 +1,14 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export interface HistoryEvent {
-  event_type: 'CREATED' | 'UPDATED' | 'DELETED';
-  doc_id: string;
-  doc_name: string;
+  // Allow custom event types (migration and operational events may use other values)
+  event_type: string;
+  doc_id?: string;
+  doc_name?: string;
   details?: string;
   user_id?: string;
+  // Allow additional metadata to be attached by callers (e.g., error details)
+  [key: string]: any;
 }
 
 export class HistoryService {

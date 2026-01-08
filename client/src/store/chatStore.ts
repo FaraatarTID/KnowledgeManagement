@@ -25,7 +25,7 @@ const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000;
 
 export const useChatStore = create<ChatStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       messages: [],
       isLoading: false,
       

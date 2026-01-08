@@ -54,8 +54,7 @@ export interface User {
  * Atomic localStorage operation with mutex
  */
 async function atomicLocalStorageOperation<T>(
-  operation: () => T,
-  key?: string
+  operation: () => T
 ): Promise<T> {
   // Wait for previous operation to complete
   await localStorageMutex;

@@ -96,10 +96,17 @@ export const ToastContainer: React.FC = () => {
       setToasts(prev => [...prev, event.detail]);
     };
 
+    const handleDismiss = (event: CustomEvent<{ id: string }>) => {
+      const id = event.detail?.id;
+      if (id) setToasts(prev => prev.filter(t => t.id !== id));
+    };
+
     window.addEventListener('toast', handleToast as EventListener);
+    window.addEventListener('toast-dismiss', handleDismiss as EventListener);
 
     return () => {
       window.removeEventListener('toast', handleToast as EventListener);
+      window.removeEventListener('toast-dismiss', handleDismiss as EventListener);
     };
   }, []);
 
@@ -151,6 +158,7 @@ export const toast = {
   },
 
   dismiss: (id: string) => {
-    // This would need to be implemented if we want manual dismissal
+    const evt = new CustomEvent('toast-dismiss', { detail: { id } });
+    window.dispatchEvent(evt);
   }
 };

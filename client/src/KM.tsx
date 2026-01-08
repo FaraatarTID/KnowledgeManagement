@@ -109,7 +109,7 @@ function AIKBContent() {
             // Cleanup timeout if component unmounts
             return () => clearTimeout(syncTimeout);
           }
-      } catch (error) {
+      } catch {
         toast.error('Failed to load data. Starting with empty state.');
         setDocuments([]);
         setChatHistory([]);
@@ -117,7 +117,7 @@ function AIKBContent() {
     };
 
     initializeData();
-  }, [loadData]); // Removed syncDocumentsToBackend - it's memoized with empty deps
+  }, [loadData, syncDocumentsToBackend]); // include syncDocumentsToBackend to satisfy hook deps
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
@@ -196,7 +196,7 @@ function AIKBContent() {
     try {
       await saveDocuments(updatedDocs);
       toast.success('Document deleted');
-    } catch (error) {
+    } catch {
       // Rollback on failure
       setDocuments(documents);
       toast.error('Failed to delete document');
@@ -332,7 +332,7 @@ function AIKBContent() {
       setChatHistory([]);
       await saveChatHistory([]);
       toast.success('Chat history cleared');
-    } catch (error) {
+    } catch {
       toast.error('Failed to clear chat history');
     }
   }, [saveChatHistory]);

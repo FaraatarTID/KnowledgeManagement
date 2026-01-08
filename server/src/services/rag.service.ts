@@ -171,7 +171,7 @@ export class RAGService {
     }
 
     const verifiedQuotes = quotes.map(rawQuote => {
-      const quoteText = sanitizeQuote(rawQuote);
+      const quoteText = sanitizeQuote(rawQuote ?? '');
       
       // SECURITY: Check for empty or suspiciously short quotes
       if (quoteText.length < 3) {
@@ -185,7 +185,7 @@ export class RAGService {
     });
 
     const confidenceMatch = aiText.match(/\[CONFIDENCE\]:\s*(High|Medium|Low)/i);
-    const confidence = confidenceMatch ? confidenceMatch[1].toUpperCase() : 'UNKNOWN';
+    const confidence = confidenceMatch?.[1]?.toUpperCase() ?? 'UNKNOWN';
 
     const hallucinatedQuoteCount = verifiedQuotes.filter(v => !v.verified).length;
     const isCompromised = hallucinatedQuoteCount > 0;

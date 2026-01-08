@@ -7,8 +7,7 @@ import {
   ShieldCheck, 
   Clock, 
   LogOut,
-  Settings,
-  User as UserIcon
+  Settings
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { authApi } from '@/lib/api';
@@ -46,7 +45,7 @@ export default function Sidebar() {
         if (e.newValue) {
           try {
             setUser(JSON.parse(e.newValue));
-          } catch (err) {
+          } catch {
             setUser(null);
           }
         } else {

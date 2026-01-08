@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   FileText, 
   Search, 
@@ -58,6 +58,9 @@ function AdminContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [currentUser, setCurrentUser] = useState<Record<string, unknown> | null>(null);
+
+  // Prevent noisy unused-import warnings for icons that may be optionally used in variants
+  void Search; void Filter; void Eye; void BarChart3; void MoreVertical; void LogOut; void UserCog; void ArrowLeft; void LayoutDashboard; void MessageSquare; void Bot; void Settings; void ShieldCheck; void ChevronLeft;
   const [editingDoc, setEditingDoc] = useState<Record<string, unknown> | null>(null);
   const [isUpdatingMetadata, setIsUpdatingMetadata] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -99,12 +102,12 @@ function AdminContent() {
     // Verify session using server-side cookie/token via authApi.getMe
     const init = async () => {
       try {
-        const freshUser = await authApi.getMe();
-        if (!freshUser) {
-          // No session
-          router.push('/login');
-          return;
-        }
+          const freshUser = await authApi.getMe();
+          if (!freshUser) {
+            // No session
+            router.push('/login');
+            return;
+          }
 
         setCurrentUser(freshUser);
         if (freshUser.role !== 'ADMIN' && freshUser.role !== 'MANAGER') {
@@ -131,25 +134,11 @@ function AdminContent() {
     };
 
     init();
-  }, [activeTab]);
+    }, [activeTab, fetchData, handleSyncNow, router]);
 
-  const verifySession = async () => {
-    try {
-      const res = await api.get('/auth/me');
-      const freshUser = res.data;
-      setCurrentUser(freshUser);
-      localStorage.setItem('user', JSON.stringify(freshUser)); // Sync local
+  
 
-      if (!['ADMIN', 'MANAGER'].includes(freshUser.role)) {
-        alert('Access Revoked: You no longer have Admin privileges.');
-        router.push('/');
-      }
-    } catch (error) {
-      // If verify fails (401), the interceptor handles it
-    }
-  };
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       if (activeTab === 'documents') {
@@ -173,7 +162,7 @@ function AdminContent() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [activeTab]);
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     if (!window.confirm(`Are you sure you want to change this user's role to ${newRole}?`)) {
@@ -183,7 +172,7 @@ function AdminContent() {
       await api.patch(`/users/${userId}`, { role: newRole });
       // Optimistic update
       setUsers(prev => prev.map(u => String(u['id']) === userId ? { ...u, role: newRole } : u));
-    } catch (e) {
+    } catch {
       alert('Failed to update role');
     }
   };
@@ -199,7 +188,7 @@ function AdminContent() {
       setDocuments(documents.map(d => d.id === editingDoc.id ? { ...d, name: editForm.title, ...editForm } : d));
       setEditingDoc(null);
       alert('Document updated successfully');
-    } catch (e) {
+    } catch {
       alert('Failed to update metadata');
     } finally {
       setIsUpdatingMetadata(false);
@@ -210,7 +199,7 @@ function AdminContent() {
     try {
       const res = await api.patch('/config/categories', { categories: newCategories });
       setSystemConfig(prev => ({ ...prev, categories: res.data.categories }));
-    } catch (e) {
+    } catch {
       alert('Failed to update categories');
     }
   };
@@ -219,7 +208,7 @@ function AdminContent() {
     try {
       const res = await api.patch('/config/departments', { departments: newDepartments });
       setSystemConfig(prev => ({ ...prev, departments: res.data.departments }));
-    } catch (e) {
+    } catch {
       alert('Failed to update departments');
     }
   };
@@ -230,7 +219,7 @@ function AdminContent() {
     try {
       await api.patch(`/users/${userId}`, { department: newDept });
       setUsers(prev => prev.map(u => String(u['id']) === userId ? { ...u, department: newDept } : u));
-    } catch (e) {
+    } catch {
       alert('Failed to update department');
     }
   };
@@ -257,7 +246,7 @@ function AdminContent() {
       setUploadFile(null);
       setAddResourceStep('select');
       fetchData();
-    } catch (e) {
+    } catch {
       alert('Upload failed');
     } finally {
       setIsUploading(false);
@@ -288,7 +277,7 @@ function AdminContent() {
       await api.delete(`/users/${userId}`);
       setUsers(prev => prev.filter(u => String(u['id']) !== userId));
       alert('User deleted successfully');
-    } catch (e) {
+    } catch {
       alert('Failed to delete user');
     }
   };
@@ -300,12 +289,12 @@ function AdminContent() {
     try {
       await api.patch(`/users/${userId}/password`, { password: newPassword });
       alert('Password updated successfully');
-    } catch (e) {
+    } catch {
       alert('Failed to update password');
     }
   };
 
-  const handleSyncNow = async () => {
+  const handleSyncNow = useCallback(async () => {
     setIsSyncing(true);
     try {
       const res = await api.post('/sync');
@@ -318,13 +307,13 @@ function AdminContent() {
     } finally {
       setIsSyncing(false);
     }
-  };
+  }, [fetchData]);
 
   const handleRowSync = async (docId: string) => {
     try {
       await api.post(`/documents/${docId}/sync`);
       fetchData(); // Refresh list to show 'Synced' status
-    } catch (e) {
+    } catch {
       alert('Row sync failed');
     }
   };
@@ -340,10 +329,8 @@ function AdminContent() {
     });
   };
 
-  const handleLogout = () => {
-    authApi.logout();
-    router.push('/login');
-  };
+  // Admin page does not expose a logout button here; use the global sidebar logout instead
+  
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col w-full">

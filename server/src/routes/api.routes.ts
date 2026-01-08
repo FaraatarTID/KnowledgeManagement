@@ -342,7 +342,7 @@ router.post('/chat', authMiddleware, async (req: AuthRequest, res) => {
     return res.json({ content: aiResponse });
   } catch (error: any) {
     console.error('Error in legacy chat handling inside /chat:', error);
-    return res.status(500).json({ message: 'Failed to process chat request.', error: error.message });
+    return res.status(500).json({ message: 'Failed to process chat request.', error: String((error as any)?.message ?? error) });
   }
 });
 
@@ -381,7 +381,7 @@ router.post('/chat/legacy', authMiddleware, async (req: AuthRequest, res) => {
     res.json({ content: aiResponse });
   } catch (error) {
     console.error('Error in legacy chat endpoint:', error);
-    res.status(500).json({ message: 'Failed to process chat request.', error: error.message });
+    res.status(500).json({ message: 'Failed to process chat request.', error: String((error as any)?.message ?? error) });
   }
 });
 
@@ -861,7 +861,7 @@ router.post('/documents/sync', authMiddleware, async (req: AuthRequest, res) => 
 
   try {
     const userId = req.user?.id || 'anonymous';
-    const userProfile = req.user?.profile || { name: 'User', department: 'General', role: 'VIEWER' };
+    const userProfile = (req.user as any)?.profile || { name: 'User', department: 'General', role: 'VIEWER' };
 
     // Process each document and add to vector database
     const results = await Promise.allSettled(
@@ -900,7 +900,7 @@ router.post('/documents/sync', authMiddleware, async (req: AuthRequest, res) => 
           return { id: doc.id, status: 'success' };
         } catch (error) {
           console.error(`Failed to sync document ${doc.id}:`, error);
-          return { id: doc.id, status: 'error', error: error.message };
+          return { id: doc.id, status: 'error', error: String((error as any)?.message ?? error) };
         }
       })
     );
@@ -924,7 +924,7 @@ router.post('/documents/sync', authMiddleware, async (req: AuthRequest, res) => 
     console.error('Document sync failed:', error);
     res.status(500).json({ 
       message: 'Failed to sync documents to vector database.', 
-      error: error.message 
+      error: String((error as any)?.message ?? error)
     });
   }
 });

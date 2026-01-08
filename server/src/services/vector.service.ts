@@ -7,7 +7,7 @@ import { LocalMetadataService } from './localMetadata.service.js';
  * Simple Mutex implementation for preventing race conditions
  */
 class Mutex {
-  private queue: (() => void)[] = [];
+  private queue: ((releaseFn: () => void) => void)[] = [];
   private locked = false;
 
   async acquire(): Promise<() => void> {
@@ -29,7 +29,7 @@ class Mutex {
         resolve(releaseFn!);
       } else {
         // Queue a resolver that will receive the release function
-        this.queue.push(resolve as any);
+        this.queue.push((r) => resolve(r));
       }
     });
 
@@ -54,6 +54,7 @@ export class VectorService {
   private vectors: VectorItem[] = [];
   private readonly DATA_FILE = path.join(process.cwd(), 'data', 'vectors.json');
   private localMetadataService: LocalMetadataService;
+  private saveTimeout?: ReturnType<typeof setTimeout>;
   
   // SECURITY: Mutex for atomic writes to prevent race conditions
   private writeMutex = new Mutex();
@@ -315,7 +316,7 @@ export class VectorService {
   private async optimizedSimilaritySearch(params: {
     embedding: number[];
     topK: number;
-    filters: { department: string; role: string };
+    filters?: { department?: string; role?: string };
   }) {
     const start = Date.now();
     const queryVec = params.embedding;
@@ -324,9 +325,9 @@ export class VectorService {
     const sensitivityMap: Record<string, number> = { 'PUBLIC': 0, 'INTERNAL': 1, 'CONFIDENTIAL': 2, 'RESTRICTED': 3, 'EXECUTIVE': 4 };
     const roleMap: Record<string, number> = { 'VIEWER': 1, 'EDITOR': 2, 'MANAGER': 3, 'ADMIN': 4 };
     
-    const userRole = params.filters.role.toUpperCase();
+    const userRole = (params.filters?.role || '').toUpperCase();
     const userClearance = roleMap[userRole] || 1;
-    const userDept = params.filters.department.toLowerCase();
+    const userDept = (params.filters?.department || '').toLowerCase();
 
     // STEP 1: Aggressive pre-filtering (reduces search space by 80-90%)
     const filteredVectors = this.vectors.filter(vec => {
@@ -390,7 +391,7 @@ export class VectorService {
   private linearSimilaritySearch(params: {
     embedding: number[];
     topK: number;
-    filters: { department: string; role: string };
+    filters?: { department?: string; role?: string };
   }) {
     const start = Date.now();
     const queryVec = params.embedding;
@@ -398,9 +399,9 @@ export class VectorService {
     const sensitivityMap: Record<string, number> = { 'PUBLIC': 0, 'INTERNAL': 1, 'CONFIDENTIAL': 2, 'RESTRICTED': 3, 'EXECUTIVE': 4 };
     const roleMap: Record<string, number> = { 'VIEWER': 1, 'EDITOR': 2, 'MANAGER': 3, 'ADMIN': 4 };
     
-    const userRole = params.filters.role.toUpperCase();
+    const userRole = (params.filters?.role || '').toUpperCase();
     const userClearance = roleMap[userRole] || 1;
-    const userDept = params.filters.department.toLowerCase();
+    const userDept = (params.filters?.department || '').toLowerCase();
 
     // Perform Hard Filtering
     const filteredVectors = this.vectors.filter(vec => {
