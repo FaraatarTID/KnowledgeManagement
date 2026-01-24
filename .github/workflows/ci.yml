@@ -24,11 +24,20 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
 
       - name: Install & Test server
         working-directory: ./server
+        env:
+          GOOGLE_CLOUD_PROJECT_ID: aikb-mock-project
+          GEMINI_MODEL: gemini-2.5-flash-lite-001
+          EMBEDDING_MODEL: text-embedding-004
         run: |
           npm ci
+          # Create mock key.json for tests
+          echo '{"type":"service_account","project_id":"aikb-mock-project"}' > key.json
           npm test
 
       - name: Install & Build client

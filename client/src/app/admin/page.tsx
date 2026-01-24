@@ -134,7 +134,7 @@ function AdminContent() {
     };
 
     init();
-    }, [activeTab, fetchData, handleSyncNow, router]);
+    }, [searchParams, router]);
 
   
 
