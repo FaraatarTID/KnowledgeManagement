@@ -581,12 +581,12 @@
     "fileName": "test.pdf",
     "updatedAt": "2026-01-26T14:09:22.203Z"
   },
-  "manual-1769437003833": {
+  "manual-1769437003793": {
     "status": "SUCCESS",
     "message": "Successfully indexed 1 chunks (1 vectors)",
-    "transactionId": "tx-1769437003835-6dxw5xz2u",
-    "lastSync": "2026-01-26T14:16:46.915Z",
-    "fileName": "test.pdf",
-    "updatedAt": "2026-01-26T14:16:46.916Z"
+    "transactionId": "tx-1769437003795-g1teuvn3m",
+    "lastSync": "2026-01-26T14:16:46.884Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-26T14:16:46.885Z"
   }
 }
