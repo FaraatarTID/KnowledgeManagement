@@ -460,5 +460,29 @@
     "lastSync": "2026-01-26T10:11:07.944Z",
     "fileName": "test.pdf",
     "updatedAt": "2026-01-26T10:11:07.944Z"
+  },
+  "manual-1769422627802": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769422627802-oj89x4hvh",
+    "lastSync": "2026-01-26T10:17:10.849Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-26T10:17:10.849Z"
+  },
+  "manual-1769431427037": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769431427038-7dptm4mbx",
+    "lastSync": "2026-01-26T12:43:50.088Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-26T12:43:50.089Z"
+  },
+  "manual-1769431427030": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769431427031-r854rvkrp",
+    "lastSync": "2026-01-26T12:43:50.089Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-26T12:43:50.090Z"
   }
 }

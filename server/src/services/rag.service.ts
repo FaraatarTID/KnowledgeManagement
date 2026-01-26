@@ -65,6 +65,7 @@ export class RAGService {
     const MAX_CONTEXT_CHARS = 100000;
     let currentLength = 0;
     const context: string[] = [];
+    let isTruncated = false;
 
     for (const res of relevantResults) {
       let text = res.metadata.text || '';
@@ -74,10 +75,8 @@ export class RAGService {
       
       const sourceBlock = `SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${text}`;
       
-      // LOGICAL FIX: Chunk-aware truncation.
-      // If adding this chunk exceeds limit, we stop. We don't want partial chunks confusing the LLM.
       if (currentLength + sourceBlock.length > MAX_CONTEXT_CHARS) {
-        // Exception: If it's the first result and it's already too big, we HAVE to truncate or we have no context.
+        isTruncated = true;
         if (context.length === 0) {
            const remaining = MAX_CONTEXT_CHARS;
            context.push(`SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${text.substring(0, remaining)}...[TRUNCATED]`);
@@ -90,7 +89,7 @@ export class RAGService {
     }
 
     // STRATEGIC FIX: Capture citations for Audit log
-    const citations = relevantResults.map(r => ({
+    const citations = relevantResults.slice(0, context.length).map(r => ({
       id: (r.metadata as any).docId,
       title: (r.metadata as any).title,
       sensitivity: (r.metadata as any).sensitivity
@@ -98,13 +97,12 @@ export class RAGService {
 
     // SECURITY: Handle empty context edge case before calling Gemini
     if (context.length === 0) {
-      // This shouldn't happen due to the check above, but as a safety net
       await this.auditService.log({
         userId,
         action: 'RAG_QUERY',
         query,
         granted: true,
-        reason: 'Context empty after filtering (edge case)'
+        reason: 'Context empty after filtering'
       });
 
       return {
@@ -125,6 +123,10 @@ export class RAGService {
 
     // --- INTEGRITY ENGINE: Post-Generation Verification ---
     const integrityResults = this.verifyIntegrity(text, context);
+    if (isTruncated) {
+       integrityResults.warning = "Context window limit reached. Some documents were partially omitted.";
+       integrityResults.isTruncated = true;
+    }
 
     // 6. Audit Logging (Improved with Integrity Metadata)
     await this.auditService.log({
@@ -137,7 +139,8 @@ export class RAGService {
         citations,
         usage: usageMetadata,
         sourceCount: relevantResults.length,
-        integrity: integrityResults
+        integrity: integrityResults,
+        isTruncated
       }
     });
 
@@ -145,7 +148,8 @@ export class RAGService {
       answer: text,
       sources: citations,
       usage: usageMetadata,
-      integrity: integrityResults
+      integrity: integrityResults,
+      isTruncated
     };
   }
 

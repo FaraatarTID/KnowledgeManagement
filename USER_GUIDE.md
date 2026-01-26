@@ -43,6 +43,16 @@
 
 ---
 
+## 🛡️ AI Trust & Verification
+
+AIKB isn't just "guessing". Every response follows a strict verification process:
+
+1.  **[CONFIDENCE]**: The AI tells you if it found enough information (High) or is missing details (Medium/Low).
+2.  **[QUOTE]**: For every major claim, the AI provides an **exact quote** from your documents.
+3.  **Cross-Verification**: Our system checks these quotes. If the AI hallucinates, it will be flagged for your review.
+
+---
+
 ## 📄 Adding Documents
 
 ### Step-by-Step

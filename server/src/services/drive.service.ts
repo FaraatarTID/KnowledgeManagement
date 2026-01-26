@@ -113,6 +113,15 @@ export class DriveService {
 
   async downloadFile(fileId: string): Promise<Buffer> {
     if (this.isMock || !this.drive) return Buffer.from('Mock binary content');
+    
+    // SECURITY: Memory Guard
+    // Check file size before downloading to prevent OOM (Max 100MB)
+    const MAX_SIZE = 100 * 1024 * 1024; 
+    const meta = await this.getFileMetadata(fileId);
+    if (meta?.size && parseInt(meta.size) > MAX_SIZE) {
+      throw new Error(`File too large for memory processing: ${Math.round(parseInt(meta.size) / 1024 / 1024)}MB. Limit: 100MB.`);
+    }
+
     try {
       const response = await this.drive.files.get({
         fileId: fileId,

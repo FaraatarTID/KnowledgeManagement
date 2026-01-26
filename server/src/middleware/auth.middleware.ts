@@ -14,28 +14,32 @@ export interface AuthRequest extends Request {
   file?: Express.Multer.File;
 }
 
+import { env } from '../config/env.js';
+
+let _authService: any = null;
+const getAuthService = async () => {
+  if (!_authService) {
+    const { authService } = await import('../container.js');
+    _authService = authService;
+  }
+  return _authService;
+};
+
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  // SECURITY: Only accept tokens from httpOnly cookies to prevent XSS token theft
-  // Removed Authorization header fallback to enforce browser security features
   const token = (req as any)?.cookies?.token;
 
   if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  // SECURITY: Fail fast if JWT_SECRET is not configured
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    console.error('FATAL: JWT_SECRET environment variable is not set');
-    return res.status(500).json({ error: 'Server configuration error' });
-  }
-
+  const secret = env.JWT_SECRET;
+  
   try {
     const decoded = jwt.verify(token, secret) as AuthUser;
     
     // SECURITY: Real-time User State Check
     // If Supabase is configured, verify the user still exists and is Active
-    const { authService } = await import('../container.js');
+    const authService = await getAuthService();
     const user = await authService.getUserById(decoded.id);
     
     if (!user) {
@@ -53,8 +57,6 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
     }
-    // SECURITY: Log invalid token attempts for security monitoring
-    console.warn(`Invalid token attempt from IP: ${req.ip}`);
     return res.status(401).json({ error: 'Invalid token' });
   }
 };

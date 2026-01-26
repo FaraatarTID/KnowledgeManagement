@@ -93,7 +93,11 @@ export class SyncService {
   }
 
   async indexFile(file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }, initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string }): Promise<string> {
-    // SECURITY: Transaction wrapper for atomic indexing
+    if (this.isSyncing) {
+       console.warn(`SyncService: Cannot index ${file.name} while a full sync is in progress.`);
+       throw new Error('System is currently performing a full synchronization. Please try again in a few minutes.');
+    }
+
     const transactionId = `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     console.log(`[Transaction ${transactionId}] Starting index for ${file.name}`);
     

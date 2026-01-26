@@ -76,11 +76,14 @@ Create a `.env` file in the `server` folder:
 
 ```ini
 NODE_ENV=production
-# CRITICAL: Must be a long, random string. App will fail without it.
-JWT_SECRET=production_secret_key_change_me_immediately_to_something_secure
+PORT=3001
+
+# CRITICAL: Must be at least 32 characters for production safety.
+JWT_SECRET=production_secret_key_change_me_immediately_to_something_secure_random_string
 
 # Google Cloud
-GCP_PROJECT_ID=...
+GOOGLE_CLOUD_PROJECT_ID=...
+GCP_REGION=us-central1
 GCP_KEY_FILE=gcp-key.json
 GOOGLE_DRIVE_FOLDER_ID=...
 
@@ -88,9 +91,37 @@ GOOGLE_DRIVE_FOLDER_ID=...
 SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
 
-# Model Selection: Gemini 2.5 Flash is recommended for the 100k context window
+# AI Config
 GEMINI_MODEL=gemini-2.5-flash-lite-001
+EMBEDDING_MODEL=text-embedding-004
+
+# Security
+ALLOWED_ORIGINS=https://your-app.com,https://admin-portal.com
 ```
+
+> [!TIP]
+> The server uses **Zod Validation**. If any of the above variables are missing or incorrectly formatted (e.g. invalid URL), the app will provide a detailed checklist of errors and refuse to start. This prevents "Ghost Failures".
+
+---
+
+## 🪵 Structured Logging
+
+In production (`NODE_ENV=production`), the system outputs **Structured JSON Logs**. This is designed for high-end observability tools like ELK, Datadog, or Grafana Loki.
+
+**Example Log Object:**
+
+```json
+{
+  "timestamp": "2026-01-26T12:00:00Z",
+  "level": "INFO",
+  "message": "SERVER ACTIVE ON PORT 3001",
+  "node_env": "production"
+}
+```
+
+This allows IT teams to set up precise alerts on `level: "ERROR"` without complex text parsing.
+
+---
 
 ### 2. Initialize Database (Supabase)
 
@@ -169,25 +200,25 @@ sudo docker-compose up -d --build
 
 ### Telemetry Events to Watch
 
-Monitor these log patterns for system health:
+Monitor these patterns for system health:
 
-```bash
-# Watch for query failures
-sudo docker logs -f aikb-server | grep "RAG_QUERY_FAILED"
+- **Errors**: `grep '"level":"ERROR"'`
+- **Security Alerts**: `grep '"action":"UNAUTHORIZED"'`
+- **Sync Alerts**: `grep 'SYNC_FAILED'`
 
-# Watch for sync failures
-sudo docker logs -f aikb-server | grep "SYNC_FAILED"
+### Key Metrics (Accessible via `/health`)
 
-# Watch for extraction failures
-sudo docker logs -f aikb-server | grep "EXTRACTION_FAILED"
-```
+The `/health` endpoint is **Deep**. It checks:
 
-### Key Metrics
+- **Disk Access**: Verifies the `data/` folder is writeable.
+- **Memory RSS**: Monitor this to detect leaks or heavy loads.
+- **Vector Count**: Tracks the size of your local knowledge base.
 
-- **Query Success Rate**: Should be > 95%
-- **Sync Success Rate**: Should be > 98%
-- **Memory Usage**: Should be stable (no continuous growth)
-- **Response Time**: Should be < 5 seconds per query
+### Scale Strategy
+
+The JSON Vector Store is designed for **Speed and Simplicity**. For extreme scale (>10,000 documents), we recommend moving the file storage to a high-speed SSD and monitoring the `resources.memory.heapUsed` metric in the health check.
+
+---
 
 ### Rollback Procedure
 

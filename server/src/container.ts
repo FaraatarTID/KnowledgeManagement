@@ -9,14 +9,13 @@ import { UserService } from './services/user.service.js';
 import { AuditService } from './services/access.service.js';
 import { RAGService } from './services/rag.service.js';
 import { ChatService } from './services/chat.service.js';
-import dotenv from 'dotenv';
-dotenv.config();
+import { env } from './config/env.js';
 
-const geminiService = new GeminiService(process.env.GOOGLE_CLOUD_PROJECT_ID || 'aikb-mock-project');
-const vectorService = new VectorService(process.env.GOOGLE_CLOUD_PROJECT_ID || 'aikb-mock-project', process.env.GCP_REGION || 'us-central1');
+const geminiService = new GeminiService(env.GOOGLE_CLOUD_PROJECT_ID);
+const vectorService = new VectorService(env.GOOGLE_CLOUD_PROJECT_ID, env.GCP_REGION);
 const auditService = new AuditService();
 const ragService = new RAGService(geminiService, vectorService);
-const driveService = new DriveService(process.env.GCP_KEY_FILE || 'key.json');
+const driveService = new DriveService(env.GCP_KEY_FILE);
 const syncService = new SyncService(driveService, vectorService, geminiService);
 const historyService = new HistoryService();
 const configService = new ConfigService();

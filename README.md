@@ -76,6 +76,20 @@ Wait for: `Ready in X seconds`
 
 ---
 
+## 💎 Trust & Reliability
+
+Unlike common AI apps, AIKB is built for **Enterprise Stability**:
+
+| Feature                 | Why It Matters                                         |
+| :---------------------- | :----------------------------------------------------- |
+| **🛡️ Atomic Storage**   | Your data is never corrupted, even during a crash.     |
+| **✅ Integrity Check**  | The AI must _prove_ every answer with direct quotes.   |
+| **🚦 Sync Locking**     | Prevents messy data when multiple admins sync at once. |
+| **📉 Scale Monitoring** | Built-in dashboards to track memory and data limits.   |
+| **🪵 JSON Logging**     | Professional logs ready for IT monitoring tools.       |
+
+---
+
 ## 🆘 Troubleshooting
 
 | Problem                   | Solution                                                           |
@@ -98,10 +112,11 @@ cd client && npm test   # Check the website (12 tests)
 
 ### Technology Stack
 
-- **AI Engine**: Google Gemini 2.5
+- **AI Engine**: Google Gemini 2.5 (1M Context)
 - **Frontend**: Next.js 15 + React 19
-- **Backend**: Node.js + Express
-- **Database**: Local JSON (Simple) or Supabase (Advanced)
+- **Backend**: Node.js + Express (Hardened)
+- **Security**: Argon2 + Zod Validation + Helmet
+- **Database**: Atomic JSON Storage or Supabase
 
 ---
 
