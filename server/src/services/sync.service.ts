@@ -5,6 +5,7 @@ import { ParsingService } from './parsing.service.js';
 import { HistoryService } from './history.service.js';
 import { LocalMetadataService } from './localMetadata.service.js';
 import { ExtractionService } from './extraction.service.js';
+import { JSONStore } from '../utils/jsonStore.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -13,17 +14,22 @@ export class SyncService {
   private historyService: HistoryService;
   private localMetadataService: LocalMetadataService;
   private extractionService: ExtractionService;
+  private statusStore: JSONStore<Record<string, any>>;
   private isSyncing = false;
 
   constructor(
     private driveService: DriveService,
     private vectorService: VectorService,
-    private geminiService: GeminiService
+    private geminiService: GeminiService,
+    statusStoragePath?: string
   ) {
     this.parsingService = new ParsingService();
     this.historyService = new HistoryService();
     this.localMetadataService = new LocalMetadataService();
     this.extractionService = new ExtractionService();
+    
+    const defaultPath = path.join(process.cwd(), 'data', 'sync_status.json');
+    this.statusStore = new JSONStore(statusStoragePath || defaultPath, {});
   }
 
   async syncAll(folderId: string) {
@@ -101,6 +107,10 @@ export class SyncService {
     const transactionId = `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     console.log(`[Transaction ${transactionId}] Starting index for ${file.name}`);
     
+    // SECURITY: Detect if this is an update or a new document
+    const allMeta = await this.vectorService.getAllMetadata();
+    const existed = !!allMeta[file.id];
+
     try {
       // Pre-transaction validation
       if (!file.id || !file.name) {
@@ -115,8 +125,13 @@ export class SyncService {
     } catch (e: any) {
       console.error(`[Transaction ${transactionId}] Failed:`, e.message);
       
-      // Rollback on failure
-      await this.rollbackIndexTransaction(file.id, transactionId);
+      // SECURITY: Safe rollback - only delete if the document was BRAND NEW
+      // and failed its first indexing. If it existed before, we preserve the old version.
+      if (!existed) {
+         await this.rollbackIndexTransaction(file.id, transactionId);
+      } else {
+         console.warn(`[Transaction ${transactionId}] Preserving old document version after update failure.`);
+      }
       
       await this.updateSyncStatus(file.id, {
         status: 'FAILED',
@@ -417,21 +432,12 @@ export class SyncService {
   }
 
   private async updateSyncStatus(docId: string, status: any) {
-    const STATUS_FILE = path.join(process.cwd(), 'data', 'sync_status.json');
     try {
-      const dataDir = path.dirname(STATUS_FILE);
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-      }
-      
-      let data: Record<string, any> = {};
-      if (fs.existsSync(STATUS_FILE)) {
-        data = JSON.parse(fs.readFileSync(STATUS_FILE, 'utf-8'));
-      }
-      
-      data[docId] = { ...status, updatedAt: new Date().toISOString() };
-      fs.writeFileSync(STATUS_FILE, JSON.stringify(data, null, 2));
-      
+      await this.statusStore.update(current => {
+         current[docId] = { ...status, updatedAt: new Date().toISOString() };
+         return current;
+      });
+
       // Log sync status for monitoring
       if (status.status === 'SUCCESS') {
         console.log('SYNC_SUCCESS', JSON.stringify({

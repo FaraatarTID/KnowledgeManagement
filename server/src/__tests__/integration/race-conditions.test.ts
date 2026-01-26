@@ -19,9 +19,9 @@ describe('VectorService Race Condition Tests', () => {
   beforeEach(() => {
     // Clean up test data
     if (fs.existsSync(testDataFile)) {
-      fs.unlinkSync(testDataFile);
+      try { fs.unlinkSync(testDataFile); } catch {}
     }
-    vectorService = new VectorService(testProjectId, 'us-central1');
+    vectorService = new VectorService(testProjectId, 'us-central1', testDataFile);
   });
 
   afterEach(() => {
@@ -68,7 +68,7 @@ describe('VectorService Race Condition Tests', () => {
     fs.writeFileSync(testDataFile, corruptedData);
 
     // Should not crash, should initialize empty
-    const newService = new VectorService(testProjectId, 'us-central1');
+    const newService = new VectorService(testProjectId, 'us-central1', testDataFile);
     
     // Should be able to use it
     await newService.upsertVectors([
