@@ -6,10 +6,10 @@ describe('Auth API', () => {
   it('should return 401 for login with invalid credentials', async () => {
     const res = await request(app)
       .post('/api/v1/auth/login')
-      .send({ email: 'wrong@example.com', password: 'wrong' });
+      .send({ email: 'wrong@aikb.com', password: 'wrongpassword' });
     
     expect(res.status).toBe(401);
-    expect(res.body.error).toBeDefined();
+    expect(res.body.message).toBeDefined();
   });
 
   it('should enforce rate limiting on login', async () => {

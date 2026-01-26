@@ -1,47 +1,29 @@
-import { Request, Response } from 'express';
-import { z } from 'zod';
+import type { Request, Response, RequestHandler } from 'express';
+// Removed inline z import
 import { authService } from '../container.js';
 import type { AuthRequest } from '../middleware/auth.middleware.js';
-
-const loginSchema = z.object({
-  email: z.string().email('Invalid email format'),
-  password: z.string().min(1, 'Password is required'),
-  type: z.enum(['admin', 'user']).optional()
-});
+import { Logger } from '../utils/logger.js';
+import { AppError } from '../middleware/error.middleware.js';
+import { catchAsync } from '../utils/catchAsync.js';
 
 export class AuthController {
-  static async login(req: Request, res: Response) {
-    try {
-      const parsed = loginSchema.safeParse(req.body);
-      
-      // Legacy demo mode support
-      if (req.body.type && !req.body.email) {
-        const demoEmail = req.body.type === 'admin' ? 'alice@aikb.com' : 'david@aikb.com';
-        const demoPassword = 'admin123';
-        
-        const user = await authService.validateCredentials(demoEmail, demoPassword);
-        if (!user) return res.status(401).json({ error: 'Demo credentials failed' });
-        
-        const token = authService.generateToken(user);
-        res.cookie('token', token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          maxAge: 24 * 60 * 60 * 1000
-        });
-        return res.json({ token, user });
+  
+  static login: RequestHandler = catchAsync(async (req: Request, res: Response) => {
+    // Validation handled by middleware logic, but we need to check the shapes
+    // Since we use a union-like refinement, types are optional in the inferred type
+    const { email, password, type } = req.body;
+    
+    // Legacy demo mode support
+    if (type && !email) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new AppError('Demo mode disabled in production', 403);
       }
+
+      const demoEmail = type === 'admin' ? 'alice@aikb.com' : 'david@aikb.com';
+      const demoPassword = 'admin123';
       
-      if (!parsed.success) {
-        return res.status(400).json({ 
-          error: 'Invalid credentials format',
-          details: parsed.error.issues.map(i => i.message)
-        });
-      }
-      
-      const { email, password } = parsed.data;
-      const user = await authService.validateCredentials(email, password);
-      if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+      const user = await authService.validateCredentials(demoEmail, demoPassword);
+      if (!user) throw new AppError('Demo credentials configuration error', 500);
       
       const token = authService.generateToken(user);
       res.cookie('token', token, {
@@ -50,25 +32,44 @@ export class AuthController {
         sameSite: 'lax',
         maxAge: 24 * 60 * 60 * 1000
       });
-      
-      res.json({ token, user });
-    } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ error: 'Login failed' });
+      Logger.info('Demo login successful', { user: user.email });
+      return res.json({ token, user });
     }
-  }
-
-  static async logout(req: Request, res: Response) {
-    res.clearCookie('token');
-    res.json({ success: true });
-  }
-
-  static async me(req: AuthRequest, res: Response) {
-    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
     
-    const user = await authService.getUserById(req.user?.id || '');
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    // Standard Login
+    if (!email || !password) {
+       // Should be caught by Zod, but double check for type safety
+       throw new AppError('Invalid credentials', 400);
+    }
+
+    const user = await authService.validateCredentials(email, password);
+    if (!user) throw new AppError('Invalid email or password', 401);
+    
+    const token = authService.generateToken(user);
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000
+    });
+    
+    Logger.info('User login successful', { user: user.email });
+    res.json({ token, user });
+  });
+
+  static logout: RequestHandler = catchAsync(async (req: Request, res: Response) => {
+    res.clearCookie('token');
+    Logger.info('User logout');
+    res.json({ success: true });
+  });
+
+  static me: RequestHandler = catchAsync(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    if (!authReq.user) throw new AppError('Not authenticated', 401);
+    
+    const user = await authService.getUserById(authReq.user.id);
+    if (!user) throw new AppError('User not found', 404);
     
     res.json(user);
-  }
+  });
 }

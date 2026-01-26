@@ -13,6 +13,8 @@ export class AppError extends Error {
   }
 }
 
+import { Logger } from '../utils/logger.js';
+
 export const errorHandler = (err: Error | AppError, req: Request, res: Response, next: NextFunction) => {
   let error = { ...err };
   error.message = err.message;
@@ -27,13 +29,12 @@ export const errorHandler = (err: Error | AppError, req: Request, res: Response,
   }
 
   // Log unknown errors with context
-  console.error('ERROR 💥', {
+  Logger.error('Unhandled Error 💥', {
     message: err.message,
     stack: err.stack,
     url: req.url,
     method: req.method,
-    ip: req.ip,
-    timestamp: new Date().toISOString()
+    ip: req.ip
   });
 
   // SECURITY: Don't leak stack traces in production

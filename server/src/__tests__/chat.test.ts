@@ -44,7 +44,7 @@ describe('Chat API (Core Loop)', () => {
         expect(typeof res.body.content).toBe('string');
     });
 
-    it('should handle empty documents gracefully', async () => {
+    it('should reject empty documents array', async () => {
         const res = await request(app)
             .post('/api/v1/chat')
             .set('Cookie', `token=${token}`)
@@ -53,8 +53,8 @@ describe('Chat API (Core Loop)', () => {
                 documents: []
             });
         
-        expect(res.status).toBe(200);
-        expect(res.body.content).toContain('اطلاعاتی برای پاسخ');
+        expect(res.status).toBe(400);
+        // expect(res.body.content).toContain('اطلاعاتی برای پاسخ'); // No longer returns content on 400
     });
 
     it('should reject invalid request body', async () => {

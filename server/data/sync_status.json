@@ -492,5 +492,69 @@
     "lastSync": "2026-01-26T12:56:47.860Z",
     "fileName": "test.pdf",
     "updatedAt": "2026-01-26T12:56:47.860Z"
+  },
+  "manual-1769432898766": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769432898766-l4hgm452k",
+    "lastSync": "2026-01-26T13:08:21.812Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-26T13:08:21.813Z"
+  },
+  "manual-1769433048688": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769433048689-jvgxh2wyf",
+    "lastSync": "2026-01-26T13:10:51.731Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-26T13:10:51.731Z"
+  },
+  "manual-1769433907398": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769433907399-nh9mgbykx",
+    "lastSync": "2026-01-26T13:25:10.444Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-26T13:25:10.444Z"
+  },
+  "manual-1769435444135": {
+    "status": "FAILED",
+    "message": "EBUSY: resource busy or locked, copyfile 'C:\\Faraatar-TID_Apps\\KnowledgeManagement\\server\\data\\vectors.json' -> 'C:\\Faraatar-TID_Apps\\KnowledgeManagement\\server\\data\\vectors.json.bak'",
+    "transactionId": "tx-1769435444135-uiwcw0uqu",
+    "lastSync": "2026-01-26T13:50:47.201Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-26T13:50:47.201Z"
+  },
+  "manual-1769435802479": {
+    "status": "FAILED",
+    "message": "EBUSY: resource busy or locked, copyfile 'C:\\Faraatar-TID_Apps\\KnowledgeManagement\\server\\data\\vectors.json' -> 'C:\\Faraatar-TID_Apps\\KnowledgeManagement\\server\\data\\vectors.json.bak'",
+    "transactionId": "tx-1769435802480-3kth9i7g8",
+    "lastSync": "2026-01-26T13:56:45.542Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-26T13:56:45.542Z"
+  },
+  "manual-1769435882575": {
+    "status": "FAILED",
+    "message": "ENOENT: no such file or directory, rename 'C:\\Faraatar-TID_Apps\\KnowledgeManagement\\server\\data\\vectors.json.tmp' -> 'C:\\Faraatar-TID_Apps\\KnowledgeManagement\\server\\data\\vectors.json'",
+    "transactionId": "tx-1769435882575-p2sl1ylr1",
+    "lastSync": "2026-01-26T13:58:05.759Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-26T13:58:05.759Z"
+  },
+  "manual-1769436109391": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769436109392-4ae6gvwfr",
+    "lastSync": "2026-01-26T14:01:52.456Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-26T14:01:52.456Z"
+  },
+  "manual-1769436137589": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769436137589-mlz3u3jk7",
+    "lastSync": "2026-01-26T14:02:20.634Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-26T14:02:20.634Z"
   }
 }

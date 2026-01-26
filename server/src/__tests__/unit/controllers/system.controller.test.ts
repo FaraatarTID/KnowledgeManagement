@@ -23,10 +23,12 @@ describe('SystemController', () => {
     let mockResponse: any;
     let jsonMock: any;
     let statusMock: any;
+    let nextMock: any;
 
     beforeEach(() => {
         jsonMock = vi.fn();
         statusMock = vi.fn().mockReturnValue({ json: jsonMock });
+        nextMock = vi.fn();
 
         mockRequest = {};
         mockResponse = {
@@ -40,9 +42,9 @@ describe('SystemController', () => {
         it('should display health of services', async () => {
             vi.mocked(geminiService.checkHealth).mockResolvedValue({ status: 'OK' });
             vi.mocked(driveService.checkHealth).mockResolvedValue({ status: 'OK' });
-            vi.mocked(vectorService.getVectorCount).mockReturnValue(10);
+            vi.mocked(vectorService.getVectorCount).mockResolvedValue(10);
 
-            await SystemController.health(mockRequest, mockResponse);
+            await SystemController.health(mockRequest, mockResponse, nextMock);
 
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
                 status: 'online',
@@ -65,7 +67,7 @@ describe('SystemController', () => {
             vi.mocked(userService.checkHealth).mockResolvedValue({ status: 'OK' });
             vi.mocked(auditService.getResolutionStats).mockResolvedValue({ percentage: '95%' });
 
-            await SystemController.stats(mockRequest, mockResponse);
+            await SystemController.stats(mockRequest, mockResponse, nextMock);
 
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
                 totalDocuments: 3,
@@ -86,7 +88,7 @@ describe('SystemController', () => {
             vi.mocked(userService.checkHealth).mockResolvedValue({ status: 'OK' });
             vi.mocked(auditService.getResolutionStats).mockResolvedValue({ percentage: '0%' });
 
-            await SystemController.stats(mockRequest, mockResponse);
+            await SystemController.stats(mockRequest, mockResponse, nextMock);
 
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
                 systemHealth: 'Critical'

@@ -29,10 +29,12 @@ describe('DocumentController', () => {
     let mockResponse: any;
     let jsonMock: any;
     let statusMock: any;
+    let nextMock: any;
 
     beforeEach(() => {
         jsonMock = vi.fn();
         statusMock = vi.fn().mockReturnValue({ json: jsonMock });
+        nextMock = vi.fn();
 
         mockRequest = {};
         mockResponse = {
@@ -44,9 +46,9 @@ describe('DocumentController', () => {
     });
 
     describe('upload', () => {
-        it('should return 400 if no file', async () => {
-            await DocumentController.upload(mockRequest, mockResponse);
-            expect(statusMock).toHaveBeenCalledWith(400);
+        it('should return 400 for upload if no file via next', async () => {
+            await DocumentController.upload(mockRequest, mockResponse, nextMock);
+            expect(nextMock).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
         });
 
         it('should process upload sequence', async () => {
@@ -55,7 +57,7 @@ describe('DocumentController', () => {
             
             vi.mocked(driveService.uploadFile).mockResolvedValue('file-id-1');
 
-            await DocumentController.upload(mockRequest, mockResponse);
+            await DocumentController.upload(mockRequest, mockResponse, nextMock);
 
             expect(driveService.uploadFile).toHaveBeenCalled();
             expect(vectorService.updateDocumentMetadata).toHaveBeenCalledWith('file-id-1', expect.anything());
@@ -80,7 +82,7 @@ describe('DocumentController', () => {
                  '2': { department: 'IT' }
              });
 
-             await DocumentController.list(mockRequest, mockResponse);
+             await DocumentController.list(mockRequest, mockResponse, nextMock);
              
              expect(jsonMock).toHaveBeenCalled();
              const result = jsonMock.mock.calls[0][0];
@@ -92,7 +94,7 @@ describe('DocumentController', () => {
     describe('delete', () => {
         it('should delete document', async () => {
             mockRequest.params = { id: '123' };
-            await DocumentController.delete(mockRequest, mockResponse);
+            await DocumentController.delete(mockRequest, mockResponse, nextMock);
             expect(vectorService.deleteDocument).toHaveBeenCalledWith('123');
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));
         });
@@ -110,7 +112,7 @@ describe('DocumentController', () => {
             });
             vi.mocked(driveService.renameFile).mockResolvedValue(true);
             
-            await DocumentController.update(mockRequest, mockResponse);
+            await DocumentController.update(mockRequest, mockResponse, nextMock);
             
             expect(vectorService.updateDocumentMetadata).toHaveBeenCalled();
             expect(driveService.renameFile).toHaveBeenCalledWith('1', 'New Title');
@@ -128,9 +130,9 @@ describe('DocumentController', () => {
                 '1': { owner: 'alice@aikb.com', category: 'IT' }
             });
             
-            await DocumentController.update(mockRequest, mockResponse);
+            await DocumentController.update(mockRequest, mockResponse, nextMock);
             
-            expect(statusMock).toHaveBeenCalledWith(403);
+            expect(nextMock).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
             expect(vectorService.updateDocumentMetadata).not.toHaveBeenCalled();
         });
 
@@ -145,7 +147,7 @@ describe('DocumentController', () => {
             });
             vi.mocked(driveService.renameFile).mockResolvedValue(true);
             
-            await DocumentController.update(mockRequest, mockResponse);
+            await DocumentController.update(mockRequest, mockResponse, nextMock);
             
             expect(vectorService.updateDocumentMetadata).toHaveBeenCalled();
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));

@@ -19,12 +19,14 @@ describe('AuthController', () => {
     let statusMock: any;
     let cookieMock: any;
     let clearCookieMock: any;
+    let nextMock: any;
 
     beforeEach(() => {
         jsonMock = vi.fn();
         statusMock = vi.fn().mockReturnValue({ json: jsonMock });
         cookieMock = vi.fn();
         clearCookieMock = vi.fn();
+        nextMock = vi.fn();
 
         mockRequest = {};
         mockResponse = {
@@ -38,24 +40,22 @@ describe('AuthController', () => {
     });
 
     describe('login', () => {
-        it('should return 400 for invalid input format', async () => {
+        it('should trigger next with 400 for invalid input format', async () => {
              mockRequest.body = { email: 'not-an-email' }; // Missing password
              
-             await AuthController.login(mockRequest as Request, mockResponse as Response);
+             await AuthController.login(mockRequest as Request, mockResponse as Response, nextMock);
              
-             expect(statusMock).toHaveBeenCalledWith(400);
-             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ error: 'Invalid credentials format' }));
+             expect(nextMock).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
         });
 
-        it('should return 401 for invalid credentials', async () => {
+        it('should trigger next with 401 for invalid credentials', async () => {
             mockRequest.body = { email: 'test@example.com', password: 'wrong' };
             vi.mocked(authService.validateCredentials).mockResolvedValue(null);
 
-            await AuthController.login(mockRequest as Request, mockResponse as Response);
+            await AuthController.login(mockRequest as Request, mockResponse as Response, nextMock);
 
             expect(authService.validateCredentials).toHaveBeenCalledWith('test@example.com', 'wrong');
-            expect(statusMock).toHaveBeenCalledWith(401);
-            expect(jsonMock).toHaveBeenCalledWith({ error: 'Invalid email or password' });
+            expect(nextMock).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
         });
 
         it('should successfully login and set cookie', async () => {
@@ -65,7 +65,7 @@ describe('AuthController', () => {
             vi.mocked(authService.validateCredentials).mockResolvedValue(mockUser);
             vi.mocked(authService.generateToken).mockReturnValue('fake-token');
 
-            await AuthController.login(mockRequest as Request, mockResponse as Response);
+            await AuthController.login(mockRequest as Request, mockResponse as Response, nextMock);
 
             expect(statusMock).not.toHaveBeenCalledWith(400);
             expect(statusMock).not.toHaveBeenCalledWith(401);
@@ -80,7 +80,7 @@ describe('AuthController', () => {
             vi.mocked(authService.validateCredentials).mockResolvedValue(mockUser);
             vi.mocked(authService.generateToken).mockReturnValue('demo-token');
 
-            await AuthController.login(mockRequest as Request, mockResponse as Response);
+            await AuthController.login(mockRequest as Request, mockResponse as Response, nextMock);
 
             expect(authService.validateCredentials).toHaveBeenCalledWith('alice@aikb.com', 'admin123');
             expect(cookieMock).toHaveBeenCalledWith('token', 'demo-token', expect.any(Object));
@@ -89,23 +89,23 @@ describe('AuthController', () => {
 
     describe('logout', () => {
         it('should clear token cookie', async () => {
-            await AuthController.logout(mockRequest as Request, mockResponse as Response);
+            await AuthController.logout(mockRequest as Request, mockResponse as Response, nextMock);
             expect(clearCookieMock).toHaveBeenCalledWith('token');
             expect(jsonMock).toHaveBeenCalledWith({ success: true });
         });
     });
 
     describe('me', () => {
-        it('should return 401 if request has no user', async () => {
-            await AuthController.me(mockRequest as Request, mockResponse as Response);
-            expect(statusMock).toHaveBeenCalledWith(401);
+        it('should return 401 via next if request has no user', async () => {
+            await AuthController.me(mockRequest as Request, mockResponse as Response, nextMock);
+            expect(nextMock).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
         });
 
         it('should return user info if authenticated', async () => {
             const reqWithUser = { ...mockRequest, user: { id: '123' } } as any;
             vi.mocked(authService.getUserById).mockResolvedValue({ id: '123', name: 'Test' } as any);
 
-            await AuthController.me(reqWithUser, mockResponse as Response);
+            await AuthController.me(reqWithUser, mockResponse as Response, nextMock);
 
             expect(authService.getUserById).toHaveBeenCalledWith('123');
             expect(jsonMock).toHaveBeenCalledWith({ id: '123', name: 'Test' });

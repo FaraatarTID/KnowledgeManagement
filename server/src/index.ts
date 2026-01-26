@@ -8,17 +8,20 @@ import path from "path";
 import { env } from "./config/env.js";
 
 import { globalLimiter } from "./middleware/rateLimit.middleware.js";
-import morgan from 'morgan';
+import { contextMiddleware } from "./middleware/context.middleware.js";
+import { Logger } from "./utils/logger.js";
 
-console.log('--- BACKEND STARTUP SEQUENCE ---');
-console.log('Time:', new Date().toISOString());
-console.log('CWD:', process.cwd());
+Logger.info('--- BACKEND STARTUP SEQUENCE ---', {
+  time: new Date().toISOString(),
+  cwd: process.cwd(),
+  node_env: env.NODE_ENV
+});
 
 const app = express();
 const port = env.PORT || 3001;
 
-// Global Traffic Logger (replaced by Morgan)
-app.use(morgan('combined'));
+// Observability: Trace Context (Must be first)
+app.use(contextMiddleware);
 
 app.use(helmet());
 app.use(cookieParser());
@@ -32,17 +35,10 @@ app.use(express.json());
 import { errorHandler } from "./middleware/error.middleware.js";
 import { sanitizationMiddleware } from "./middleware/sanitization.middleware.js";
 import { vectorService } from "./container.js";
-import { Logger } from "./services/logger.service.js";
 
 app.use(sanitizationMiddleware);
 
-Logger.info('--- BACKEND STARTUP SEQUENCE ---', { 
-  time: new Date().toISOString(),
-  cwd: process.cwd(),
-  node_env: env.NODE_ENV
-});
-
-// ...
+Logger.info('Middleware Stack Initialized');
 
 // Main API Mount
 app.use("/api/v1", apiRoutes);
@@ -58,7 +54,7 @@ app.get("/", (req, res) => {
 
 app.get("/health", async (req, res) => {
   const mem = process.memoryUsage();
-  const health = {
+  const health: any = {
     status: "ok",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),

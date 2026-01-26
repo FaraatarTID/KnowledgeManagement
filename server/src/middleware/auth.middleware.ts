@@ -11,7 +11,7 @@ export interface AuthUser {
 
 export interface AuthRequest extends Request {
   user?: AuthUser;
-  file?: Express.Multer.File;
+  file?: Express.Multer.File | undefined;
 }
 
 import { env } from '../config/env.js';

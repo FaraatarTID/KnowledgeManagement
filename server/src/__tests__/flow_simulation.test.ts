@@ -51,7 +51,7 @@ describe('End-to-End Chat Flow Simulation', () => {
         expect(typeof res.body.content).toBe('string');
     });
 
-    it('Scenario 2: Empty Documents Handling', async () => {
+    it('Scenario 2: Reject Empty Documents', async () => {
         const res = await request(app)
             .post('/api/v1/chat')
             .set('Cookie', `token=${employeeToken}`)
@@ -60,8 +60,8 @@ describe('End-to-End Chat Flow Simulation', () => {
                 documents: []
             });
         
-        expect(res.status).toBe(200);
-        expect(res.body.content).toContain('اطلاعاتی برای پاسخ');
+        expect(res.status).toBe(400);
+        // expect(res.body.content).toContain('اطلاعاتی برای پاسخ'); // No content on 400
     });
 
     it('Scenario 3: Invalid Request Body', async () => {

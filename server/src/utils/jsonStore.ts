@@ -5,21 +5,36 @@ import { Mutex } from './mutex.js';
 /**
  * Universal Atomic JSON Storage Utility.
  * Provides thread-safe, crash-resistant persistence using the write-then-rename pattern.
+ * SHARED LOCKING: Uses a static registry to ensure all instances for the same file share a lock.
  */
 export class JSONStore<T> {
+  // Path-based Lock Registry to prevent cross-instance collisions
+  private static readonly locks = new Map<string, Mutex>();
+
   private memoryState: T;
-  private readonly mutex = new Mutex();
   private readonly backupPath: string;
   private readonly tempPath: string;
+  private readonly normalizedPath: string;
 
   constructor(
     private readonly storagePath: string,
     private readonly defaultState: T
   ) {
     this.memoryState = defaultState;
+    this.normalizedPath = path.resolve(storagePath);
     this.backupPath = `${storagePath}.bak`;
     this.tempPath = `${storagePath}.tmp`;
+    
+    // Ensure lock exists for this path
+    if (!JSONStore.locks.has(this.normalizedPath)) {
+      JSONStore.locks.set(this.normalizedPath, new Mutex());
+    }
+    
     this.init();
+  }
+
+  private get mutex(): Mutex {
+    return JSONStore.locks.get(this.normalizedPath)!;
   }
 
   private init() {
@@ -67,13 +82,13 @@ export class JSONStore<T> {
       // 2. Persist to temp file
       await fs.promises.writeFile(this.tempPath, JSON.stringify(newState, null, 2), { flag: 'w' });
 
-      // 3. Create backup of current
+      // 3. Create backup of current (Optional but safer)
       if (fs.existsSync(this.storagePath)) {
         await fs.promises.copyFile(this.storagePath, this.backupPath);
       }
 
       // 4. Atomic swap with retry
-      let retries = 3;
+      let retries = 5;
       while (retries > 0) {
         try {
           await fs.promises.rename(this.tempPath, this.storagePath);
@@ -81,7 +96,8 @@ export class JSONStore<T> {
         } catch (err: any) {
           if (retries === 1 || (err.code !== 'EPERM' && err.code !== 'EBUSY')) throw err;
           retries--;
-          await new Promise(r => setTimeout(r, 50 * (4 - retries)));
+          // Jittered backoff to avoid synchronized retries
+          await new Promise(r => setTimeout(r, 100 * (6 - retries) + Math.random() * 50));
         }
       }
 

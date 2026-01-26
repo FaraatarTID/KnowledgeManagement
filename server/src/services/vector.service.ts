@@ -117,11 +117,22 @@ export class VectorService {
     const filteredVectors = vectors.filter(vec => {
       const docSensitivity = (vec.metadata.sensitivity || 'INTERNAL').toUpperCase();
       const docRequiredLevel = sensitivityMap[docSensitivity] ?? 1;
+      
+      // 1. Sensitivity Clearance Check
       if (userClearance < docRequiredLevel) return false;
 
+      // 2. Department Isolation (Strict Deny)
       if (userRole !== 'ADMIN') {
          const vecDept = (vec.metadata.department || '').toLowerCase();
-         if (vecDept && vecDept !== userDept) return false;
+         const userDeptNormal = userDept.toLowerCase();
+
+         // Only allow if:
+         // - Department matches exactly
+         // - OR document is explicitly 'public' or 'general' (if intended)
+         // FOR NOW: Strict match for production isolation.
+         if (vecDept !== userDeptNormal && vecDept !== 'general' && vecDept !== 'public') {
+             return false;
+         }
       }
       return true;
     });
@@ -166,11 +177,18 @@ export class VectorService {
     const filteredVectors = vectors.filter(vec => {
       const docSensitivity = (vec.metadata.sensitivity || 'INTERNAL').toUpperCase();
       const docRequiredLevel = sensitivityMap[docSensitivity] ?? 1;
+      
+      // 1. Sensitivity Clearance Check
       if (userClearance < docRequiredLevel) return false;
 
+      // 2. Department Isolation (Strict Deny)
       if (userRole !== 'ADMIN') {
          const vecDept = (vec.metadata.department || '').toLowerCase();
-         if (vecDept && vecDept !== userDept) return false;
+         const userDeptNormal = userDept.toLowerCase();
+
+         if (vecDept !== userDeptNormal && vecDept !== 'general' && vecDept !== 'public') {
+             return false;
+         }
       }
       return true;
     });

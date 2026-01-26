@@ -69,10 +69,10 @@ Wait for: `Ready in X seconds`
 
 ## 🔐 Security Highlights
 
-- ✅ **Military-grade Encryption**: Passwords are scrambled and safe.
-- ✅ **Need-to-Know Access**: Users only see documents for their department.
+- ✅ **Industrial-grade Encryption**: Scrambled using **Argon2id** (OWASP recommended) for high-end protection.
+- ✅ **Strict Department Isolation**: "Strict Deny" model ensures users only see data specifically belonging to their unit.
+- ✅ **Schema Guardrails**: Every single API request is validated by **Zod** before hitting the brain.
 - ✅ **Private by Design**: Your API keys and data stay on your secure server.
-- ✅ **Safety Controls**: Only document owners can modify their files.
 
 ---
 
@@ -80,13 +80,13 @@ Wait for: `Ready in X seconds`
 
 Unlike common AI apps, AIKB is built for **Enterprise Stability**:
 
-| Feature                 | Why It Matters                                         |
-| :---------------------- | :----------------------------------------------------- |
-| **🛡️ Atomic Storage**   | Your data is never corrupted, even during a crash.     |
-| **✅ Integrity Check**  | The AI must _prove_ every answer with direct quotes.   |
-| **🚦 Sync Locking**     | Prevents messy data when multiple admins sync at once. |
-| **📉 Scale Monitoring** | Built-in dashboards to track memory and data limits.   |
-| **🪵 JSON Logging**     | Professional logs ready for IT monitoring tools.       |
+| Feature                    | Why It Matters                                          |
+| :------------------------- | :------------------------------------------------------ |
+| **🛡️ Global Shared Locks** | Prevents data corruption even across multiple services. |
+| **✅ Integrity Check**     | The AI must _prove_ every answer with direct quotes.    |
+| **🚦 Async Resilience**    | Advanced error handling ensures the brain stays active. |
+| **📉 Scale Monitoring**    | Built-in dashboards to track memory and data limits.    |
+| **🪵 Structured Logs**     | Professional JSON logs ready for cloud monitoring.      |
 
 ---
 
@@ -114,9 +114,11 @@ cd client && npm test   # Check the website (12 tests)
 
 - **AI Engine**: Google Gemini 2.5 (1M Context)
 - **Frontend**: Next.js 15 + React 19
-- **Backend**: Node.js + Express (Hardened)
-- **Security**: Argon2 + Zod Validation + Helmet
-- **Database**: Atomic JSON Storage or Supabase
+- **Backend**: Node.js + Express (Industrial Hardened)
+- **Validation**: Zod (System-wide schemas)
+- **Security**: Argon2id + Helmet + CSRF Protection
+- **Database**: Atomic JSON Storage (Shared Locking) or Supabase
+- **Observability**: AsyncContext + Structured JSON Logging
 
 ---
 

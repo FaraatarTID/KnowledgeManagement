@@ -104,49 +104,35 @@ ALLOWED_ORIGINS=https://your-app.com,https://admin-portal.com
 
 ---
 
-## 🪵 Structured Logging
+## 🪵 Industrial Monitoring
 
-In production (`NODE_ENV=production`), the system outputs **Structured JSON Logs**. This is designed for high-end observability tools like ELK, Datadog, or Grafana Loki.
+In production (`NODE_ENV=production`), the system outputs **Structured JSON Logs**. These are designed for high-end observability tools like Datadog, Grafana Loki, or Splunk.
 
-**Example Log Object:**
+### Key Telemetry to Watch:
 
-```json
-{
-  "timestamp": "2026-01-26T12:00:00Z",
-  "level": "INFO",
-  "message": "SERVER ACTIVE ON PORT 3001",
-  "node_env": "production"
-}
-```
+- **System Hardening Errors**: `grep '"level":"ERROR"'`
+- **Unauthorized Access**: `grep '"granted":false'`
+- **Transaction Failures**: `grep 'SYNC_FAILED'`
 
-This allows IT teams to set up precise alerts on `level: "ERROR"` without complex text parsing.
+### Zod Runtime Verification:
+
+The server validates its entire `.env` environment at startup using **Zod**. If a critical secret like `JWT_SECRET` is too short or `SUPABASE_URL` is malformed, the app will **fail fast** with a detailed error report, preventing insecure state.
 
 ---
 
 ### 2. Initialize Database (Supabase)
 
-Run this SQL in your Supabase Dashboard to create the necessary tables:
+Run this SQL to establish the hardened schema:
 
 ```sql
--- 1. History Log
-create table document_history (
-  id uuid default gen_random_uuid() primary key,
-  created_at timestamp with time zone default now(),
-  event_type text not null,
-  doc_id text not null,
-  doc_name text not null,
-  details text,
-  user_id text
-);
-
--- 2. Users (Role-Based Access)
+-- 1. Users (Hardened Isolation)
 create table users (
   id uuid default gen_random_uuid() primary key,
   email varchar(255) unique not null,
   password_hash varchar(255) not null,
   name varchar(255) not null,
   role varchar(50) default 'VIEWER',
-  department varchar(100) default 'General',
+  department varchar(100) default 'General', -- Critical for isolation
   status varchar(50) default 'Active',
   created_at timestamp default now(),
   updated_at timestamp default now()
@@ -198,21 +184,13 @@ sudo docker-compose up -d --build
 
 ## 📊 Production Monitoring
 
-### Telemetry Events to Watch
-
-Monitor these patterns for system health:
-
-- **Errors**: `grep '"level":"ERROR"'`
-- **Security Alerts**: `grep '"action":"UNAUTHORIZED"'`
-- **Sync Alerts**: `grep 'SYNC_FAILED'`
-
 ### Key Metrics (Accessible via `/health`)
 
-The `/health` endpoint is **Deep**. It checks:
+The `/health` endpoint is **Deep**. It monitors:
 
-- **Disk Access**: Verifies the `data/` folder is writeable.
-- **Memory RSS**: Monitor this to detect leaks or heavy loads.
-- **Vector Count**: Tracks the size of your local knowledge base.
+- **Persistence Visibility**: Verifies write access to the shared lock registry.
+- **Memory RSS**: Tracks usage to prevent OOM during massive indexing.
+- **Vector Count**: Real-time status of the local semantic index.
 
 ### Scale Strategy
 
