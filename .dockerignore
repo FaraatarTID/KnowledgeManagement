@@ -1,0 +1,26 @@
+# General
+.git
+.gitignore
+.env
+.env.*
+! .env.example
+npm-debug.log
+.DS_Store
+
+# Node
+node_modules
+dist
+coverage
+
+# Next.js
+.next/*
+!.next/package.json
+!.next/next.config.js
+# !.next/static <--- Handled separately in advanced builds, but usually good to ignore base
+out
+build
+
+# Project Specific
+data/*
+!data/.keep
+c:\Faraatar-TID_Apps\KnowledgeManagement\data\uploads

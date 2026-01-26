@@ -1,0 +1,114 @@
+# 📘 User Guide
+
+> **A complete guide to using the AI Knowledge Base. Written for beginners.**
+
+---
+
+## 🎯 What Can You Do?
+
+| Feature           | What It Does                                   |
+| ----------------- | ---------------------------------------------- |
+| **Ask Questions** | Type a question, get an AI answer with sources |
+| **Add Documents** | Upload files so the AI can learn from them     |
+| **Search**        | Find documents by title or content             |
+| **Manage Users**  | (Admin only) Add and remove team members       |
+
+---
+
+## 🔑 Logging In
+
+### Demo Accounts
+
+| User      | Email          | Password | What They Can Do          |
+| --------- | -------------- | -------- | ------------------------- |
+| **Admin** | alice@aikb.com | admin123 | Everything                |
+| **User**  | david@aikb.com | admin123 | View & ask questions only |
+
+### How to Login
+
+1. Go to http://localhost:3000
+2. Enter email and password
+3. Click "ورود" (Login)
+
+---
+
+## 💬 Asking Questions
+
+### How It Works
+
+1. Type your question in the chat box at the bottom
+2. Click "ارسال" (Send) or press Enter
+3. Wait 2-5 seconds for the AI to respond
+4. Read the answer with source documents
+
+---
+
+## 📄 Adding Documents
+
+### Step-by-Step
+
+1. Click "افزودن سند" (Add Document)
+2. Fill in the form:
+   - **عنوان سند** (Title): Name your document
+   - **دسته‌بندی** (Category): e.g., "HR", "IT"
+   - **محتوا** (Content): Paste the text
+3. Click "ذخیره سند" (Save Document)
+
+---
+
+## 🔍 Searching Documents
+
+1. Click the "اسناد" (Documents) tab
+2. Type in the search box
+3. Results appear instantly
+
+---
+
+## 👥 User Roles
+
+| Role       | View Docs        | Ask AI | Add Docs | Manage Users |
+| ---------- | ---------------- | ------ | -------- | ------------ |
+| **Viewer** | ✅ Own dept only | ✅     | ❌       | ❌           |
+| **Editor** | ✅ Own dept only | ✅     | ✅       | ❌           |
+| **Admin**  | ✅ Everything    | ✅     | ✅       | ✅           |
+
+---
+
+## 🔐 Security Features
+
+1. **Encrypted Passwords** - Safe from theft
+2. **Secure Cookies** - Protected from hackers
+3. **Role-Based Access** - See only what's allowed
+4. **Owner Validation** - Only you edit your docs
+
+---
+
+## 🌐 Persian/Farsi Guide
+
+| English      | Persian    | Pronunciation   |
+| ------------ | ---------- | --------------- |
+| Login        | ورود       | Vorud           |
+| Add Document | افزودن سند | Afzudan-e Sanad |
+| Save         | ذخیره      | Zakhire         |
+| Send         | ارسال      | Ersal           |
+| Documents    | اسناد      | Asnad           |
+| Search       | جستجو      | Jostoju         |
+
+---
+
+## 🆘 Troubleshooting
+
+- **Login fails?** Check spelling of `alice@aikb.com` and password `admin123`.
+- **AI returns mock responses?** This is "Demo Mode". Needs IT setup for real AI.
+- **Page won't load?** Make sure both server and client terminals are running.
+
+---
+
+## 📅 System Info
+
+- **Admin Setup**: Check [Deployment Guide](DEPLOYMENT.md) for first-time use.
+- **Google Drive**: Handled via company [Service Account](DEPLOYMENT.md).
+
+---
+
+**Developed by Antigravity AI**

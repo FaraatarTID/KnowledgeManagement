@@ -71,12 +71,19 @@ export class GeminiService {
       ? `\n\nConversation History:\n${history.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n')}`
       : '';
 
-    // SECURITY: Sanitize context to prevent "Golden Ticket" prompt injection
-    // We escape XML-like tags that could break out of the <context_data> block
-    const sanitizedContext = context.map(c => 
-      c.replace(/<\/context_data>/gi, '<\\/context_data>')
-       .replace(/<\/([^>]+)>/g, '<\\/$1>')
-    );
+    // SECURITY: Comprehensive sanitization to prevent prompt injection attacks
+    // 1. Replace angle brackets with safe unicode alternatives
+    // 2. Neutralize instruction-like patterns at line starts
+    // 3. Limit individual chunk size to prevent token exhaustion
+    const sanitizedContext = context.map(c => {
+      let s = c;
+      // Replace angle brackets with safe unicode alternatives
+      s = s.replace(/</g, '〈').replace(/>/g, '〉');
+      // Neutralize common injection patterns at line starts
+      s = s.replace(/^(ignore|forget|disregard|override|system:|assistant:|user:)/gim, '[$1]');
+      // Limit per-chunk size to prevent token exhaustion
+      return s.substring(0, 5000);
+    });
 
     const prompt = `You are a knowledgeable AI assistant helping employees find information in the company knowledge base.
 

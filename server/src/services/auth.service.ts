@@ -62,8 +62,12 @@ export class AuthService {
       this.supabase = createClient(url, key);
       console.log('AuthService: Supabase client initialized.');
     } else {
-      console.warn('AuthService: Supabase not configured. Running in DEMO MODE with pre-seeded users.');
-      console.warn('AuthService: Demo credentials - Email: alice@aikb.com or david@aikb.com, Password: admin123');
+      // SECURITY: Fail-closed in production
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('FATAL: Supabase credentials required in production. Demo mode is disabled.');
+      }
+      console.warn('AuthService: Supabase not configured. Running in DEMO MODE.');
+      console.warn('AuthService: Demo mode is for DEVELOPMENT ONLY.');
       this.isDemoMode = true;
     }
   }

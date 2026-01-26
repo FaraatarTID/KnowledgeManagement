@@ -5,20 +5,45 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
+    container_name: aikb-server
+    image: aikb-server:latest
     ports:
       - "3001:3001"
     env_file:
       - ./server/.env
+    # Persist data (uploads, vector store if local)
+    volumes:
+      - ./data/server:/home/node/app/data
     restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   client:
     build:
       context: ./client
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
+        # Pass NEXT_PUBLIC_API_URL during build or runtime
+        # For standalone mode, build args bake it in, but runtime env vars need handling in next.config or a wrapper.
+        # Here we assume client side calls browser URL, or internal server-side calls via service name if implemented.
+        # But usually client-side JS needs public URL.
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+    container_name: aikb-client
+    image: aikb-client:latest
     ports:
       - "3000:3000"
+    environment:
+      # Pass runtime vars if Next.js properly supports them in standalone (requires 'publicRuntimeConfig' or similar)
+      # or just rely on baked in build args.
+      - PORT=3000
     depends_on:
-      - server
+      server:
+        condition: service_healthy
     restart: always
+
+# Define networks if needed, default bridge is usually fine for simple stack.
+# Services can reach each other by service name "server" / "client".

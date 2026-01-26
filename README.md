@@ -1,152 +1,108 @@
-# 🚀 Quick Guide
+# 🧠 AI Knowledge Base (AIKB)
 
-**Welcome! This is a smart assistant that reads your documents and answers questions.**
+> **Your company's intelligent assistant that reads documents and answers questions.**
 
-## 🎯 What You Need to Know
-
-### For  Beginners
-1. **Read:** `GUIDE_FOR_BEGINNERS.md` (Everything explained simply)
-2. **Try:** `QUICK_START.md` (5-minute setup)
-3. **Use:** `USER_MANUAL.md` (How to use all features)
-
-### For Users
-- **Just want to use it?** → Read `USER_MANUAL.md`
-- **Want to understand how it works?** → Read `GUIDE_FOR_BEGINNERS.md`
-
-### For Admins
-- **Setting up for your team?** → Read `DEPLOYMENT_GUIDE.md`
-- **Need a checklist?** → Read `DEPLOYMENT_CHECKLIST.md`
+AIKB is a **smart search engine** for your company documents. Instead of searching through hundreds of files manually, you just **ask a question** and the AI finds the answer.
 
 ---
 
-# AI-Native Knowledge Base (AIKB) 🧠
+## 🎬 How It Works
 
-**Welcome to AIKB!**
-
-This is an intelligent "Brain" for your company. It connects to your **Google Drive**, reads your documents, and lets you ask questions about them using state-of-the-art AI. It's designed to be secure, private, and easy to run.
-
----
-
-## 🚀 What's New? (The "Dummies" Guide)
-
-We've made major upgrades to make this system **secure, scalable, and production-ready**. Here's what changed:
-
-### 1. **Frontend + Backend Architecture** 🏗️
-*   **Before**: The app ran entirely in your browser, which was insecure and limited.
-*   **Now**: We have a separate **Backend Server** (Node.js) that handles all the heavy lifting. This keeps your API keys safe and allows for powerful features.
-
-### 2. **Smart AI (RAG - Retrieval Augmented Generation)** 🧠
-*   **Before**: The AI read *every single document* for *every single question*. This was slow and expensive.
-*   **Now**: The AI uses a "Smart Search" to find only the **3 most relevant documents** before answering. This saves time and money.
-
-### 3. **Security Fixes** 🛡️
-*   **API Keys**: Your AI API keys are now hidden safely on the server. No one can steal them from the browser.
-*   **Unique IDs**: We now use proper UUIDs instead of timestamps, preventing data collisions.
-
-### 4. **Performance Boost** ⚡
-*   **Search**: Typing in the search box is now instant, even with thousands of documents.
+| 🧩 Part            | 🛠️ What It Does                          | 💡 Simple Example                    |
+| :----------------- | :--------------------------------------- | :----------------------------------- |
+| **🧠 The Brain**   | AI that reads and understands text       | A librarian who memorized every book |
+| **📚 The Library** | Stores "fingerprints" for quick search   | An efficient index card system       |
+| **🔐 The Guard**   | Checks who you are and what you can see  | A security checkpoint at the door    |
+| **🖥️ The Website** | Where you type questions and see answers | A simple search engine interface     |
 
 ---
 
-## 🏁 Getting Started (Easy Mode)
+## 🚀 Quick Start (5 Minutes)
 
-We have written two guides depending on what you want to do:
+### 1. Open Two Terminals (Command Prompt)
 
-### 1. "I just want to run it on my laptop"
+**Windows:** Press `Win + R`, type `cmd`, press Enter. Do this **twice**.
 
-👉 Read the **[User Manual (Beginner's Guide)](USER_MANUAL.md)**
-_(Includes the 1-Click Windows Setup!)_
+### 2. Start the "Brain" (Server)
 
-### 2. "I want to deploy this for my team"
-
-👉 Read the **[Deployment Guide](DEPLOYMENT_GUIDE.md)**
-_(Instructions for Servers, Docker, and Database)_
-
----
-
-## 💻 For Developers
-
-### Quick Start (Mock Mode)
-
-If you want to test the system without real Google Cloud credentials, follow these steps:
-
-1.  **Install Dependencies**:
-    ```bash
-    # In the client directory
-    cd client
-    npm install
-
-    # In the server directory
-    cd ../server
-    npm install
-    ```
-
-2.  **Setup Environment Variables**:
-    *   Create a `.env` file in the `server` directory.
-    *   Copy the contents of `.env.example` into `.env`.
-    *   **Important**: Ensure `GOOGLE_CLOUD_PROJECT_ID=aikb-mock-project` is set.
-
-3.  **Run the Backend**:
-    ```bash
-    cd server
-    npm run dev
-    ```
-    *You should see "GeminiService initialized in MOCK MODE."*
-
-4.  **Run the Frontend**:
-    ```bash
-    cd client
-    npm run dev
-    ```
-
-5.  **Open your browser** to `http://localhost:3000` and enjoy!
-
-### Project Structure
-
-- **`client/`**: Next.js (React) Frontend.
-- **`server/`**: Node.js (Express) Backend with Vector Search.
-- **`run_app.bat`**: Windows automation script.
-
-### Running Tests
-
-Before making changes, verify the system integrity:
+In the first window, type:
 
 ```bash
-cd server
-npm test
+cd C:\Faraatar-TID_Apps\KnowledgeManagement\server
+npm install
+npm run dev
 ```
 
-This runs the **Vitest** suite to check authentication, API security, and basic routes.
+Wait for: `✅ SERVER ACTIVE ON PORT 3001`
 
-### 🔒 Code Quality & Security
+### 3. Start the "Website" (Client)
 
-The project includes a **custom ESLint plugin** (`eslint-plugin-aikb`) that detects common anti-patterns:
-
-- **Stale Closures**: Prevents memory leaks in React hooks
-- **Silent Failures**: Ensures all errors are logged with telemetry
-- **Missing Cleanup**: Detects event listeners without proper removal
-- **Race Conditions**: Flags unsafe async patterns
-
-**Run the linter:**
-```bash
-cd client
-npm run lint
-```
-
-### 🧪 Integration Tests
-
-Race condition tests ensure the system handles concurrent operations safely:
+In the second window, type:
 
 ```bash
-# Server-side race condition tests
-cd server
-npm test -- race-conditions.test.ts
-
-# Client-side race condition tests  
-cd client
-npm test -- race-conditions.test.tsx
+cd C:\Faraatar-TID_Apps\KnowledgeManagement\client
+npm install
+npm run dev
 ```
+
+Wait for: `Ready in X seconds`
+
+### 4. Login & Enjoy
+
+1. Open browser: **http://localhost:3000**
+2. Login with:
+   - 📧 Email: `alice@aikb.com`
+   - 🔑 Password: `admin123`
+3. **Ask a question!** The AI will answer based on your documents.
 
 ---
 
-**Developed by Antigravity AI**
+## 📚 Reference Guides
+
+| I want to...           | Read this                         |
+| :--------------------- | :-------------------------------- |
+| **Learn all features** | [User Guide](USER_GUIDE.md)       |
+| **Set up for a team**  | [Deployment Guide](DEPLOYMENT.md) |
+| **See what's changed** | [Changelog](CHANGELOG.md)         |
+
+---
+
+## 🔐 Security Highlights
+
+- ✅ **Military-grade Encryption**: Passwords are scrambled and safe.
+- ✅ **Need-to-Know Access**: Users only see documents for their department.
+- ✅ **Private by Design**: Your API keys and data stay on your secure server.
+- ✅ **Safety Controls**: Only document owners can modify their files.
+
+---
+
+## 🆘 Troubleshooting
+
+| Problem                   | Solution                                                           |
+| :------------------------ | :----------------------------------------------------------------- |
+| **"Port already in use"** | Restart your computer or close other terminal windows.             |
+| **"Login fails"**         | Make sure you used the email `alice@aikb.com`. Check spelling.     |
+| **"AI says mock data"**   | Normal for "Demo Mode". Ask your IT admin to connect Google Cloud. |
+| **"Can't reach website"** | Make sure both terminal windows are still open and running.        |
+
+---
+
+## 🧑‍💻 Technical Info
+
+### Run Tests
+
+```bash
+cd server && npm test   # Check the brain (73 tests)
+cd client && npm test   # Check the website (12 tests)
+```
+
+### Technology Stack
+
+- **AI Engine**: Google Gemini 2.5
+- **Frontend**: Next.js 15 + React 19
+- **Backend**: Node.js + Express
+- **Database**: Local JSON (Simple) or Supabase (Advanced)
+
+---
+
+**Developed by Antigravity AI** | January 2026

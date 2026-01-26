@@ -28,8 +28,11 @@ export class RedactionService {
     // Robust phone detection (supports various formats including international)
     redacted = redacted.replace(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, '[PHONE REDACTED]');
     
-    // Placeholder for National IDs / Passport numbers if applicable
-    // redacted = redacted.replace(/\b[A-Z]{1,2}\d{6,9}\b/g, '[ID REDACTED]');
+    // SECURITY: SSN patterns (US format: XXX-XX-XXXX, with or without dashes)
+    redacted = redacted.replace(/\b\d{3}[- ]?\d{2}[- ]?\d{4}\b/g, '[SSN REDACTED]');
+    
+    // SECURITY: National IDs (EU, UK passport-style formats)
+    redacted = redacted.replace(/\b[A-Z]{1,2}\d{6,9}\b/gi, '[ID REDACTED]');
     
     return redacted;
   }

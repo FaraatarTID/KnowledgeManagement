@@ -33,6 +33,7 @@ function AIKBContent() {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
       const response = await fetch(`${baseUrl}/documents/sync`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -146,6 +147,7 @@ function AIKBContent() {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
       const response = await fetch(`${baseUrl}/documents/sync`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -247,8 +249,9 @@ function AIKBContent() {
     try {
       // CRITICAL FIX: Only send query, NOT documents
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-      const response = await fetch(`${baseUrl}/chat`, {
+      const response = await fetch(`${baseUrl}/query`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -263,7 +266,7 @@ function AIKBContent() {
       }
 
       const data = await response.json();
-      const aiResponse = data.content;
+      const aiResponse = data.answer; // /query returns { answer, sources, usage }
 
       // CRITICAL FIX: Only update if this query is still the latest
       setChatHistory(prev => {

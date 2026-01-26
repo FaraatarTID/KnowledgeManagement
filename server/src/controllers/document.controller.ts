@@ -161,10 +161,32 @@ export class DocumentController {
     try {
       const { id } = req.params;
       const { title, category, sensitivity, department } = req.body;
+      const user = req.user!;
 
       // Validate metadata
       if (!title && !category && !sensitivity && !department) {
         return res.status(400).json({ error: 'At least one metadata field (title, category, sensitivity or department) must be provided.' });
+      }
+
+      // SECURITY: Verify ownership or admin role before allowing updates
+      if (!id) {
+        return res.status(400).json({ error: 'Document ID is required' });
+      }
+      
+      const allMetadata = await vectorService.getAllMetadata();
+      const docMeta = allMetadata[id];
+      
+      if (!docMeta) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+
+      // Only ADMIN, MANAGER, or the document owner can update
+      const isOwner = docMeta.owner && docMeta.owner.toLowerCase() === user.email.toLowerCase();
+      const isPrivileged = user.role === 'ADMIN' || user.role === 'MANAGER';
+      
+      if (!isOwner && !isPrivileged) {
+        console.warn(`SECURITY: User ${user.email} attempted to update document ${id} without permission`);
+        return res.status(403).json({ error: 'You do not have permission to edit this document' });
       }
 
       // 1. Update local index (VectorStore + Metadata Overrides)
@@ -182,7 +204,7 @@ export class DocumentController {
         event_type: 'UPDATED',
         doc_id: id,
         doc_name: title || 'Metadata Update',
-        details: `Metadata updated: ${JSON.stringify({ title, category, sensitivity, department })}. Drive Rename: ${driveRenameStatus}`
+        details: `Metadata updated by ${user.email}: ${JSON.stringify({ title, category, sensitivity, department })}. Drive Rename: ${driveRenameStatus}`
       });
 
       res.json({ 

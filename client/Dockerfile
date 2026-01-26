@@ -14,20 +14,29 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine
+FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install --production
+ENV NODE_ENV=production
 
-# In Next.js, the standalone output is often preferred for production Docker images
-# but for simplicity, we'll copy the whole build output if not using standalone
-COPY --from=builder /app/.next ./.next
+# Don't run as root
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/next.config.mjs ./
-# COPY --from:builder /app/node_modules ./node_modules
+
+# Automatically leverage output traces to reduce image size
+# https://nextjs.org/docs/advanced-features/output-file-tracing
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+ENV PORT=3000
+# set hostname to localhost
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"]
