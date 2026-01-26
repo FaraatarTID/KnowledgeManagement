@@ -159,8 +159,20 @@ export class VectorService {
         await fs.promises.copyFile(this.DATA_FILE, backupFile);
       }
 
-      // 4. Atomic rename (guaranteed atomic on most filesystems)
-      await fs.promises.rename(tempFile, this.DATA_FILE);
+      // 4. Atomic rename with retry for Windows EPERM/EBUSY
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          await fs.promises.rename(tempFile, this.DATA_FILE);
+          break;
+        } catch (renameError: any) {
+          if (retries === 1 || (renameError.code !== 'EPERM' && renameError.code !== 'EBUSY')) {
+            throw renameError;
+          }
+          retries--;
+          await new Promise(resolve => setTimeout(resolve, 100 * (4 - retries))); // Exponential-ish backoff
+        }
+      }
 
       // 5. Clean up backup after successful write
       if (fs.existsSync(backupFile)) {

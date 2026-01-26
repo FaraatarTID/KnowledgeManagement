@@ -5,6 +5,7 @@ import { useStorage } from '@/hooks/useStorage';
 import { useDebounce } from '@/hooks/useDebounce';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { toast } from '@/components/ToastContainer';
+import { api } from '@/lib/apiClient';
 
 function AIKBContent() {
   type Doc = { id: string; title?: string; content?: string; category?: string; createdAt?: string };
@@ -26,25 +27,12 @@ function AIKBContent() {
 
   // Sync existing documents to backend (for first-time load or recovery)
   // Moved to useEffect to avoid stale closures - see useDocumentSync below
+  // Sync existing documents to backend (for first-time load or recovery)
   const syncDocumentsToBackend = useCallback(async (docsToSync: Doc[]) => {
     if (docsToSync.length === 0) return;
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-      const response = await fetch(`${baseUrl}/documents/sync`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ documents: docsToSync }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Backend sync failed');
-      }
-
-      const result = await response.json();
+      const result = await api.syncDocuments(docsToSync);
       
       if (result.stats && result.stats.successes > 0) {
         toast.success(`Synced ${result.stats.successes} documents to AI search`);
@@ -128,7 +116,7 @@ function AIKBContent() {
   }, [chatHistory, activeTab]);
 
   // Optimistic document addition with backend sync
-  const addDocument = useCallback(async (doc: Omit<Doc, 'id' | 'createdAt'>) => {
+  const addDocument = useCallback(async (doc: { title: string; content: string; category: string }) => {
     const newDoc = {
       id: uuidv4(),
       ...doc,
@@ -144,28 +132,8 @@ function AIKBContent() {
       await saveDocuments(updatedDocs);
       
       // 2. Sync to backend Vector Database
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-      const response = await fetch(`${baseUrl}/documents/sync`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ documents: [newDoc] }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to sync with backend');
-      }
-
-      const result = await response.json();
-      
-      if (result.stats && result.stats.failures > 0) {
-        toast.error(`Document saved locally, but ${result.stats.failures} failed to sync to AI`);
-      } else {
-        toast.success('Document added and synced for AI search');
-      }
+      await api.addDocument(newDoc);
+      toast.success('Document added and synced for AI search');
       
       setShowAddDoc(false);
       
@@ -248,24 +216,7 @@ function AIKBContent() {
 
     try {
       // CRITICAL FIX: Only send query, NOT documents
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-      const response = await fetch(`${baseUrl}/query`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query: queryToSubmit }), // Use captured query
-        // Add timeout to prevent hanging
-        signal: AbortSignal.timeout(30000)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Server error');
-      }
-
-      const data = await response.json();
+      const data = await api.query(queryToSubmit, AbortSignal.timeout(30000));
       const aiResponse = data.answer; // /query returns { answer, sources, usage }
 
       // CRITICAL FIX: Only update if this query is still the latest

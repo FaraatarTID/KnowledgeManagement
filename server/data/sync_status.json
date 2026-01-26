@@ -380,5 +380,21 @@
     "lastSync": "2026-01-26T09:13:37.901Z",
     "fileName": "test.pdf",
     "updatedAt": "2026-01-26T09:13:37.902Z"
+  },
+  "manual-1769419118154": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769419118154-zpq44f38d",
+    "lastSync": "2026-01-26T09:18:38.184Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-26T09:18:38.185Z"
+  },
+  "manual-1769419118156": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769419118156-kd0dx0mc0",
+    "lastSync": "2026-01-26T09:18:38.187Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-26T09:18:38.187Z"
   }
 }
