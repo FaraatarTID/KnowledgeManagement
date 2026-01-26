@@ -13,6 +13,7 @@ export class SyncService {
   private historyService: HistoryService;
   private localMetadataService: LocalMetadataService;
   private extractionService: ExtractionService;
+  private isSyncing = false;
 
   constructor(
     private driveService: DriveService,
@@ -26,6 +27,12 @@ export class SyncService {
   }
 
   async syncAll(folderId: string) {
+    if (this.isSyncing) {
+       console.warn('SyncService: Sync already in progress. Ignoring request.');
+       return { status: 'already_syncing' };
+    }
+
+    this.isSyncing = true;
     console.log('SyncService: Starting full sync...');
     
     // 1. List all files
@@ -50,8 +57,39 @@ export class SyncService {
       }
     }
 
+    // 3. Prune deleted documents
+    console.log('SyncService: Pruning deleted documents...');
+    const driveIds = new Set(files.filter(f => f.id).map(f => f.id!));
+    await this.pruneDeletedDocuments(driveIds);
+
+    this.isSyncing = false;
     console.log('SyncService: Sync complete.');
     return { status: 'success', processed: processedRequestCount };
+  }
+
+  /**
+   * Removes vectors from local store that are no longer present in Google Drive
+   */
+  private async pruneDeletedDocuments(currentDriveIds: Set<string>) {
+    const meta = await this.vectorService.getAllMetadata();
+    const localIds = Object.keys(meta);
+    
+    let pruneCount = 0;
+    for (const docId of localIds) {
+      // Only prune documents that look like they came from Drive (manual- prefix is for uploads)
+      if (!docId.startsWith('manual-') && !currentDriveIds.has(docId)) {
+         console.log(`SyncService: Pruning deleted document ${docId}`);
+         await this.vectorService.deleteDocument(docId);
+         pruneCount++;
+      }
+    }
+    
+    if (pruneCount > 0) {
+       await this.historyService.recordEvent({
+         event_type: 'PRUNED',
+         details: `Removed ${pruneCount} dangling documents no longer in Google Drive.`
+       });
+    }
   }
 
   async indexFile(file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }, initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string }): Promise<string> {

@@ -14,7 +14,7 @@ export interface AuthRequest extends Request {
   file?: Express.Multer.File;
 }
 
-export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   // SECURITY: Only accept tokens from httpOnly cookies to prevent XSS token theft
   // Removed Authorization header fallback to enforce browser security features
   const token = (req as any)?.cookies?.token;
@@ -32,7 +32,22 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
 
   try {
     const decoded = jwt.verify(token, secret) as AuthUser;
-    req.user = decoded;
+    
+    // SECURITY: Real-time User State Check
+    // If Supabase is configured, verify the user still exists and is Active
+    const { authService } = await import('../container.js');
+    const user = await authService.getUserById(decoded.id);
+    
+    if (!user) {
+      return res.status(401).json({ error: 'Account no longer exists' });
+    }
+    
+    if (user.status === 'Inactive') {
+      return res.status(403).json({ error: 'Account is deactivated' });
+    }
+
+    // Pass latest user data from DB instead of stale JWT data
+    req.user = user;
     next();
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
