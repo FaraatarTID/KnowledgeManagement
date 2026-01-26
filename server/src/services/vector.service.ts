@@ -477,7 +477,7 @@ export class VectorService {
     if (this.isMock) return;
     
     // Save to local metadata overrides to ensure it's "sticky" through syncs
-    this.localMetadataService.setOverride(docId, metadata);
+    await this.localMetadataService.setOverride(docId, metadata);
 
     let updatedCount = 0;
     this.vectors = this.vectors.map(v => {

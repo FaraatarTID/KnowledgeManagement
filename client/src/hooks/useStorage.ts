@@ -141,68 +141,48 @@ export const useStorage = () => {
 
   /**
    * Save documents with atomic backup
-   * SECURITY FIX: Add telemetry and error handling
+   * Optimized: removed redundant loadData call
    */
-  const saveDocuments = async (documents: unknown[]) => {
+  const saveDocuments = async (documents: unknown[], currentChatHistory: unknown[] = []) => {
     const startTime = Date.now();
     try {
       const json = JSON.stringify(documents);
       await set('aikb-documents', json);
       
-      // Create backup for recovery
-      const currentData = await loadData();
+      // Create backup for recovery (use provided history or empty)
       await set('aikb-backup', JSON.stringify({
         docs: documents,
-        chat: currentData.chatHistory,
+        chat: currentChatHistory,
         timestamp: Date.now()
       }));
 
-      console.log('STORAGE_SAVE_SUCCESS', JSON.stringify({
-        type: 'documents',
-        count: documents.length,
-        duration: `${Date.now() - startTime}ms`
-      }));
+      console.log('STORAGE_SAVE_SUCCESS', { type: 'documents', count: documents.length });
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error('STORAGE_SAVE_FAILED', JSON.stringify({
-        type: 'documents',
-        error: msg,
-        timestamp: new Date().toISOString()
-      }));
+      console.error('STORAGE_SAVE_FAILED', error);
       throw error;
     }
   };
 
   /**
    * Save chat history with atomic backup
-   * SECURITY FIX: Add telemetry and error handling
+   * Optimized: removed redundant loadData call
    */
-  const saveChatHistory = async (chatHistory: unknown[]) => {
+  const saveChatHistory = async (chatHistory: unknown[], currentDocuments: unknown[] = []) => {
     const startTime = Date.now();
     try {
       const json = JSON.stringify(chatHistory);
       await set('aikb-chat-history', json);
       
-      // Create backup for recovery
-      const currentData = await loadData();
+      // Create backup for recovery (use provided docs or empty)
       await set('aikb-backup', JSON.stringify({
-        docs: currentData.documents,
+        docs: currentDocuments,
         chat: chatHistory,
         timestamp: Date.now()
       }));
 
-      console.log('STORAGE_SAVE_SUCCESS', JSON.stringify({
-        type: 'chatHistory',
-        count: chatHistory.length,
-        duration: `${Date.now() - startTime}ms`
-      }));
+      console.log('STORAGE_SAVE_SUCCESS', { type: 'chatHistory', count: chatHistory.length });
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error('STORAGE_SAVE_FAILED', JSON.stringify({
-        type: 'chatHistory',
-        error: msg,
-        timestamp: new Date().toISOString()
-      }));
+      console.error('STORAGE_SAVE_FAILED', error);
       throw error;
     }
   };

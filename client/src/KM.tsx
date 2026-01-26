@@ -129,7 +129,7 @@ function AIKBContent() {
     
     try {
       // 1. Save to local IndexedDB
-      await saveDocuments(updatedDocs);
+      await saveDocuments(updatedDocs, chatHistory);
       
       // 2. Sync to backend Vector Database
       await api.addDocument(newDoc);
@@ -243,7 +243,7 @@ function AIKBContent() {
         ];
 
         // Save to storage in background
-        saveChatHistory(finalHistory).catch((err: unknown) => {
+        saveChatHistory(finalHistory, documents).catch((err: unknown) => {
           console.error('Failed to save chat history:', err);
         });
 
@@ -284,7 +284,7 @@ function AIKBContent() {
 
     try {
       setChatHistory([]);
-      await saveChatHistory([]);
+      await saveChatHistory([], documents);
       toast.success('Chat history cleared');
     } catch {
       toast.error('Failed to clear chat history');
@@ -515,7 +515,7 @@ function AIKBContent() {
   );
 }
 
-function AddDocumentModal({ onClose, onAdd }: { onClose: () => void; onAdd: (doc: Record<string, unknown>) => void }) {
+function AddDocumentModal({ onClose, onAdd }: { onClose: () => void; onAdd: (doc: { title: string; content: string; category: string }) => void }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState('');

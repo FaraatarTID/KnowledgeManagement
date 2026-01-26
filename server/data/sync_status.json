@@ -396,5 +396,37 @@
     "lastSync": "2026-01-26T09:18:38.187Z",
     "fileName": "test.pdf",
     "updatedAt": "2026-01-26T09:18:38.187Z"
+  },
+  "manual-1769419431542": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769419431542-g4ade71cd",
+    "lastSync": "2026-01-26T09:23:51.575Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-26T09:23:51.576Z"
+  },
+  "manual-1769419431547": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769419431548-jwrcsv9hm",
+    "lastSync": "2026-01-26T09:23:51.578Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-26T09:23:51.579Z"
+  },
+  "manual-1769422072198": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769422072198-uqqkyj5kf",
+    "lastSync": "2026-01-26T10:07:52.230Z",
+    "fileName": "test.txt",
+    "updatedAt": "2026-01-26T10:07:52.230Z"
+  },
+  "manual-1769422072205": {
+    "status": "SUCCESS",
+    "message": "Successfully indexed 1 chunks (1 vectors)",
+    "transactionId": "tx-1769422072205-cfuy1t3ai",
+    "lastSync": "2026-01-26T10:07:52.238Z",
+    "fileName": "test.pdf",
+    "updatedAt": "2026-01-26T10:07:52.238Z"
   }
 }
