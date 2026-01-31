@@ -1,5 +1,5 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as argon2 from 'argon2';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import type { User, UserRole, CreateUserDTO } from '../types/user.types.js';
@@ -38,12 +38,10 @@ export class AuthService {
     try {
       const { data, error } = await this.supabase
         .from('users')
-        .select('*')
+        .select('id, email, name, role, department, status, password_hash')
         .eq('email', email.toLowerCase().trim())
         .single();
 
-      // If user not found, we still perform a verify operation with a dummy hash
-      // to ensure the response time is consistent with a valid user check.
       if (error || !data) {
         await argon2.verify(AuthService.DUMMY_HASH, password);
         return null; 
@@ -51,6 +49,16 @@ export class AuthService {
 
       const isValid = await this.verifyPassword(password, data.password_hash);
       if (!isValid) return null;
+
+      // Migrate legacy BCrypt hashes to Argon2
+      if (data.password_hash.startsWith('$2')) {
+        console.log(`AuthService: Migrating legacy hash for ${email} to Argon2...`);
+        const newHash = await this.hashPassword(password);
+        await this.supabase
+          .from('users')
+          .update({ password_hash: newHash })
+          .eq('id', data.id);
+      }
 
       const { password_hash, ...user } = data;
       return user as User;
@@ -96,16 +104,16 @@ export class AuthService {
 
   async verifyPassword(password: string, hash: string): Promise<boolean> {
     try {
-      // Argon2 is the only supported hash. BCrypt is deprecated and removed for new hashes.
-      // If legacy BCrypt hashes exist, they must be migrated on next login.
       if (hash.startsWith('$argon2')) {
         return await argon2.verify(hash, password);
       }
       
-      // Temporary fallback for legacy migration (to be removed after rollout)
-      // Note: bcrypt is not imported anymore, this will throw if reached.
-      // This is intentional to force argon2 usage.
-      throw new Error('Legacy BCrypt hash detected. Authentication requires Argon2.');
+      // Fallback for legacy BCrypt hashes to support migration
+      if (hash.startsWith('$2')) {
+        return await bcrypt.compare(password, hash);
+      }
+
+      throw new Error('Unsupported password hash format.');
     } catch (error) {
       console.error('AuthService: Password verification failed', error);
       return false;
