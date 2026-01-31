@@ -110,7 +110,7 @@ AIKB isn't just "guessing". Every response follows a strict verification process
 ## 🆘 Troubleshooting
 
 - **Login fails?** Ensure you are using the correct credentials provided by your IT department.
-- **AI returns mock responses?** This signifies the system is in **Mock Mode**. Real document indexing must be enabled by an administrator.
+- **AI returns mock responses?** This signifies that real-time AI indexing is not yet connected. An administrator must configure Google Cloud credentials.
 - **Page won't load?** Ensure the network is stable and the AIKB service is running.
 
 ---

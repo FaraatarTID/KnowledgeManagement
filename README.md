@@ -30,6 +30,10 @@ In the first window, type:
 ```bash
 cd C:\Faraatar-TID_Apps\KnowledgeManagement\server
 npm install
+
+# QUICK CONFIG: Copy the example and set your password
+copy .env.example .env
+
 npm run dev
 ```
 
@@ -94,12 +98,12 @@ Unlike common AI apps, AIKB is built for **Enterprise Stability**:
 
 ## 🆘 Troubleshooting
 
-| Problem                   | Solution                                                                     |
-| :------------------------ | :--------------------------------------------------------------------------- |
-| **"Port already in use"** | Restart your computer or close other terminal windows.                       |
-| **"Login fails"**         | Ensure `INITIAL_ADMIN_PASSWORD` is set in `.env`. Check Supabase connection. |
-| **"AI says mock data"**   | Normal for **Mock Mode** (Dev/Test). IT admin must connect Google Cloud.     |
-| **"Can't reach website"** | Make sure both terminal windows are still open and running.                  |
+| Problem                   | Solution                                                                                 |
+| :------------------------ | :--------------------------------------------------------------------------------------- |
+| **"Port already in use"** | Restart your computer or close other terminal windows.                                   |
+| **"Login fails"**         | Ensure `INITIAL_ADMIN_PASSWORD` is set in `.env`. Check Supabase connection.             |
+| **"AI says mock data"**   | Ensure your Google Cloud / Gemini AI credentials are correctly set in the server `.env`. |
+| **"Can't reach website"** | Make sure both terminal windows are still open and running.                              |
 
 ---
 

@@ -149,7 +149,7 @@ npm install
 npm test
 ```
 
-_Note: Tests will fail if Supabase/GCP isn't configured in `.env` unless explicitly placed in "Mock Mode" for development. "Demo Mode" has been completely removed for security._
+_Note: Backend tests require either a valid Supabase connection or for the server to be in a controlled test environment. Insecure legacy "Demo Codes" have been completely removed._
 
 ### 4. Start the App
 
