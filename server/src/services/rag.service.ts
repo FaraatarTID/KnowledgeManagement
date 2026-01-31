@@ -3,10 +3,15 @@ import { GeminiService } from './gemini.service.js';
 import { VectorService } from './vector.service.js';
 import { RedactionService } from './redaction.service.js';
 import { AuditService } from './access.service.js';
+import { HallucinationService } from './hallucination.service.js';
+import { Logger } from '../utils/logger.js';
+import { TimeoutUtil, REQUEST_TIMEOUTS } from '../utils/timeout.util.js';
 
 export class RAGService {
   private redactionService: RedactionService;
   private auditService: AuditService;
+  private hallucinationService: HallucinationService;
+  private logger = new Logger('RAGService');
 
   constructor(
     private geminiService: GeminiService,
@@ -14,6 +19,7 @@ export class RAGService {
   ) {
     this.redactionService = new RedactionService();
     this.auditService = new AuditService();
+    this.hallucinationService = new HallucinationService();
   }
 
   async query(params: {
@@ -23,45 +29,55 @@ export class RAGService {
     history?: { role: 'user' | 'model'; content: string }[];
   }) {
     const { query, userId, userProfile, history = [] } = params;
+    const operationDeadline = Date.now() + REQUEST_TIMEOUTS.RAG_QUERY;
 
-    // 1. Generate query embedding
-    const queryEmbedding = await this.geminiService.generateEmbedding(query);
+    try {
+      // 1. Generate query embedding (with timeout)
+      const queryEmbedding = await TimeoutUtil.timeout(
+        this.geminiService.generateEmbedding(query),
+        REQUEST_TIMEOUTS.EMBEDDING_GENERATION,
+        'RAG: Embedding generation'
+      );
 
-    // 2. Vector similarity search with access control
-    const searchResults = await this.vectorService.similaritySearch({
-      embedding: queryEmbedding,
-      topK: 10, // Increased from 5 to 10 for better depth
-      filters: {
-        department: userProfile.department,
-        role: userProfile.role
+      // 2. Vector similarity search with access control (with timeout)
+      const searchResults = await TimeoutUtil.timeout(
+        this.vectorService.similaritySearch({
+          embedding: queryEmbedding,
+          topK: 10, // Increased from 5 to 10 for better depth
+          filters: {
+            department: userProfile.department,
+            role: userProfile.role
+          }
+        }),
+        REQUEST_TIMEOUTS.VECTOR_SEARCH,
+        'RAG: Vector search'
+      );
+
+      // 3. Filter by Similarity Threshold
+      // If the best match score is too low (e.g. < 0.60), we assume it's "noise" and return early.
+      // This is a HARD GATE against hallucination on irrelevant data.
+      const relevantResults = searchResults.filter(res => (res as any).score >= env.RAG_MIN_SIMILARITY);
+
+      if (relevantResults.length === 0) {
+        // Audit: Log query with no results
+        await this.auditService.log({
+          userId,
+          action: 'RAG_QUERY',
+          query,
+          granted: true,
+          reason: 'No matching documents found'
+        });
+
+        return {
+          answer: "I couldn't find any documents in the knowledge base that match your query.",
+          sources: [],
+          usage: undefined,
+          integrity: { confidence: 'Low', isVerified: true, reason: 'No matching documents' }
+        };
       }
-    });
 
-    // 3. Filter by Similarity Threshold
-    // If the best match score is too low (e.g. < 0.60), we assume it's "noise" and return early.
-    // This is a HARD GATE against hallucination on irrelevant data.
-    const relevantResults = searchResults.filter(res => (res as any).score >= env.RAG_MIN_SIMILARITY);
-
-    if (relevantResults.length === 0) {
-      // Audit: Log query with no results
-      await this.auditService.log({
-        userId,
-        action: 'RAG_QUERY',
-        query,
-        granted: true,
-        reason: 'No matching documents found'
-      });
-
-      return {
-        answer: "I couldn't find any documents in the knowledge base that match your query.",
-        sources: [],
-        usage: undefined,
-        integrity: { confidence: 'Low', isVerified: true, reason: 'No matching documents' }
-      };
-    }
-
-    // 4. Build context from results with Token Cap
-    // Limit total context size to prevent token exhaustion/cost spikes.
+      // 4. Build context from results with Token Cap
+      // Limit total context size to prevent token exhaustion/cost spikes.
     const MAX_CONTEXT_CHARS = env.RAG_MAX_CONTEXT_CHARS;
     let currentLength = 0;
     const context: string[] = [];
@@ -113,16 +129,20 @@ export class RAGService {
       };
     }
 
-    // 5. Generate response with Gemini
+    // 5. Generate response with Gemini (with timeout)
     // SECURITY: Redact PII from user query before sending to LLM
     const redactedQuery = this.redactionService.redactPII(query);
 
-    const { text, usageMetadata } = await this.geminiService.queryKnowledgeBase({
-      query: redactedQuery,
-      context,
-      userProfile,
-      history
-    });
+    const { text, usageMetadata } = await TimeoutUtil.timeout(
+      this.geminiService.queryKnowledgeBase({
+        query: redactedQuery,
+        context,
+        userProfile,
+        history
+      }),
+      REQUEST_TIMEOUTS.RAG_QUERY - (Date.now() - operationDeadline), // Remaining time in RAG query
+      'RAG: Gemini query'
+    );
 
     // PARSE JSON RESPONSE
     let parsedResponse: any;
@@ -139,11 +159,81 @@ export class RAGService {
       };
     }
 
+    // --- HALLUCINATION DETECTION: Multi-layer Verification ---
+    let hallucinationAnalysis = null;
+    let shouldRejectResponse = false;
+    
+    try {
+      hallucinationAnalysis = await this.hallucinationService.analyze({
+        query: redactedQuery,
+        answer: parsedResponse.answer,
+        context,
+        citations: parsedResponse.citations?.map((c: any) => ({
+          quote: c.quote || c.text || '',
+          source: c.title || c.source || ''
+        })) || [],
+        aiConfidence: parsedResponse.confidence
+      });
+
+      // If verdict is 'reject', log warning and consider fallback response
+      if (hallucinationAnalysis.verdict === 'reject') {
+        this.logger.warn('Hallucination detected - verdict REJECT', {
+          score: hallucinationAnalysis.score,
+          issues: hallucinationAnalysis.issues.length
+        });
+        shouldRejectResponse = true;
+      } else if (hallucinationAnalysis.verdict === 'caution') {
+        this.logger.info('Hallucination caution flag', {
+          score: hallucinationAnalysis.score,
+          issues: hallucinationAnalysis.issues.map(i => i.type)
+        });
+      }
+    } catch (error) {
+      // If hallucination detection fails, log but don't block response
+      this.logger.error('Hallucination detection error', { error });
+      hallucinationAnalysis = null;
+    }
+
     // --- INTEGRITY ENGINE: Post-Generation Verification ---
     const integrityResults = this.verifyIntegrity(parsedResponse, context);
     if (isTruncated) {
        integrityResults.warning = "Context window limit reached. Some documents were partially omitted.";
        integrityResults.isTruncated = true;
+    }
+
+    // Include hallucination analysis in integrity check
+    if (hallucinationAnalysis) {
+      integrityResults.hallucinationScore = hallucinationAnalysis.score;
+      integrityResults.hallucinationVerdict = hallucinationAnalysis.verdict;
+      integrityResults.hallucinationIssues = hallucinationAnalysis.issues;
+    }
+
+    // If hallucination detected as critical, return safer response
+    if (shouldRejectResponse) {
+      await this.auditService.log({
+        userId: userId || 'anonymous',
+        action: 'RAG_QUERY',
+        query,
+        granted: true,
+        metadata: {
+          hallucinationDetected: true,
+          hallucinationScore: hallucinationAnalysis?.score,
+          verdict: 'REJECTED'
+        }
+      });
+
+      return {
+        answer: 'The AI response contained potential inaccuracies. Please review the source documents directly or try rephrasing your question.',
+        sources: citations.slice(0, 3),
+        usage: usageMetadata,
+        integrity: {
+          confidence: 'LOW',
+          isVerified: false,
+          reason: 'Hallucination detected - response rejected for safety',
+          hallucinationScore: hallucinationAnalysis?.score,
+          hallucinationIssues: hallucinationAnalysis?.issues
+        }
+      };
     }
 
     // 6. Audit Logging (Improved with Integrity Metadata)
@@ -168,6 +258,41 @@ export class RAGService {
       ai_citations: parsedResponse.citations, // Return specific AI citations
       usage: usageMetadata,
       integrity: integrityResults,
+      operationTimeMsec: Date.now() - (operationDeadline - REQUEST_TIMEOUTS.RAG_QUERY)
+    };
+    } catch (error) {
+      // Catch timeout and other errors
+      Logger.error('RAGService: Query failed', {
+        error: error instanceof Error ? error.message : String(error),
+        userId
+      });
+
+      // Log failure to audit
+      try {
+        await this.auditService.log({
+          userId: userId || 'anonymous',
+          action: 'RAG_QUERY',
+          query,
+          granted: false,
+          reason: `Query failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        });
+      } catch (auditError) {
+        Logger.error('RAGService: Failed to log query failure', { auditError });
+      }
+
+      // Return error response
+      return {
+        answer: 'An error occurred while processing your query. Please try again.',
+        sources: [],
+        ai_citations: [],
+        usage: undefined,
+        integrity: {
+          confidence: 'LOW',
+          isVerified: false,
+          reason: error instanceof Error ? error.message : 'Unknown error'
+        }
+      };
+    }
       isTruncated
     };
   }

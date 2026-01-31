@@ -4,6 +4,54 @@ export interface AccessDecision {
   auditLevel?: 'minimal' | 'standard' | 'maximum';
 }
 
+import { z } from 'zod';
+
+// ============================================================================
+// AUDIT LOG ENTRY VALIDATION SCHEMA
+// ============================================================================
+
+export const auditLogEntrySchema = z.object({
+  userId: z.string()
+    .min(1, 'userId required')
+    .or(z.literal('anonymous')),
+  
+  action: z.enum([
+    'RAG_QUERY',
+    'DOCUMENT_UPLOAD',
+    'DOCUMENT_DELETE',
+    'AUTH_LOGIN',
+    'AUTH_LOGIN_FAILED',
+    'AUTH_LOGOUT',
+    'AUTH_REGISTER',
+    'ACCESS_DENIED',
+    'SETTINGS_CHANGE',
+    'PII_DETECTED_IN_QUERY',
+    'VECTOR_SYNC',
+    'VECTOR_DELETE'
+  ]),
+  
+  resourceId: z.string().uuid().optional(),
+  
+  query: z.string()
+    .max(2000, 'Query too long (max 2000 chars)')
+    .optional(),
+  
+  granted: z.boolean(),
+  
+  reason: z.string()
+    .max(500, 'Reason too long (max 500 chars)')
+    .optional(),
+  
+  metadata: z.record(z.any())
+    .optional()
+    .refine(
+      (m) => m ? Object.keys(m).length <= 10 : true,
+      'Metadata can have max 10 keys'
+    )
+});
+
+export type AuditLogEntry = z.infer<typeof auditLogEntrySchema>;
+
 export class AccessControlEngine {
   async checkAccess(params: {
     userId: string;
@@ -50,6 +98,7 @@ export class AuditService {
   private flushTimer: NodeJS.Timeout | null = null;
   private readonly BUFFER_LIMIT = 50;
   private readonly FLUSH_INTERVAL = 5000; // 5 seconds
+  private readonly MAX_BUFFER_SIZE = 500; // Prevent unbounded growth
 
   constructor() {
     const url = env.SUPABASE_URL;
@@ -66,41 +115,78 @@ export class AuditService {
     this.supabase = createClient(url, key);
   }
 
-  async log(entry: {
-    userId: string;
-    action: string;
-    resourceId?: string;
-    query?: string;
-    granted: boolean;
-    reason?: string;
-    metadata?: any;
-  }) {
-    const logEntry = {
-      user_id: entry.userId,
-      action: entry.action,
-      resource_id: entry.resourceId,
-      query: entry.query,
-      granted: entry.granted,
-      reason: entry.reason,
-      metadata: entry.metadata,
-      created_at: new Date().toISOString()
-    };
+  async log(entry: any): Promise<void> {
+    try {
+      // Validate against schema (P0.3: Security fix)
+      const validated = auditLogEntrySchema.parse(entry);
 
-    if (!this.supabase) {
-      console.log(`[AUDIT] ${logEntry.created_at}: ${logEntry.user_id} performed ${logEntry.action}. Granted: ${logEntry.granted}.`);
-      return;
-    }
+      const logEntry = {
+        user_id: validated.userId,
+        action: validated.action,
+        resource_id: validated.resourceId,
+        query: validated.query,
+        granted: validated.granted,
+        reason: validated.reason,
+        metadata: validated.metadata || {},
+        created_at: new Date().toISOString()
+      };
 
-    this.buffer.push(logEntry);
+      if (!this.supabase) {
+        console.log(`[AUDIT] ${logEntry.created_at}: ${logEntry.user_id} -> ${logEntry.action} (granted: ${logEntry.granted})`);
+        return;
+      }
 
-    if (this.buffer.length >= this.BUFFER_LIMIT) {
-      await this.flush();
-    } else if (!this.flushTimer) {
-      this.flushTimer = setTimeout(() => this.flush(), this.FLUSH_INTERVAL);
+      this.buffer.push(logEntry);
+
+      // Check if buffer is at max capacity
+      if (this.buffer.length >= this.MAX_BUFFER_SIZE) {
+        console.warn('[AUDIT] Buffer at max capacity, forcing flush');
+        await this.flush();
+      } else if (!this.flushTimer) {
+        // Schedule periodic flush
+        this.flushTimer = setTimeout(() => this._flushInternal(), this.FLUSH_INTERVAL);
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        console.error('[AUDIT] Invalid audit log entry - rejecting:', {
+          issues: error.issues,
+          entry
+        });
+        // Don't re-throw - we still want the service to function even if entry is malformed
+        return;
+      }
+      throw error;
     }
   }
 
-  private async flush() {
+  // Public flush method for graceful shutdown (P0.2)
+  async flush(): Promise<void> {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+
+    if (this.buffer.length === 0 || !this.supabase) return;
+
+    const toFlush = [...this.buffer];
+    this.buffer = [];
+
+    try {
+      const { error } = await this.supabase
+        .from('audit_logs')
+        .insert(toFlush);
+
+      if (error) throw error;
+      console.log(`[AUDIT] Flushed ${toFlush.length} logs to Supabase`);
+    } catch (error) {
+      // Re-add to buffer if flush fails
+      this.buffer.unshift(...toFlush);
+      console.error('[AUDIT] Flush failed, re-queued:', error);
+      throw error;
+    }
+  }
+
+  private async _flushInternal() {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
@@ -121,7 +207,8 @@ export class AuditService {
     } catch (e) {
       console.error('AuditService: Failed to flush logs', e);
       // Put failed logs back in front of the buffer (simple retry)
-      this.buffer = [...toFlush, ...this.buffer].slice(0, this.BUFFER_LIMIT * 2);
+      // Limit re-buffered logs to prevent unbounded growth
+      this.buffer = [...toFlush, ...this.buffer].slice(0, this.MAX_BUFFER_SIZE * 2);
     }
   }
 

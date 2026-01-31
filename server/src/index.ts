@@ -91,33 +91,58 @@ app.get("/health", async (req, res) => {
 // Centralized Error Handling
 app.use(errorHandler);
 
+// ============================================================================
+// GRACEFUL SHUTDOWN SETUP
+// ============================================================================
+
 let server: any;
 if (process.env.NODE_ENV !== 'test') {
   server = app.listen(port, () => {
     Logger.info(`✅ SERVER ACTIVE ON PORT ${port}`);
   });
+
+  const setupGracefulShutdown = async (signal: string) => {
+    Logger.warn(`\n--- RECEIVED ${signal}: STARTING GRACEFUL SHUTDOWN ---`);
+    
+    if (server) {
+      Logger.info('Closing HTTP server (no new connections accepted)...');
+      server.close(async () => {
+        try {
+          Logger.info('HTTP server closed. Flushing buffers...');
+
+          // Flush audit logs (CRITICAL - prevents data loss)
+          if (userService?.auditService?.flush) {
+            await userService.auditService.flush();
+            Logger.info('✅ Audit logs flushed');
+          }
+
+          // Flush vector service if present
+          if (vectorService?.flush) {
+            await vectorService.flush();
+            Logger.info('✅ Vector store flushed');
+          }
+
+          Logger.info('🎉 GRACEFUL SHUTDOWN COMPLETE - EXITING');
+          process.exit(0);
+        } catch (error) {
+          Logger.error('❌ Graceful shutdown error:', { error });
+          process.exit(1);
+        }
+      });
+    }
+
+    // Force shutdown after timeout (prevent hanging indefinitely)
+    setTimeout(() => {
+      Logger.error('⏱️  GRACEFUL SHUTDOWN TIMEOUT - FORCING EXIT (pending operations lost)');
+      process.exit(1);
+    }, 30000); // 30 seconds
+  };
+
+  // Register signal handlers
+  process.on('SIGTERM', () => setupGracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => setupGracefulShutdown('SIGINT'));
+
+  Logger.info('✅ Graceful shutdown handlers registered');
 }
-
-// SECURITY: Graceful Shutdown Logic
-const shutdown = async (signal: string) => {
-  Logger.warn(`--- RECEIVED ${signal}: STARTING GRACEFUL SHUTDOWN ---`);
-  
-  if (server) {
-    Logger.info('Closing HTTP server...');
-    server.close(() => {
-      Logger.info('HTTP server closed.');
-    });
-  }
-
-  // Allow 5 seconds for pending async operations (like DB writes)
-  Logger.info('Waiting 5s for pending operations to complete...');
-  setTimeout(() => {
-    Logger.info('Finalizing exit...');
-    process.exit(0);
-  }, 5000);
-};
-
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
 
 export default app;
