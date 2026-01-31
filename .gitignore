@@ -15,3 +15,14 @@ npm-debug.log*
 
 # Node
 node_modules/
+dist/
+.next/
+
+# Env
+.env*
+
+# Data
+server/data/*.json
+server/data/*.bak
+server/data/uploads/*
+!server/data/uploads/.gitkeep

@@ -119,3 +119,11 @@ src/**/*.js
 src/**/*.js.map
 src/**/*.d.ts
 src/**/*.d.ts.map
+
+# Runtime Data
+data/*.json
+data/*.bak
+data/*.lock
+data/.healthcheck
+data/uploads/*
+!data/uploads/.gitkeep
