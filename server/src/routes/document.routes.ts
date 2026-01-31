@@ -51,11 +51,17 @@ router.post('/documents/:id/sync',
   DocumentController.syncOne as RequestHandler
 );
 
-// Global Sync
+// Global Cloud Sync (Drive)
 router.post('/sync', 
   authMiddleware, 
   requireRole('ADMIN'), 
   DocumentController.syncAll as RequestHandler
+);
+
+// Batch Local Sync (from Client)
+router.post('/documents/sync',
+  authMiddleware,
+  DocumentController.syncBatch as RequestHandler
 );
 
 export default router;

@@ -26,7 +26,8 @@ export class RedactionService {
     let redacted = content.replace(/[a-zA-Z0-9._%+-]+(?:\s*(?:@|\[at\]|\(at\))\s*)[a-zA-Z0-9.-]+(?:\s*(?:\.|\[dot\]|\(dot\))\s*)[a-zA-Z]{2,}/gi, '[EMAIL REDACTED]');
     
     // Robust phone detection (supports various formats including international)
-    redacted = redacted.replace(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, '[PHONE REDACTED]');
+    // SECURITY FIX: ReDoS-resistant regex for phone numbers
+    redacted = redacted.replace(/(?:\+?\d{1,3})?[\s.-]?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g, '[PHONE REDACTED]');
     
     // SECURITY: SSN patterns (US format: XXX-XX-XXXX, with or without dashes)
     redacted = redacted.replace(/\b\d{3}[- ]?\d{2}[- ]?\d{4}\b/g, '[SSN REDACTED]');

@@ -1,4 +1,5 @@
 import { get, set, del } from 'idb-keyval';
+import { useCallback, useRef } from 'react';
 
 interface StorageData {
   documents: unknown[];
@@ -9,16 +10,16 @@ interface StorageData {
 /**
  * Secure storage hook with corruption recovery
  * Uses IndexedDB for persistent client-side storage
+ * Optimized with debounced writes to prevent I/O bottlenecks
  */
 export const useStorage = () => {
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   /**
    * Load data with corruption detection and recovery
-   * SECURITY FIX: Add telemetry and prevent cascading failures
    */
   const loadData = async (): Promise<StorageData> => {
     const startTime = Date.now();
-
-    // Hoist these so recovery logic in the catch block can inspect backupResult
     let docsResult: unknown | undefined;
     let chatResult: unknown | undefined;
     let backupResult: unknown | undefined;
@@ -35,104 +36,49 @@ export const useStorage = () => {
       let documents: unknown[] = [];
       let chatHistory: unknown[] = [];
 
-      // Parse documents with validation
       if (typeof docsResult === 'string') {
         try {
           const parsed = JSON.parse(docsResult);
-          if (Array.isArray(parsed)) {
-            documents = parsed;
-          } else {
-            throw new Error('Invalid document format: not an array');
-          }
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : 'unknown';
-          console.error('STORAGE_CORRUPTION', JSON.stringify({
-            type: 'documents',
-            error: msg,
-            timestamp: new Date().toISOString()
-          }));
+          if (Array.isArray(parsed)) documents = parsed;
+        } catch (e) {
+          console.error('STORAGE_CORRUPTION', { type: 'documents', error: e });
           throw new Error('DOCUMENTS_CORRUPTED');
         }
       }
 
-      // Parse chat history with validation
       if (typeof chatResult === 'string') {
         try {
           const parsed = JSON.parse(chatResult);
-          if (Array.isArray(parsed)) {
-            chatHistory = parsed;
-          } else {
-            throw new Error('Invalid chat format: not an array');
-          }
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : 'unknown';
-          console.error('STORAGE_CORRUPTION', JSON.stringify({
-            type: 'chatHistory',
-            error: msg,
-            timestamp: new Date().toISOString()
-          }));
+          if (Array.isArray(parsed)) chatHistory = parsed;
+        } catch (e) {
+          console.error('STORAGE_CORRUPTION', { type: 'chatHistory', error: e });
           throw new Error('CHAT_CORRUPTED');
         }
       }
 
-      const duration = Date.now() - startTime;
-      console.log(`STORAGE_LOAD_SUCCESS`, JSON.stringify({
-        documents: documents.length,
-        chatHistory: chatHistory.length,
-        duration: `${duration}ms`
-      }));
-
       return { documents, chatHistory, timestamp: Date.now() };
 
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'unknown';
-      console.warn('STORAGE_LOAD_FAILED', JSON.stringify({
-        error: msg,
-        timestamp: new Date().toISOString()
-      }));
+    } catch (error: any) {
+      console.warn('STORAGE_LOAD_FAILED', { error: error.message });
 
-      // Attempt recovery from backup
       if (typeof backupResult === 'string') {
         try {
           const backup = JSON.parse(backupResult);
-          const recoveredData = {
+          const recovered = {
             documents: Array.isArray(backup.docs) ? backup.docs : [],
             chatHistory: Array.isArray(backup.chat) ? backup.chat : [],
             timestamp: backup.timestamp || Date.now()
-          } as StorageData;
-
-          // Validate recovered data
-          if (!Array.isArray(recoveredData.documents) || !Array.isArray(recoveredData.chatHistory)) {
-            throw new Error('Backup data structure invalid');
-          }
-
-          // Restore from backup
-          await set('aikb-documents', JSON.stringify(recoveredData.documents));
-          await set('aikb-chat-history', JSON.stringify(recoveredData.chatHistory));
-
-          console.log('STORAGE_RECOVERY_SUCCESS', JSON.stringify({
-            recoveredDocs: recoveredData.documents.length,
-            recoveredChat: recoveredData.chatHistory.length
-          }));
-
-          return recoveredData;
-        } catch (backupError: unknown) {
-          const bmsg = backupError instanceof Error ? backupError.message : 'unknown';
-          console.error('STORAGE_RECOVERY_FAILED', JSON.stringify({
-            error: bmsg,
-            timestamp: new Date().toISOString()
-          }));
+          };
+          
+          await Promise.all([
+            set('aikb-documents', JSON.stringify(recovered.documents)),
+            set('aikb-chat-history', JSON.stringify(recovered.chatHistory))
+          ]);
+          
+          return recovered;
+        } catch (e) {
+             console.error('RECOVERY_FAILED', e);
         }
-      }
-
-      // Last resort: clear corrupted data and return empty
-      try {
-        await del('aikb-documents');
-        await del('aikb-chat-history');
-        await del('aikb-backup');
-        console.warn('STORAGE_CLEARED_ALL');
-      } catch (cleanupError: unknown) {
-        console.error('STORAGE_CLEANUP_FAILED', cleanupError);
       }
 
       return { documents: [], chatHistory: [], timestamp: Date.now() };
@@ -140,58 +86,46 @@ export const useStorage = () => {
   };
 
   /**
-   * Save documents with atomic backup
-   * Optimized: removed redundant loadData call
+   * Internal helper for debounced persistence
    */
-  const saveDocuments = async (documents: unknown[], currentChatHistory: unknown[] = []) => {
-    try {
-      const json = JSON.stringify(documents);
-      await set('aikb-documents', json);
-      
-      // Create backup for recovery (use provided history or empty)
-      await set('aikb-backup', JSON.stringify({
-        docs: documents,
-        chat: currentChatHistory,
-        timestamp: Date.now()
-      }));
+  const persist = useCallback((docs: unknown[], chat: unknown[]) => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
-      console.log('STORAGE_SAVE_SUCCESS', { type: 'documents', count: documents.length });
-    } catch (error: unknown) {
-      console.error('STORAGE_SAVE_FAILED', error);
-      throw error;
-    }
-  };
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await Promise.all([
+           set('aikb-documents', JSON.stringify(docs)),
+           set('aikb-chat-history', JSON.stringify(chat)),
+           set('aikb-backup', JSON.stringify({ docs, chat, timestamp: Date.now() }))
+        ]);
+        console.log('STORAGE_PERSISTED');
+      } catch (err) {
+        console.error('STORAGE_PERSIST_FAILED', err);
+      }
+    }, 1000); // 1 second debounce
+  }, []);
 
   /**
-   * Save chat history with atomic backup
-   * Optimized: removed redundant loadData call
+   * Save documents (Debounced)
    */
-  const saveChatHistory = async (chatHistory: unknown[], currentDocuments: unknown[] = []) => {
-    try {
-      const json = JSON.stringify(chatHistory);
-      await set('aikb-chat-history', json);
-      
-      // Create backup for recovery (use provided docs or empty)
-      await set('aikb-backup', JSON.stringify({
-        docs: currentDocuments,
-        chat: chatHistory,
-        timestamp: Date.now()
-      }));
-
-      console.log('STORAGE_SAVE_SUCCESS', { type: 'chatHistory', count: chatHistory.length });
-    } catch (error: unknown) {
-      console.error('STORAGE_SAVE_FAILED', error);
-      throw error;
-    }
-  };
+  const saveDocuments = useCallback(async (documents: unknown[], currentChatHistory: unknown[] = []) => {
+     persist(documents, currentChatHistory);
+  }, [persist]);
 
   /**
-   * Clear all data (for logout/reset)
+   * Save chat history (Debounced)
    */
+  const saveChatHistory = useCallback(async (chatHistory: unknown[], currentDocuments: unknown[] = []) => {
+     persist(currentDocuments, chatHistory);
+  }, [persist]);
+
   const clearAll = async () => {
-    await del('aikb-documents');
-    await del('aikb-chat-history');
-    await del('aikb-backup');
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    await Promise.all([
+      del('aikb-documents'),
+      del('aikb-chat-history'),
+      del('aikb-backup')
+    ]);
   };
 
   return {

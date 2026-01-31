@@ -222,5 +222,37 @@ export class DocumentController {
     Logger.info('Full sync completed', { result });
     res.json(result);
   });
+
+  static syncBatch: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
+    const { documents } = req.body;
+    if (!Array.isArray(documents)) throw new AppError('Documents array is required', 400);
+
+    Logger.info('Batch sync requested', { count: documents.length });
+    let successes = 0;
+    let failures = 0;
+
+    for (const doc of documents) {
+      try {
+        await syncService.indexContent({
+          id: doc.id || `local-${Date.now()}`,
+          name: doc.title || 'Untitled',
+          content: doc.content || '',
+          metadata: {
+            category: doc.category || 'General',
+            department: doc.department || req.user?.department || 'General',
+            sensitivity: doc.sensitivity || 'INTERNAL'
+          }
+        });
+        successes++;
+      } catch (err) {
+        Logger.error('Batch sync item failed', { id: doc.id, error: (err as any).message });
+        failures++;
+      }
+    }
+
+    res.json({
+      stats: { successes, failures }
+    });
+  });
 }
 

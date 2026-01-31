@@ -6,6 +6,7 @@ import { HistoryService } from './history.service.js';
 import { LocalMetadataService } from './localMetadata.service.js';
 import { ExtractionService } from './extraction.service.js';
 import { JSONStore } from '../utils/jsonStore.js';
+import { Logger } from '../utils/logger.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -287,6 +288,60 @@ export class SyncService {
     if (fn.includes('sales') || fn.includes('marketing')) return 'Sales';
     if (fn.includes('legal')) return 'Legal';
     return 'General';
+  }
+
+  /**
+   * Directly indexes content and metadata.
+   */
+  async indexContent(params: { 
+    id: string, 
+    name: string, 
+    content: string, 
+    metadata: { category: string, department: string, sensitivity: string } 
+  }): Promise<string> {
+    const { id, name, content, metadata } = params;
+    const transactionId = `tx-content-${Date.now()}`;
+
+    try {
+      // 1. Chunking 
+      const chunks = this.parsingService.chunkContent(content, 1000);
+      const itemsToUpsert: any[] = [];
+
+      // 2. Embedding
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        if (!chunk) continue;
+        const embedding = await this.geminiService.generateEmbedding(chunk);
+        
+        itemsToUpsert.push({
+          id: `${id}_${i}`,
+          values: embedding,
+          metadata: {
+            docId: id,
+            text: chunk,
+            title: name,
+            ...metadata,
+            modifiedAt: new Date().toISOString()
+          }
+        });
+      }
+
+      // 3. Upsert
+      if (itemsToUpsert.length > 0) {
+        await this.vectorService.upsertVectors(itemsToUpsert);
+        await this.historyService.recordEvent({
+          event_type: 'UPDATED',
+          doc_id: id,
+          doc_name: name,
+          details: `Manual sync: Indexed ${chunks.length} chunks.`
+        });
+      }
+
+      return id;
+    } catch (e: any) {
+      Logger.error(`indexContent failed for ${name}`, { error: e.message });
+      throw e;
+    }
   }
 
   private async logExtractionFailure(file: { id: string, name: string, mimeType?: string }, error: any, operation: string) {

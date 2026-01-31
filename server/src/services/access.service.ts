@@ -46,6 +46,10 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export class AuditService {
   private supabase: SupabaseClient | null = null;
+  private buffer: any[] = [];
+  private flushTimer: NodeJS.Timeout | null = null;
+  private readonly BUFFER_LIMIT = 50;
+  private readonly FLUSH_INTERVAL = 5000; // 5 seconds
 
   constructor() {
     const url = env.SUPABASE_URL;
@@ -71,28 +75,53 @@ export class AuditService {
     reason?: string;
     metadata?: any;
   }) {
+    const logEntry = {
+      user_id: entry.userId,
+      action: entry.action,
+      resource_id: entry.resourceId,
+      query: entry.query,
+      granted: entry.granted,
+      reason: entry.reason,
+      metadata: entry.metadata,
+      created_at: new Date().toISOString()
+    };
+
     if (!this.supabase) {
-      console.log(`[AUDIT] ${new Date().toISOString()}: ${entry.userId} performed ${entry.action} on ${entry.resourceId || 'N/A'}. Granted: ${entry.granted}. Metadata: ${JSON.stringify(entry.metadata || {})}`);
+      console.log(`[AUDIT] ${logEntry.created_at}: ${logEntry.user_id} performed ${logEntry.action}. Granted: ${logEntry.granted}.`);
       return;
     }
+
+    this.buffer.push(logEntry);
+
+    if (this.buffer.length >= this.BUFFER_LIMIT) {
+      await this.flush();
+    } else if (!this.flushTimer) {
+      this.flushTimer = setTimeout(() => this.flush(), this.FLUSH_INTERVAL);
+    }
+  }
+
+  private async flush() {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+
+    if (this.buffer.length === 0 || !this.supabase) return;
+
+    const toFlush = [...this.buffer];
+    this.buffer = [];
 
     try {
       const { error } = await this.supabase
         .from('audit_logs')
-        .insert([{
-          user_id: entry.userId,
-          action: entry.action,
-          resource_id: entry.resourceId,
-          query: entry.query,
-          granted: entry.granted,
-          reason: entry.reason,
-          metadata: entry.metadata, // NEW: citations
-          created_at: new Date().toISOString()
-        }]);
+        .insert(toFlush);
 
       if (error) throw error;
+      console.log(`AuditService: Flushed ${toFlush.length} logs to Supabase.`);
     } catch (e) {
-      console.error('AuditService: Failed to persist log', e);
+      console.error('AuditService: Failed to flush logs', e);
+      // Put failed logs back in front of the buffer (simple retry)
+      this.buffer = [...toFlush, ...this.buffer].slice(0, this.BUFFER_LIMIT * 2);
     }
   }
 
