@@ -15,14 +15,15 @@
 
 ---
 
-## 🔑 Logging In
+### User Accounts
 
-### Demo Accounts
+The system distinguishes between different levels of access. Please contact your administrator for your account details.
 
-| User      | Email          | Password | What They Can Do          |
-| --------- | -------------- | -------- | ------------------------- |
-| **Admin** | alice@aikb.com | admin123 | Everything                |
-| **User**  | david@aikb.com | admin123 | View & ask questions only |
+| Role       | Recommended For  | What They Can Do        |
+| ---------- | ---------------- | ----------------------- |
+| **Admin**  | System Managers  | Full Control & Auditing |
+| **Editor** | Content Creators | Add & Manage Documents  |
+| **Viewer** | Standard Users   | Ask questions & search  |
 
 ### How to Login
 
@@ -108,9 +109,9 @@ AIKB isn't just "guessing". Every response follows a strict verification process
 
 ## 🆘 Troubleshooting
 
-- **Login fails?** Check spelling of `alice@aikb.com` and password `admin123`.
-- **AI returns mock responses?** This is "Demo Mode". Needs IT setup for real AI.
-- **Page won't load?** Make sure both server and client terminals are running.
+- **Login fails?** Ensure you are using the correct credentials provided by your IT department.
+- **AI returns mock responses?** This signifies the system is in **Mock Mode**. Real document indexing must be enabled by an administrator.
+- **Page won't load?** Ensure the network is stable and the AIKB service is running.
 
 ---
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.0-secure] - 2026-01-31
+
+### Zero-Trust Hardening & Verification
+
+- **Security**:
+  - **Purged "Demo Mode"**: Removed all hardcoded credentials and insecure fallback logic from `AuthService` and `UserService`.
+  - **Enforced Production Failsafes**: Implemented strict environment validation; system now "Fails Fast" and refuses to start in `production` if Supabase credentials or `INITIAL_ADMIN_PASSWORD` are missing.
+  - **Bootstrap Hardening**: Secured initial admin creation to require environmental configuration, preventing 'admin123' defaults in live environments.
+- **RAG Architecture**:
+  - **Integrity Factory**: Implemented structured JSON generation for RAG responses with machine-verified citation checking.
+  - **Adversarial Resilience**: Verified system stability against prompt injection and hallucination attempts.
+- **Verification**:
+  - Expanded integration test suite to 28 passing tests covering RBAC, Modern RAG, and Security stress tests.
+  - Implemented standardized Vitest mocks for the authentication layer to ensure consistent testing without compromising production security rules.
+
 ## [1.0.0-industrial] - 2026-01-26
 
 ### Industrial Hardening (Rounds 8-10)

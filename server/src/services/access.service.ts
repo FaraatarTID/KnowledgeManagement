@@ -41,21 +41,27 @@ export class AccessControlEngine {
   }
 }
 
+import { env } from '../config/env.js';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export class AuditService {
   private supabase: SupabaseClient | null = null;
-  private isDemoMode: boolean = false;
 
   constructor() {
-    const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const url = env.SUPABASE_URL;
+    const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (url && key) {
-      this.supabase = createClient(url, key);
-    } else {
-      this.isDemoMode = true;
+    if (!url || !key) {
+      if (env.NODE_ENV === 'production') {
+        throw new Error('FATAL: Supabase credentials missing in AuditService. Auditing is mandatory in production.');
+      } else {
+        console.warn('AuditService: Supabase credentials missing. Entering MOCK MODE (logging to console).');
+        this.supabase = null;
+        return;
+      }
     }
+
+    this.supabase = createClient(url, key);
   }
 
   async log(entry: {
@@ -65,9 +71,9 @@ export class AuditService {
     query?: string;
     granted: boolean;
     reason?: string;
-    metadata?: any; // New: For citations / sensitivity levels
+    metadata?: any;
   }) {
-    if (this.isDemoMode || !this.supabase) {
+    if (!this.supabase) {
       console.log(`[AUDIT] ${new Date().toISOString()}: ${entry.userId} performed ${entry.action} on ${entry.resourceId || 'N/A'}. Granted: ${entry.granted}. Metadata: ${JSON.stringify(entry.metadata || {})}`);
       return;
     }
@@ -93,8 +99,8 @@ export class AuditService {
   }
 
   async getResolutionStats(): Promise<{ percentage: string }> {
-    if (this.isDemoMode || !this.supabase) {
-      return { percentage: 'Demo Mode' };
+    if (!this.supabase) {
+      return { percentage: 'Mock Mode' };
     }
 
     try {

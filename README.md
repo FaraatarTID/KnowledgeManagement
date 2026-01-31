@@ -47,13 +47,15 @@ npm run dev
 
 Wait for: `Ready in X seconds`
 
-### 4. Login & Enjoy
+### 4. Login & First Run
 
 1. Open browser: **http://localhost:3000**
-2. Login with:
-   - 📧 Email: `alice@aikb.com`
-   - 🔑 Password: `admin123`
+2. Login with your configured admin credentials.
+   - _Default (Development only)_: `alice@aikb.com` / `admin123` (requires `INITIAL_ADMIN_PASSWORD` in `.env`).
 3. **Ask a question!** The AI will answer based on your documents.
+
+> [!CAUTION]
+> In **Production**, the system will refuse to start without a valid Supabase connection and a secure `INITIAL_ADMIN_PASSWORD`.
 
 ---
 
@@ -92,12 +94,12 @@ Unlike common AI apps, AIKB is built for **Enterprise Stability**:
 
 ## 🆘 Troubleshooting
 
-| Problem                   | Solution                                                           |
-| :------------------------ | :----------------------------------------------------------------- |
-| **"Port already in use"** | Restart your computer or close other terminal windows.             |
-| **"Login fails"**         | Make sure you used the email `alice@aikb.com`. Check spelling.     |
-| **"AI says mock data"**   | Normal for "Demo Mode". Ask your IT admin to connect Google Cloud. |
-| **"Can't reach website"** | Make sure both terminal windows are still open and running.        |
+| Problem                   | Solution                                                                     |
+| :------------------------ | :--------------------------------------------------------------------------- |
+| **"Port already in use"** | Restart your computer or close other terminal windows.                       |
+| **"Login fails"**         | Ensure `INITIAL_ADMIN_PASSWORD` is set in `.env`. Check Supabase connection. |
+| **"AI says mock data"**   | Normal for **Mock Mode** (Dev/Test). IT admin must connect Google Cloud.     |
+| **"Can't reach website"** | Make sure both terminal windows are still open and running.                  |
 
 ---
 

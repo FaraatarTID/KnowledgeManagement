@@ -4,10 +4,10 @@ This guide explains how to take the AIKB app from your computer and put it on th
 
 ### 🔑 Admin Bootstrapping
 
-On the first run with a fresh database, the system automatically creates the initial Admin user. By default, it uses:
+On the first run with a fresh database, the system creates the initial Admin user. You **must** provide these credentials in your `.env`.
 
-- **Email**: `alice@aikb.com`
-- **Password**: `admin123`
+- **Email**: `INITIAL_ADMIN_EMAIL` (e.g., `alice@aikb.com`)
+- **Password**: `INITIAL_ADMIN_PASSWORD` (e.g., `admin123` - **REQUIRED FOR BOOTSTRAP**)
 
 You can customize this in your `.env`:
 
@@ -149,7 +149,7 @@ npm install
 npm test
 ```
 
-_Note: Tests might fail if Supabase/GCP isn't configured in `.env`, but "Mock Mode" should pass._
+_Note: Tests will fail if Supabase/GCP isn't configured in `.env` unless explicitly placed in "Mock Mode" for development. "Demo Mode" has been completely removed for security._
 
 ### 4. Start the App
 

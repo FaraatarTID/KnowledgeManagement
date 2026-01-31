@@ -22,7 +22,7 @@ AIKB follows a "Zero Trust" approach to internal data visibility.
 
 - **Strict Deny**: If a document is missing department metadata, it is **locked by default**. It is only accessible to ADMINs.
 - **Identity-Based Perimeter**: Access control is enforced at the service layer (`VectorService`), not just the API layer. Documents are filtered against the user's cryptographically verified department in the JWT.
-- **Secure Defaults**: All uploads default to the uploader's own department unless explicitly overridden by a MANAGER or ADMIN.
+- **Fail-Fast Bootstrapping**: In production, the system refuses to initialize without a secure, environmentally-defined `INITIAL_ADMIN_PASSWORD`.
 
 ---
 
