@@ -55,7 +55,8 @@ export class RAGService {
       return {
         answer: "I couldn't find any documents in the knowledge base that match your query.",
         sources: [],
-        usage: undefined
+        usage: undefined,
+        integrity: { confidence: 'Low', isVerified: true, reason: 'No matching documents' }
       };
     }
 
@@ -113,8 +114,11 @@ export class RAGService {
     }
 
     // 5. Generate response with Gemini
+    // SECURITY: Redact PII from user query before sending to LLM
+    const redactedQuery = this.redactionService.redactPII(query);
+
     const { text, usageMetadata } = await this.geminiService.queryKnowledgeBase({
-      query,
+      query: redactedQuery,
       context,
       userProfile,
       history
@@ -184,8 +188,11 @@ export class RAGService {
         return { ...cit, verified: false, reason: 'Quote too short' };
       }
 
-      // Check existence
-      const exists = searchContext.some(ctx => ctx.includes(cleanQuote));
+      // PERFORMANCE: Normalize text for robust verification (fuzzy match)
+      const normalize = (t: string) => t.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+      const normQuote = normalize(cleanQuote);
+      
+      const exists = searchContext.some(ctx => normalize(ctx).includes(normQuote));
       return { ...cit, verified: exists };
     });
 

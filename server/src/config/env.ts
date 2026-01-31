@@ -4,13 +4,13 @@ import 'dotenv/config';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('3001'),
-  JWT_SECRET: z.string().default('development-secret-change-me-next-time'),
+  JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters long."),
   
   // Google Cloud
-  GOOGLE_CLOUD_PROJECT_ID: z.string().default(process.env.NODE_ENV === 'test' ? 'aikb-test-project' : 'aikb-mock-project'),
+  GOOGLE_CLOUD_PROJECT_ID: z.string(),
   GCP_REGION: z.string().default('us-central1'),
   GCP_KEY_FILE: z.string().default('key.json'),
-  GOOGLE_DRIVE_FOLDER_ID: z.string().optional().default(process.env.NODE_ENV === 'test' ? 'mock-folder-id' : ''),
+  GOOGLE_DRIVE_FOLDER_ID: z.string(),
   
   // Database / Supabase
   SUPABASE_URL: z.string().url().or(z.literal('')).optional(),
@@ -35,15 +35,12 @@ const validateEnv = (): Env => {
     const parsed = envSchema.parse(process.env);
     
     // Additional conditional logic
-    if (parsed.NODE_ENV === 'production') {
-       if (parsed.JWT_SECRET.length < 32) {
-          throw new Error('JWT_SECRET must be at least 32 characters long in production.');
-       }
+    if (parsed.NODE_ENV === 'production' || parsed.NODE_ENV === 'development') {
        if (!parsed.SUPABASE_URL || !parsed.SUPABASE_SERVICE_ROLE_KEY || parsed.SUPABASE_URL === '') {
-          throw new Error('FATAL: Supabase credentials are required in production.');
+          throw new Error('FATAL: Supabase credentials are required for identity management.');
        }
-       if (parsed.GOOGLE_CLOUD_PROJECT_ID === 'aikb-mock-project') {
-          throw new Error('GOOGLE_CLOUD_PROJECT_ID cannot be "aikb-mock-project" in production.');
+       if (parsed.GOOGLE_CLOUD_PROJECT_ID.includes('mock')) {
+          throw new Error('GOOGLE_CLOUD_PROJECT_ID cannot be a mock project in non-test environments.');
        }
     }
     
@@ -59,8 +56,22 @@ const validateEnv = (): Env => {
     }
     
     if (process.env.NODE_ENV === 'test') {
-       console.warn('⚠️  Validation failed in TEST mode. Continuing with defaults.');
-       return process.env as any;
+       console.warn('⚠️  Validation failed in TEST mode. Providing minimal defaults.');
+       return {
+         NODE_ENV: 'test',
+         PORT: '3001',
+         JWT_SECRET: 'test-secret-at-least-thirty-two-characters-long',
+         GOOGLE_CLOUD_PROJECT_ID: 'aikb-test-project',
+         GOOGLE_DRIVE_FOLDER_ID: 'mock-folder-id',
+         GCP_REGION: 'us-central1',
+         GCP_KEY_FILE: 'key.json',
+         GEMINI_MODEL: 'gemini-2.5-flash-lite-001',
+         EMBEDDING_MODEL: 'text-embedding-004',
+         RAG_MIN_SIMILARITY: 0.60,
+         RAG_MAX_CONTEXT_CHARS: 100000,
+         ALLOWED_ORIGINS: 'http://localhost:3000',
+         ...process.env
+       } as any;
     }
     process.exit(1);
   }

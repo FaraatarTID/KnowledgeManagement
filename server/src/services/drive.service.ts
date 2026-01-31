@@ -4,32 +4,20 @@ import fs from 'fs';
 import path from 'path';
 
 export class DriveService {
-  private drive: drive_v3.Drive | null = null;
-  private isMock: boolean = false;
+  private drive: drive_v3.Drive;
 
   constructor(authKeyPath: string) {
-    try {
-      const auth = new google.auth.GoogleAuth({
-        keyFile: authKeyPath,
-        scopes: [
-          'https://www.googleapis.com/auth/drive', // Upgraded to full access for renaming
-          'https://www.googleapis.com/auth/drive.file'
-        ]
-      });
-      this.drive = google.drive({ version: 'v3', auth });
-    } catch (e) {
-      console.warn('DriveService: Failed to initialize Google Drive client (missing key file?). Entering MOCK MODE.');
-      this.isMock = true;
-    }
+    const auth = new google.auth.GoogleAuth({
+      keyFile: authKeyPath,
+      scopes: [
+        'https://www.googleapis.com/auth/drive',
+        'https://www.googleapis.com/auth/drive.file'
+      ]
+    });
+    this.drive = google.drive({ version: 'v3', auth });
   }
 
   async uploadFile(folderId: string, fileName: string, filePath: string, mimeType: string): Promise<string> {
-    if (this.isMock || !this.drive) {
-      const mockId = `mock-upload-${Date.now()}`;
-      console.log(`DriveService [MOCK]: Uploaded ${fileName} to folder ${folderId}. Assigned ID: ${mockId}`);
-      return mockId;
-    }
-
     try {
       const response = await this.drive.files.create({
         requestBody: {
@@ -51,10 +39,6 @@ export class DriveService {
   }
 
   async renameFile(fileId: string, newName: string): Promise<boolean> {
-    if (this.isMock || !this.drive) {
-      console.log(`DriveService [MOCK]: Renamed ${fileId} to ${newName}`);
-      return true;
-    }
     try {
       await this.drive.files.update({
         fileId: fileId,
@@ -70,13 +54,6 @@ export class DriveService {
   }
 
   async listFiles(folderId: string): Promise<drive_v3.Schema$File[]> {
-    if (this.isMock || !this.drive) {
-      console.log('DriveService: Recurring mock files for listFiles');
-      return [
-        { id: 'mock-1', name: 'Mock Project Plan.pdf', mimeType: 'application/pdf', modifiedTime: new Date().toISOString(), webViewLink: 'https://docs.google.com/document/d/mock-1' },
-        { id: 'mock-2', name: 'Mock Budget 2024.xlsx', mimeType: 'application/vnd.google-apps.spreadsheet', modifiedTime: new Date().toISOString(), webViewLink: 'https://docs.google.com/spreadsheets/d/mock-2' }
-      ];
-    }
     let allFiles: drive_v3.Schema$File[] = [];
     let pageToken: string | undefined = undefined;
 
@@ -103,7 +80,6 @@ export class DriveService {
   }
 
   async exportDocument(fileId: string, mimeType: string = 'text/plain'): Promise<string> {
-    if (this.isMock || !this.drive) return '[MOCK CONTENT]';
     const response = await this.drive.files.export({
       fileId: fileId,
       mimeType: mimeType
@@ -112,8 +88,6 @@ export class DriveService {
   }
 
   async downloadFile(fileId: string): Promise<Buffer> {
-    if (this.isMock || !this.drive) return Buffer.from('Mock binary content');
-    
     // SECURITY: Memory Guard
     // Check file size before downloading to prevent OOM (Max 100MB)
     const MAX_SIZE = 100 * 1024 * 1024; 
@@ -135,7 +109,6 @@ export class DriveService {
   }
 
   async watchFolder(folderId: string, webhookUrl: string) {
-    if (this.isMock || !this.drive) return { id: 'mock-channel', resourceId: 'mock-resource' };
     const channel = await this.drive.files.watch({
       fileId: folderId,
       requestBody: {
@@ -149,13 +122,10 @@ export class DriveService {
   }
 
   async getFileMetadata(fileId: string): Promise<drive_v3.Schema$File | null> {
-    if (this.isMock || !this.drive) {
-      return { id: fileId, name: 'Mock File.pdf', mimeType: 'application/pdf' };
-    }
     try {
       const response = await this.drive.files.get({
         fileId: fileId,
-        fields: 'id, name, mimeType, webViewLink, modifiedTime, owners'
+        fields: 'id, name, mimeType, webViewLink, modifiedTime, owners, size'
       });
       return response.data;
     } catch (e) {
@@ -165,7 +135,6 @@ export class DriveService {
   }
 
   async checkPermission(fileId: string, userEmail: string): Promise<boolean> {
-    if (this.isMock || !this.drive) return true;
     try {
       const response = await this.drive.permissions.list({
         fileId: fileId,
@@ -180,7 +149,6 @@ export class DriveService {
   }
 
   async checkHealth(): Promise<{ status: 'OK' | 'ERROR'; message?: string }> {
-    if (this.isMock || !this.drive) return { status: 'OK', message: 'Mock Mode' };
     try {
       // Test by listing root folder (just 1 file)
       await this.drive.files.list({ pageSize: 1 });

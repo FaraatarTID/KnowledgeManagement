@@ -97,7 +97,10 @@ export class SyncService {
        });
     }
   }
-
+  /**
+   * Main entry point for indexing a file.
+   * Everything is wrapped in a transaction with rollback capability.
+   */
   async indexFile(file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }, initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string }): Promise<string> {
     if (this.isSyncing) {
        console.warn(`SyncService: Cannot index ${file.name} while a full sync is in progress.`);
@@ -111,54 +114,15 @@ export class SyncService {
     const allMeta = await this.vectorService.getAllMetadata();
     const existed = !!allMeta[file.id];
 
-    try {
-      // Pre-transaction validation
-      if (!file.id || !file.name) {
-        throw new Error('Invalid file: missing id or name');
-      }
-
-      // Execute indexing within transaction
-      const result = await this._doIndexFileWithTransaction(file, initialMetadata, transactionId);
-      
-      console.log(`[Transaction ${transactionId}] Completed successfully`);
-      return result;
-    } catch (e: any) {
-      console.error(`[Transaction ${transactionId}] Failed:`, e.message);
-      
-      // SECURITY: Safe rollback - only delete if the document was BRAND NEW
-      // and failed its first indexing. If it existed before, we preserve the old version.
-      if (!existed) {
-         await this.rollbackIndexTransaction(file.id, transactionId);
-      } else {
-         console.warn(`[Transaction ${transactionId}] Preserving old document version after update failure.`);
-      }
-      
-      await this.updateSyncStatus(file.id, {
-        status: 'FAILED',
-        message: e.message,
-        transactionId,
-        lastSync: new Date().toISOString(),
-        fileName: file.name
-      });
-      throw e;
-    }
-  }
-
-  /**
-   * Transactional indexing with rollback capability
-   */
-  private async _doIndexFileWithTransaction(
-    file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }, 
-    initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string },
-    transactionId?: string
-  ): Promise<string> {
-    console.log(`SyncService: Indexing ${file.name} (TX: ${transactionId})...`);
-    
     // Track what needs to be rolled back
     const rollbackActions: (() => Promise<void>)[] = [];
 
     try {
-      // 1. Extract text
+      if (!file.id || !file.name) {
+        throw new Error('Invalid file: missing id or name');
+      }
+
+      // 1. Extract text content
       let textContent = '';
       if (file.mimeType === 'application/vnd.google-apps.document') {
          try {
@@ -182,32 +146,33 @@ export class SyncService {
          textContent = `Filename: ${file.name}\nType: ${file.mimeType}`; 
       }
 
-      if (!textContent) return file.id;
+      if (!textContent) {
+        console.warn(`[Transaction ${transactionId}] No content extracted for ${file.name}`);
+        return file.id;
+      }
 
-      // 2. Extract metadata
+      // 2. Metadata Extraction & Normalization
       const { metadata, cleanContent } = this.parsingService.extractMetadata(textContent);
-      
-      // 3. Apply overrides
       const override = this.localMetadataService.getOverride(file.id);
-      const finalTitle = override?.title || metadata.title || file.name;
-      const finalDepartment = override?.department || metadata.department || this.detectDepartment(file.name);
-      const finalSensitivity = override?.sensitivity || metadata.sensitivity || 'INTERNAL';
-      const finalCategory = override?.category || metadata.category || 'General';
+      
+      const finalMetadata = {
+        title: override?.title || metadata.title || file.name,
+        department: override?.department || metadata.department || this.detectDepartment(file.name),
+        sensitivity: override?.sensitivity || metadata.sensitivity || 'INTERNAL',
+        category: override?.category || metadata.category || 'General',
+        owner: metadata.owner || file.owners?.[0]?.emailAddress
+      };
 
-      // 4. Chunk content
+      // 3. Chunking & Embedding
       const chunks = this.parsingService.chunkContent(cleanContent, 1000);
-
-      // 5. Embed and prepare upsert with concurrency control
       const BATCH_SIZE = 5;
-      const CONCURRENCY = 3; // Limit parallel API calls to prevent rate limits
+      const CONCURRENCY = 3; 
       const itemsToUpsert: any[] = [];
 
-      // Process chunks in batches with concurrency control
       for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
         const batch = chunks.slice(i, i + BATCH_SIZE);
-        
-        // Process this batch with concurrency limit
         const batchEmbeddings: number[][] = [];
+        
         for (let j = 0; j < batch.length; j += CONCURRENCY) {
           const concurrentChunk = batch.slice(j, j + CONCURRENCY);
           const concurrentEmbeddings = await Promise.all(
@@ -226,88 +191,62 @@ export class SyncService {
             values: embedding,
             metadata: {
               docId: file.id,
-              title: finalTitle,
               text: chunk,
               link: file.webViewLink || '#',
               mimeType: file.mimeType,
-              department: finalDepartment,
-              sensitivity: finalSensitivity,
-              category: finalCategory,
               modifiedAt: file.modifiedTime || new Date().toISOString(),
-              owner: metadata.owner || file.owners?.[0]?.emailAddress
+              ...finalMetadata
             }
           });
         });
       }
 
-      // 6. Record rollback action BEFORE upsert
+      // 4. Persistence with Rollback Guard
       rollbackActions.unshift(async () => {
         console.log(`[Rollback ${transactionId}] Removing vectors for ${file.id}`);
         await this.vectorService.deleteDocument(file.id);
       });
 
-      // 7. Upsert vectors (this is the critical operation)
       if (itemsToUpsert.length > 0) {
-        // Log progress
-        console.log(`[Transaction ${transactionId}] Upserting ${itemsToUpsert.length} vectors...`);
+        await this.vectorService.upsertVectors(itemsToUpsert);
         
-        try {
-          await this.vectorService.upsertVectors(itemsToUpsert);
-          
-          // 8. Record history
-          await this.historyService.recordEvent({
-            event_type: 'UPDATED', 
-            doc_id: file.id!,
-            doc_name: file.name!,
-            details: `Indexed ${chunks.length} chunks (${itemsToUpsert.length} vectors). TX: ${transactionId}`
-          });
+        await this.historyService.recordEvent({
+          event_type: 'UPDATED', 
+          doc_id: file.id,
+          doc_name: file.name,
+          details: `Indexed ${chunks.length} chunks. TX: ${transactionId}`
+        });
 
-          // 9. Update sync status
-          await this.updateSyncStatus(file.id, {
-            status: 'SUCCESS',
-            message: `Successfully indexed ${chunks.length} chunks (${itemsToUpsert.length} vectors)`,
-            transactionId,
-            lastSync: new Date().toISOString(),
-            fileName: file.name
-          });
-        } catch (upsertError: any) {
-          console.error(`[Transaction ${transactionId}] Upsert failed:`, upsertError);
-          
-          // Record failure
-          await this.historyService.recordEvent({
-            event_type: 'SYNC_FAILED',
-            doc_id: file.id!,
-            doc_name: file.name!,
-            details: `Upsert failed: ${upsertError.message}. TX: ${transactionId}`
-          });
-
-          throw upsertError;
-        }
-      } else {
-        console.warn(`[Transaction ${transactionId}] No vectors generated for ${file.name}`);
         await this.updateSyncStatus(file.id, {
-          status: 'WARNING',
-          message: 'No content extracted or chunks generated',
+          status: 'SUCCESS',
+          message: `Indexed ${chunks.length} chunks`,
           transactionId,
           lastSync: new Date().toISOString(),
           fileName: file.name
         });
       }
 
+      console.log(`[Transaction ${transactionId}] Completed successfully.`);
       return file.id;
-    } catch (error) {
-      // If we have rollback actions, execute them
-      if (rollbackActions.length > 0) {
-        console.log(`[Rollback ${transactionId}] Executing ${rollbackActions.length} rollback actions`);
+
+    } catch (e: any) {
+      console.error(`[Transaction ${transactionId}] Process failed:`, e.message);
+      
+      // SECURITY: Rollback only if it was a new document attempt 
+      if (!existed && rollbackActions.length > 0) {
         for (const action of rollbackActions) {
-          try {
-            await action();
-          } catch (rollbackError) {
-            console.error(`[Rollback ${transactionId}] Action failed:`, rollbackError);
-          }
+          try { await action(); } catch (err) { console.error('Rollback action failed', err); }
         }
       }
-      throw error;
+
+      await this.updateSyncStatus(file.id, {
+        status: 'FAILED',
+        message: e.message,
+        transactionId,
+        lastSync: new Date().toISOString(),
+        fileName: file.name
+      });
+      throw e;
     }
   }
 
@@ -317,10 +256,7 @@ export class SyncService {
   private async rollbackIndexTransaction(docId: string, transactionId: string): Promise<void> {
     console.log(`[Rollback ${transactionId}] Rolling back index for ${docId}`);
     try {
-      // Remove any vectors that might have been created
       await this.vectorService.deleteDocument(docId);
-      
-      // Update status to reflect rollback
       await this.updateSyncStatus(docId, {
         status: 'ROLLED_BACK',
         message: 'Transaction rolled back due to error',
@@ -329,106 +265,7 @@ export class SyncService {
       });
     } catch (e) {
       console.error(`[Rollback ${transactionId}] Failed to rollback:`, e);
-      // Don't throw - rollback errors are logged but don't fail the original error
     }
-  }
-
-  private async _doIndexFile(file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }, initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string }): Promise<string> {
-    console.log(`SyncService: Indexing ${file.name}...`);
-    
-    // 3. Extract text
-    let textContent = '';
-    if (file.mimeType === 'application/vnd.google-apps.document') {
-       textContent = await this.driveService.exportDocument(file.id);
-    } else if (file.mimeType === 'application/pdf' || 
-               file.mimeType?.includes('wordprocessing') || 
-               file.mimeType?.startsWith('text/') ||
-               file.mimeType?.includes('markdown')) {
-       // Download and extract using ExtractionService
-       try {
-         const buffer = await this.driveService.downloadFile(file.id);
-         textContent = await this.extractionService.extractFromBuffer(buffer, file.mimeType || 'application/octet-stream');
-       } catch (e) {
-         console.warn(`SyncService: Failed to download/extract ${file.name}. Indexing metadata only.`);
-         textContent = `Filename: ${file.name}\nType: ${file.mimeType}\n\n(Content could not be extracted)`;
-       }
-    } else {
-       // For OTHER binary files, index Title + Type
-       textContent = `Filename: ${file.name}\nType: ${file.mimeType}`; 
-    }
-
-    if (!textContent) return file.id;
-
-    // 4. Extract metadata from YAML frontmatter (if present)
-    const { metadata, cleanContent } = this.parsingService.extractMetadata(textContent);
-    
-    // 4.5 Apply Local Overrides (Stability Feature)
-    const override = this.localMetadataService.getOverride(file.id);
-    const finalTitle = override?.title || metadata.title || file.name;
-    const finalDepartment = override?.department || metadata.department || this.detectDepartment(file.name);
-    const finalSensitivity = override?.sensitivity || metadata.sensitivity || 'INTERNAL';
-    const finalCategory = override?.category || metadata.category || 'General';
-
-    // 5. Chunk using ParsingService (paragraph-aware) or fallback
-    const chunks = this.parsingService.chunkContent(cleanContent, 1000);
-
-    // 6. Embed & Prepare Upsert (Parallel with Concurrency Control)
-    // We'll process chunks in batches of 5 to avoid hitting Rate Limits while speeding up indexing.
-    const BATCH_SIZE = 5;
-    const itemsToUpsert: any[] = [];
-
-    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-      const batch = chunks.slice(i, i + BATCH_SIZE);
-      const batchEmbeddings = await Promise.all(
-        batch.map(chunk => this.geminiService.generateEmbedding(chunk))
-      );
-
-      batchEmbeddings.forEach((embedding, index) => {
-        const chunkIndex = i + index;
-        const chunk = batch[index];
-        if (!chunk) return;
-
-        itemsToUpsert.push({
-          id: `${file.id}_${chunkIndex}`,
-          values: embedding,
-          metadata: {
-            docId: file.id,
-            title: finalTitle,
-            text: chunk,
-            link: file.webViewLink || '#',
-            mimeType: file.mimeType,
-            department: finalDepartment,
-            sensitivity: finalSensitivity,
-            category: finalCategory,
-            modifiedAt: file.modifiedTime || new Date().toISOString(),
-            owner: metadata.owner || file.owners?.[0]?.emailAddress
-          }
-        });
-      });
-    }
-
-    // 7. Record History Event
-    await this.historyService.recordEvent({
-      event_type: 'UPDATED', 
-      doc_id: file.id!,
-      doc_name: file.name!,
-      details: `Indexed ${chunks.length} chunks.`
-    });
-
-    if (itemsToUpsert.length > 0) {
-      // Finalize indexing
-      await this.vectorService.upsertVectors(itemsToUpsert);
-      
-      // STRATEGIC FIX: Log Sync Success to Status Tracking
-      await this.updateSyncStatus(file.id, {
-        status: 'SUCCESS',
-        message: `Successfully indexed ${chunks.length} chunks`,
-        lastSync: new Date().toISOString(),
-        fileName: file.name
-      });
-    }
-
-    return file.id;
   }
 
   private async updateSyncStatus(docId: string, status: any) {
@@ -437,99 +274,28 @@ export class SyncService {
          current[docId] = { ...status, updatedAt: new Date().toISOString() };
          return current;
       });
-
-      // Log sync status for monitoring
-      if (status.status === 'SUCCESS') {
-        console.log('SYNC_SUCCESS', JSON.stringify({
-          docId,
-          fileName: status.fileName,
-          message: status.message,
-          transactionId: status.transactionId
-        }));
-      } else if (status.status === 'FAILED') {
-        console.error('SYNC_FAILED', JSON.stringify({
-          docId,
-          fileName: status.fileName,
-          error: status.message,
-          transactionId: status.transactionId
-        }));
-      }
     } catch (e: any) {
-      console.error('SYNC_STATUS_UPDATE_FAILED', JSON.stringify({
-        docId,
-        error: e.message,
-        timestamp: new Date().toISOString()
-      }));
+      console.error('SYNC_STATUS_UPDATE_FAILED', e.message);
     }
   }
 
-  /**
-   * Optimized department detection using Map lookup
-   * Patterns are checked in order of likelihood
-   */
   private detectDepartment(filename: string): string {
     const fn = filename.toLowerCase();
-    
-    // Use Map for O(1) lookup instead of sequential if statements
-    const departmentPatterns = new Map([
-      ['it', ['security', 'it', 'technical', 'infrastructure']],
-      ['compliance', ['legal', 'compliance', 'regulatory', 'policy']],
-      ['marketing', ['marketing', 'sales', 'promotion', 'campaign']],
-      ['engineering', ['engineering', 'product', 'dev', 'development', 'code']],
-      ['hr', ['hr', 'human', 'resources', 'personnel', 'recruit']],
-      ['finance', ['finance', 'budget', 'accounting', 'expense', 'revenue']]
-    ]);
-
-    // Check each department's patterns
-    for (const [dept, patterns] of departmentPatterns.entries()) {
-      if (patterns.some(pattern => fn.includes(pattern))) {
-        return dept.charAt(0).toUpperCase() + dept.slice(1);
-      }
-    }
-
+    if (fn.includes('hr') || fn.includes('people')) return 'HR';
+    if (fn.includes('finance') || fn.includes('budget')) return 'Finance';
+    if (fn.includes('it') || fn.includes('security') || fn.includes('tech')) return 'IT';
+    if (fn.includes('sales') || fn.includes('marketing')) return 'Sales';
+    if (fn.includes('legal')) return 'Legal';
     return 'General';
   }
 
-  /**
-   * Log extraction failures with comprehensive telemetry
-   */
   private async logExtractionFailure(file: { id: string, name: string, mimeType?: string }, error: any, operation: string) {
-    const errorDetails = {
-      fileId: file.id,
-      fileName: file.name,
-      mimeType: file.mimeType,
-      operation: operation,
-      error: error.message,
-      stack: error.stack,
-      timestamp: new Date().toISOString(),
-      transactionId: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    };
-    
-    console.error('EXTRACTION_FAILED', JSON.stringify(errorDetails));
-    
-    // Log to history for admin review
+    console.warn(`SyncService: Extraction failure on ${file.name} during ${operation}: ${error.message}`);
     await this.historyService.recordEvent({
       event_type: 'EXTRACTION_FAILED',
       doc_id: file.id,
       doc_name: file.name,
-      details: `Extraction failed during ${operation}: ${error.message}. Metadata-only indexing.`
+      details: `Operation ${operation} failed: ${error.message}`
     });
-
-    // Send alert to monitoring system in production
-    if (process.env.NODE_ENV === 'production' && process.env.ALERT_WEBHOOK_URL) {
-      try {
-        await fetch(process.env.ALERT_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            severity: 'WARNING',
-            category: 'EXTRACTION_FAILURE',
-            details: errorDetails
-          })
-        });
-      } catch (alertError) {
-        console.error('Failed to send alert:', alertError);
-      }
-    }
   }
 }

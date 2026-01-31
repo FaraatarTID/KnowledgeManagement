@@ -5,19 +5,7 @@ export class GeminiService {
   private model: GenerativeModel;
   private embeddingModel: GenerativeModel;
 
-  private isMock: boolean = false;
-
   constructor(projectId: string, location: string = 'us-central1') {
-    if (projectId === 'aikb-mock-project') {
-      console.log('GeminiService initialized in MOCK MODE.');
-      this.isMock = true;
-      // Initialize dummy objects to satisfy TypeScript, but they won't be used
-      this.vertexAI = {} as any;
-      this.model = {} as any;
-      this.embeddingModel = {} as any;
-      return;
-    }
-
     this.vertexAI = new VertexAI({
       project: projectId,
       location: location
@@ -39,10 +27,6 @@ export class GeminiService {
   }
 
   async generateEmbedding(text: string): Promise<number[]> {
-    if (this.isMock) {
-      // Return 768-dim dummy vector
-      return new Array(768).fill(0).map(() => Math.random());
-    }
     const result = await (this.embeddingModel as any).embedContent({
       content: { role: 'user', parts: [{ text }] }
     });
@@ -57,16 +41,6 @@ export class GeminiService {
     history?: { role: 'user' | 'model'; content: string }[];
   }) {
     const { query, context, userProfile, history = [] } = params;
-
-    if (this.isMock) {
-      const historySummary = history.length > 0 ? ` with ${history.length} previous messages` : '';
-      return {
-        text: `[MOCK RESPONSE] Query: "${query}"${historySummary}.\nContext: ${context.length} relevant snippets found.\n\nReady for production data.`,
-        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50, totalTokenCount: 150 }
-      };
-    }
-    
-    // Format conversation history
     const historyText = history.length > 0
       ? `\n\nConversation History:\n${history.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n')}`
       : '';
@@ -135,7 +109,6 @@ Begin JSON Response:`;
   }
 
   async checkHealth(): Promise<{ status: 'OK' | 'ERROR'; message?: string }> {
-    if (this.isMock) return { status: 'OK', message: 'Mock Mode (No Google Cloud)' };
     try {
       // Simple test: generate embedding for a single word
       await this.generateEmbedding('healthcheck');

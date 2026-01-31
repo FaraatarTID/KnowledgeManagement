@@ -37,15 +37,11 @@ export class AuthService {
     const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!url || !key) {
-      if (env.NODE_ENV === 'production') {
-        throw new Error('FATAL: Supabase credentials (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are missing. Authentication cannot function in production.');
-      } else {
-        console.warn('AuthService: Supabase credentials missing. Entering MOCK MODE (dev/test only).');
-        // We'll use a dummy client for non-production so it doesn't crash, 
-        // though calls will likely fail if not caught by controller mocks.
-        this.supabase = {} as any; 
+      if (env.NODE_ENV === 'test') {
+        this.supabase = {} as any;
         return;
       }
+      throw new Error('FATAL: Supabase credentials (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are missing. Authentication cannot function.');
     }
 
     this.supabase = createClient(url, key);

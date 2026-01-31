@@ -52,13 +52,11 @@ export class AuditService {
     const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!url || !key) {
-      if (env.NODE_ENV === 'production') {
-        throw new Error('FATAL: Supabase credentials missing in AuditService. Auditing is mandatory in production.');
-      } else {
-        console.warn('AuditService: Supabase credentials missing. Entering MOCK MODE (logging to console).');
+      if (env.NODE_ENV === 'test') {
         this.supabase = null;
         return;
       }
+      throw new Error('FATAL: Supabase credentials (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are missing. Auditing is mandatory.');
     }
 
     this.supabase = createClient(url, key);

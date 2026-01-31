@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { LocalMetadataService } from './localMetadata.service.js';
 import { JSONStore } from '../utils/jsonStore.js';
+import { TopKHeap } from '../utils/heap.js';
 
 interface VectorItem {
   id: string;
@@ -20,7 +21,6 @@ interface VectorItem {
 }
 
 export class VectorService {
-  private isMock: boolean = false;
   private localMetadataService: LocalMetadataService;
   private store: JSONStore<VectorItem[]>;
   private storagePath: string;
@@ -29,11 +29,6 @@ export class VectorService {
     this.storagePath = storagePath || path.join(process.cwd(), 'data', 'vectors.json');
     this.localMetadataService = new LocalMetadataService();
     this.store = new JSONStore(this.storagePath, []);
-    
-    if (projectId.includes('mock')) {
-       this.isMock = true;
-       console.log('VectorService initialized in MOCK MODE.');
-    }
   }
 
   getVectorCount(): number {
@@ -45,15 +40,6 @@ export class VectorService {
   }
 
   async addItem(item: VectorItem): Promise<void> {
-    if (this.isMock) {
-      await this.store.update(v => {
-        const idx = v.findIndex(x => x.id === item.id);
-        if (idx >= 0) v[idx] = item; else v.push(item);
-        return v;
-      });
-      return;
-    }
-
     await this.store.update(current => {
       const idx = current.findIndex(v => v.id === item.id);
       if (idx >= 0) current[idx] = item; else current.push(item);
@@ -76,30 +62,17 @@ export class VectorService {
     topK: number;
     filters?: { department?: string; role?: string; [key: string]: any };
   }) {
-    if (this.isMock) {
-       return [
-         { id: 'mock-chunk-1', score: 0.95, metadata: { docId: 'd1', title: 'Security Policy 2024', text: 'Mock result regarding security policy...' } },
-         { id: 'mock-chunk-2', score: 0.88, metadata: { docId: 'd2', title: 'Product Specs v2', text: 'Another mock result...' } }
-       ];
-    }
-
     if (!params.filters?.role || !params.filters?.department) {
       console.warn('VectorService: Rejected search due to missing security filters.');
       return [];
     }
 
     const vectors = this.store.state;
-    const THRESHOLD = 1000;
-    const useOptimized = vectors.length >= THRESHOLD;
-
-    if (useOptimized) {
-      return this.optimizedSimilaritySearch(params, vectors);
-    } else {
-      return this.linearSimilaritySearch(params, vectors);
-    }
+    // PERFORMANCE: Use O(N log K) heap-based search for all queries
+    return this.efficientSimilaritySearch(params, vectors);
   }
 
-  private async optimizedSimilaritySearch(params: {
+  private async efficientSimilaritySearch(params: {
     embedding: number[];
     topK: number;
     filters?: { department?: string; role?: string };
@@ -107,6 +80,7 @@ export class VectorService {
     const start = Date.now();
     const queryVec = params.embedding;
     
+    // Authorization matrices
     const sensitivityMap: Record<string, number> = { 'PUBLIC': 0, 'INTERNAL': 1, 'CONFIDENTIAL': 2, 'RESTRICTED': 3, 'EXECUTIVE': 4 };
     const roleMap: Record<string, number> = { 'VIEWER': 1, 'EDITOR': 2, 'MANAGER': 3, 'ADMIN': 4 };
     
@@ -114,97 +88,40 @@ export class VectorService {
     const userClearance = roleMap[userRole] || 1;
     const userDept = (params.filters?.department || '').toLowerCase();
 
-    const filteredVectors = vectors.filter(vec => {
+    // PERFORMANCE: Use Min-Heap for Top-K selection (O(N log K))
+    const heap = new TopKHeap<VectorItem>(params.topK);
+    const BATCH_SIZE = 100;
+
+    for (let i = 0; i < vectors.length; i++) {
+      const vec = vectors[i]!;
+      
+      // 1. Mandatory Security Filter (Fail-Fast)
       const docSensitivity = (vec.metadata.sensitivity || 'INTERNAL').toUpperCase();
       const docRequiredLevel = sensitivityMap[docSensitivity] ?? 1;
       
-      // 1. Sensitivity Clearance Check
-      if (userClearance < docRequiredLevel) return false;
+      if (userClearance < docRequiredLevel) continue;
 
-      // 2. Department Isolation (Strict Deny)
       if (userRole !== 'ADMIN') {
          const vecDept = (vec.metadata.department || '').toLowerCase();
-         const userDeptNormal = userDept.toLowerCase();
-
-         // Only allow if:
-         // - Department matches exactly
-         // - OR document is explicitly 'public' or 'general' (if intended)
-         // FOR NOW: Strict match for production isolation.
-         if (vecDept !== userDeptNormal && vecDept !== 'general' && vecDept !== 'public') {
-             return false;
-         }
+         if (vecDept !== userDept && vecDept !== 'general' && vecDept !== 'public') continue;
       }
-      return true;
-    });
 
-    const BATCH_SIZE = 50;
-    const scoredResults: { vec: VectorItem; score: number }[] = [];
+      // 2. Similarity Computation
+      const score = this.cosineSimilarity(queryVec, vec.values);
+      heap.add(score, vec);
 
-    for (let i = 0; i < filteredVectors.length; i += BATCH_SIZE) {
-      const batch = filteredVectors.slice(i, i + BATCH_SIZE);
-      const batchScores = await Promise.all(
-        batch.map(vec => Promise.resolve({
-          vec,
-          score: this.cosineSimilarity(queryVec, vec.values)
-        }))
-      );
-      scoredResults.push(...batchScores);
-      if (i % 200 === 0) await new Promise(resolve => setImmediate(resolve));
+      // 3. Voluntary Event Loop Yielding (Prevent blocking on massive datasets)
+      if (i > 0 && i % BATCH_SIZE === 0) {
+        await new Promise(resolve => setImmediate(resolve));
+      }
     }
 
-    const topK = Math.min(params.topK, scoredResults.length);
-    const topResults = scoredResults.sort((a, b) => b.score - a.score).slice(0, topK);
-
-    console.log(`VectorService: Optimized search completed in ${Date.now() - start}ms`);
-    return topResults.map(r => ({ id: r.vec.id, score: r.score, metadata: r.vec.metadata }));
-  }
-
-  private linearSimilaritySearch(params: {
-    embedding: number[];
-    topK: number;
-    filters?: { department?: string; role?: string };
-  }, vectors: VectorItem[]) {
-    const start = Date.now();
-    const queryVec = params.embedding;
-    
-    const sensitivityMap: Record<string, number> = { 'PUBLIC': 0, 'INTERNAL': 1, 'CONFIDENTIAL': 2, 'RESTRICTED': 3, 'EXECUTIVE': 4 };
-    const roleMap: Record<string, number> = { 'VIEWER': 1, 'EDITOR': 2, 'MANAGER': 3, 'ADMIN': 4 };
-    
-    const userRole = (params.filters?.role || '').toUpperCase();
-    const userClearance = roleMap[userRole] || 1;
-    const userDept = (params.filters?.department || '').toLowerCase();
-
-    const filteredVectors = vectors.filter(vec => {
-      const docSensitivity = (vec.metadata.sensitivity || 'INTERNAL').toUpperCase();
-      const docRequiredLevel = sensitivityMap[docSensitivity] ?? 1;
-      
-      // 1. Sensitivity Clearance Check
-      if (userClearance < docRequiredLevel) return false;
-
-      // 2. Department Isolation (Strict Deny)
-      if (userRole !== 'ADMIN') {
-         const vecDept = (vec.metadata.department || '').toLowerCase();
-         const userDeptNormal = userDept.toLowerCase();
-
-         if (vecDept !== userDeptNormal && vecDept !== 'general' && vecDept !== 'public') {
-             return false;
-         }
-      }
-      return true;
-    });
-
-    const scored = filteredVectors.map(vec => ({
-      ...vec,
-      score: this.cosineSimilarity(queryVec, vec.values)
-    }));
-
-    scored.sort((a, b) => b.score - a.score);
-    console.log(`VectorService: Linear search completed in ${Date.now() - start}ms`);
-    return scored.slice(0, params.topK);
+    const results = heap.getResults();
+    console.log(`VectorService: Efficient search (N=${vectors.length}, K=${params.topK}) completed in ${Date.now() - start}ms`);
+    return results.map(r => ({ id: r.item.id, score: r.score, metadata: r.item.metadata }));
   }
 
   async deleteDocument(docId: string) {
-    if (this.isMock) return;
     await this.store.update(current => {
        return current.filter(v => v.metadata.docId !== docId);
     });
@@ -233,8 +150,6 @@ export class VectorService {
   }
 
   async updateDocumentMetadata(docId: string, metadata: { title?: string; category?: string; sensitivity?: string; department?: string }) {
-    if (this.isMock) return;
-    
     await this.localMetadataService.setOverride(docId, metadata);
 
     await this.store.update(current => {
@@ -255,11 +170,6 @@ export class VectorService {
   }
 
   async upsertVectors(vectors: { id: string; values: number[]; metadata: any }[]) {
-    if (this.isMock) {
-       await this.addItems(vectors as any);
-       return;
-    }
-
     await this.store.update(current => {
       const newIds = new Set(vectors.map(v => v.id));
       const filtered = current.filter(v => !newIds.has(v.id));
@@ -294,7 +204,6 @@ export class VectorService {
   }
 
   async checkHealth(): Promise<{ status: 'OK' | 'ERROR'; message?: string }> {
-    if (this.isMock) return { status: 'OK', message: 'Mock Mode' };
     try {
       if (fs.existsSync(this.storagePath)) {
         return { status: 'OK', message: `${this.store.state.length} vectors` };

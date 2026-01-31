@@ -41,10 +41,22 @@ class MockGeminiFail extends GeminiService {
   }
 }
 
+class MockVector extends VectorService {
+  async similaritySearch() {
+    return [
+      { 
+        id: 'doc1', 
+        score: 1.0, 
+        metadata: { docId: 'doc1', title: 'Policy', text: 'This is the official policy text.' } 
+      }
+    ] as any;
+  }
+}
+
 describe('Adversarial RAG Verification', () => {
     const mockGemini = new MockGeminiFail('aikb-mock-project');
-    const vector = new VectorService('aikb-mock-project', 'us-central1');
-    const rag = new RAGService(mockGemini, vector);
+    const mockVector = new MockVector('aikb-mock-project', 'us-central1');
+    const rag = new RAGService(mockGemini, mockVector);
 
     it('should catch injection attacks and return low confidence', async () => {
         const res = await rag.query({

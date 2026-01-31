@@ -19,5 +19,5 @@ export const updatePasswordSchema = z.object({
 });
 
 export const userIdSchema = z.object({
-  id: z.string().uuid().or(z.string().min(1)), // Support both UUIDs and strings (for demo)
+  id: z.string().uuid(),
 });

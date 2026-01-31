@@ -87,25 +87,6 @@ export class DocumentController {
     const user = req.user!;
     const vectorMetadata = await vectorService.getAllMetadata();
 
-    // Mock Mode Support
-    if (!process.env.GOOGLE_DRIVE_FOLDER_ID) {
-        const mockDocs = [
-          { id: 'mock-1', name: 'Mock Project Plan.pdf', category: 'Compliance', department: 'IT', sensitivity: 'CONFIDENTIAL', status: 'Synced', date: new Date(), owner: 'alice@aikb.com', link: 'https://docs.google.com/document/d/mock-1' },
-          { id: 'mock-2', name: 'Mock Budget 2024.xlsx', category: 'Engineering', department: 'Engineering', sensitivity: 'INTERNAL', status: 'Synced', date: new Date(), owner: 'charlie@aikb.com', link: 'https://docs.google.com/spreadsheets/d/mock-2' }
-        ];
-        
-        const mergedMock = mockDocs.map(d => ({
-          ...d,
-          name: vectorMetadata[d.id]?.title || d.name,
-          category: vectorMetadata[d.id]?.category || d.category,
-          sensitivity: vectorMetadata[d.id]?.sensitivity || d.sensitivity,
-          link: vectorMetadata[d.id]?.link || d.link
-        }));
-
-        if (user.role === 'ADMIN') return res.json(mergedMock);
-        return res.json(mergedMock.filter(d => d.department === user.department));
-    }
-    
     let documents: any[] = [];
     
     if (process.env.GOOGLE_DRIVE_FOLDER_ID && process.env.GOOGLE_DRIVE_FOLDER_ID !== 'mock-folder') {
@@ -224,14 +205,8 @@ export class DocumentController {
   });
 
   static syncAll: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
-    if (!process.env.GOOGLE_DRIVE_FOLDER_ID) {
-      await historyService.recordEvent({
-        event_type: 'UPDATED',
-        doc_id: 'internal-sync',
-        doc_name: 'System Sync',
-        details: 'Simulated sync completed successfully in mock mode.'
-      });
-      return res.json({ status: 'success', message: 'Demo Sync Completed (Mock Mode)' });
+    if (!process.env.GOOGLE_DRIVE_FOLDER_ID || process.env.GOOGLE_DRIVE_FOLDER_ID === 'mock-folder') {
+      throw new AppError('Google Drive folder ID is not configured. Sync cannot proceed.', 400);
     }
 
     Logger.info('Starting full sync');
