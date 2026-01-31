@@ -34,11 +34,14 @@ app.use(express.json());
 
 import { errorHandler } from "./middleware/error.middleware.js";
 import { sanitizationMiddleware } from "./middleware/sanitization.middleware.js";
-import { vectorService } from "./container.js";
+import { vectorService, userService } from "./container.js";
 
 app.use(sanitizationMiddleware);
 
 Logger.info('Middleware Stack Initialized');
+
+// Initialize services (e.g., seeding)
+userService.initialize().catch(err => Logger.error('UserService initialization failed', { error: err.message }));
 
 // Main API Mount
 app.use("/api/v1", apiRoutes);

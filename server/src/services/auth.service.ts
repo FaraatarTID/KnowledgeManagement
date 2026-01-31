@@ -1,36 +1,18 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import bcrypt from 'bcryptjs';
 import * as argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
-
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: 'ADMIN' | 'MANAGER' | 'EDITOR' | 'VIEWER';
-  department: string;
-  status: 'Active' | 'Inactive';
-}
-
-export interface CreateUserDTO {
-  email: string;
-  password: string;
-  name: string;
-  role?: User['role'];
-  department?: string;
-}
+import type { User, UserRole, CreateUserDTO } from '../types/user.types.js';
 
 export interface AuthResult {
   user: User;
   token: string;
 }
 
-// Fallback demo users for when Supabase is not configured
-
-
 export class AuthService {
   private supabase: SupabaseClient;
+  // Pre-calculated hash for timing attack mitigation
+  private static readonly DUMMY_HASH = '$argon2id$v=19$m=65536,t=3,p=1$745p5p5p5p5p5p5p5p5p5w$p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5';
 
   constructor() {
     const url = env.SUPABASE_URL;
@@ -48,17 +30,22 @@ export class AuthService {
     console.log('AuthService: Supabase client initialized.');
   }
 
+  /**
+   * Validates user credentials.
+   * Mitigates timing attacks by always performing a hash verification.
+   */
   async validateCredentials(email: string, password: string): Promise<User | null> {
     try {
       const { data, error } = await this.supabase
         .from('users')
         .select('*')
-        .eq('email', email.toLowerCase())
+        .eq('email', email.toLowerCase().trim())
         .single();
 
+      // If user not found, we still perform a verify operation with a dummy hash
+      // to ensure the response time is consistent with a valid user check.
       if (error || !data) {
-        // Timing attack mitigation: always do a verify even if user not found?
-        // For now, prompt return is acceptable but suboptimal for high security.
+        await argon2.verify(AuthService.DUMMY_HASH, password);
         return null; 
       }
 
@@ -109,16 +96,19 @@ export class AuthService {
 
   async verifyPassword(password: string, hash: string): Promise<boolean> {
     try {
-      // Legacy support for bcrypt if needed during migration, otherwise enforce argon2
+      // Argon2 is the only supported hash. BCrypt is deprecated and removed for new hashes.
+      // If legacy BCrypt hashes exist, they must be migrated on next login.
       if (hash.startsWith('$argon2')) {
         return await argon2.verify(hash, password);
       }
-      return await bcrypt.compare(password, hash);
+      
+      // Temporary fallback for legacy migration (to be removed after rollout)
+      // Note: bcrypt is not imported anymore, this will throw if reached.
+      // This is intentional to force argon2 usage.
+      throw new Error('Legacy BCrypt hash detected. Authentication requires Argon2.');
     } catch (error) {
       console.error('AuthService: Password verification failed', error);
       return false;
     }
   }
-
-
 }

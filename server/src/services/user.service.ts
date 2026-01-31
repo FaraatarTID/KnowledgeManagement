@@ -1,19 +1,13 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import bcrypt from 'bcryptjs';
-import type { User, CreateUserDTO } from './auth.service.js';
+import type { User, CreateUserDTO, UpdateUserDTO } from '../types/user.types.js';
 import { env } from '../config/env.js';
-
-export interface UpdateUserDTO {
-  name?: string;
-  role?: User['role'];
-  department?: string;
-  status?: User['status'];
-}
+import { AuthService } from './auth.service.js';
 
 export class UserService {
   private supabase: SupabaseClient;
+  private isMock: boolean = false;
 
-  constructor() {
+  constructor(private authService: AuthService) {
     const url = env.SUPABASE_URL;
     const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -21,42 +15,51 @@ export class UserService {
       if (env.NODE_ENV === 'production') {
         throw new Error('FATAL: Supabase credentials (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are missing in UserService. App cannot function in production.');
       } else {
-        console.warn('UserService: Supabase credentials missing. Entering MOCK MODE (dev/test only).');
+        console.warn('UserService: Supabase credentials missing. Entering MOCK MODE.');
+        this.isMock = true;
         this.supabase = {} as any;
         return;
       }
     }
 
     this.supabase = createClient(url, key);
-    // Bootstrapping: Ensure at least one admin exists
-    this.seedDefaultAdmin().catch(err => console.error('UserService: Seeding failed', err));
   }
 
   /**
-   * Checks if the database is empty/missing admin and seeds the default admin.
+   * Explicit initialization for seeding.
+   * Call this during app startup, not in constructor.
    */
-  private async seedDefaultAdmin() {
-    if (!this.supabase) return;
+  async initialize() {
+    if (this.isMock) return;
+    await this.seedDefaultAdmin();
+  }
 
-    // Check if Alice exists
-    const { data: existingUser } = await this.supabase
+  private async seedDefaultAdmin() {
+    // Check if any admin exists
+    const { data: existingAdmin, error: checkError } = await this.supabase
       .from('users')
       .select('id')
-      .eq('email', 'alice@aikb.com')
-      .single();
+      .eq('role', 'ADMIN')
+      .limit(1)
+      .maybeSingle();
 
-    if (!existingUser) {
-      const adminEmail = process.env.INITIAL_ADMIN_EMAIL || 'alice@aikb.com';
+    if (checkError) {
+      console.error('UserService: Failed to check for existing admin', checkError);
+      return;
+    }
+
+    if (!existingAdmin) {
+      const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || 'alice@aikb.com').toLowerCase();
       const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || 'admin123';
       const adminName = process.env.INITIAL_ADMIN_NAME || 'Alice Admin';
 
-      console.log(`UserService: No users found. Seeding initial Admin (${adminEmail})...`);
-      const password_hash = await bcrypt.hash(adminPassword, 10);
+      console.log(`UserService: No admins found. Seeding initial Admin (${adminEmail})...`);
+      const password_hash = await this.authService.hashPassword(adminPassword);
       
-      const { error } = await this.supabase
+      const { error: insertError } = await this.supabase
         .from('users')
         .insert({
-          email: adminEmail.toLowerCase(),
+          email: adminEmail,
           name: adminName,
           password_hash,
           role: 'ADMIN',
@@ -64,15 +67,17 @@ export class UserService {
           status: 'Active'
         });
 
-      if (error) {
-        console.error('UserService: Failed to seed admin', error);
+      if (insertError) {
+        console.error('UserService: Failed to seed admin', insertError);
       } else {
-        console.log('UserService: Default Admin (Alice) seeded successfully.');
+        console.log('UserService: Initial Admin seeded successfully.');
       }
     }
   }
 
   async getAll(): Promise<User[]> {
+    if (this.isMock) return [];
+    
     const { data, error } = await this.supabase
       .from('users')
       .select('id, email, name, role, department, status')
@@ -80,34 +85,46 @@ export class UserService {
 
     if (error) {
       console.error('UserService: getAll failed', error);
-      return [];
+      throw new Error('Database operation failed');
     }
     return data as User[];
   }
 
   async getById(id: string): Promise<User | null> {
+    if (this.isMock) return null;
+
     const { data, error } = await this.supabase
       .from('users')
       .select('id, email, name, role, department, status')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
-    if (error) return null;
+    if (error) {
+      console.error('UserService: getById failed', error);
+      return null;
+    }
     return data as User;
   }
 
   async getByEmail(email: string): Promise<User | null> {
+    if (this.isMock) return null;
+
     const { data, error } = await this.supabase
       .from('users')
       .select('id, email, name, role, department, status')
-      .eq('email', email.toLowerCase())
-      .single();
+      .eq('email', email.toLowerCase().trim())
+      .maybeSingle();
 
-    if (error) return null;
+    if (error) {
+      console.error('UserService: getByEmail failed', error);
+      return null;
+    }
     return data as User;
   }
 
   async update(id: string, updates: UpdateUserDTO): Promise<User | null> {
+    if (this.isMock) return null;
+
     const { data, error } = await this.supabase
       .from('users')
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -123,15 +140,15 @@ export class UserService {
   }
 
   async create(userData: CreateUserDTO): Promise<User | null> {
-    // SECURITY: Use a robust hash. For now keeping bcrypt as it was used, 
-    // but should ideally move to argon2.
-    const password_hash = await bcrypt.hash(userData.password, 12);
+    if (this.isMock) return null;
+
+    const password_hash = await this.authService.hashPassword(userData.password);
 
     const { data, error } = await this.supabase
       .from('users')
       .insert({
-          email: userData.email.toLowerCase(),
-          name: userData.name,
+          email: userData.email.toLowerCase().trim(),
+          name: userData.name.trim(),
           password_hash,
           role: userData.role || 'VIEWER',
           department: userData.department || 'General',
@@ -148,6 +165,8 @@ export class UserService {
   }
 
   async delete(id: string): Promise<boolean> {
+    if (this.isMock) return false;
+
     const { error } = await this.supabase
       .from('users')
       .delete()
@@ -161,7 +180,9 @@ export class UserService {
   }
 
   async updatePassword(id: string, newPassword: string): Promise<boolean> {
-    const password_hash = await bcrypt.hash(newPassword, 12);
+    if (this.isMock) return false;
+
+    const password_hash = await this.authService.hashPassword(newPassword);
 
     const { error } = await this.supabase
       .from('users')
@@ -176,8 +197,9 @@ export class UserService {
   }
 
   async checkHealth(): Promise<{ status: 'OK' | 'ERROR'; message?: string }> {
+    if (this.isMock) return { status: 'OK', message: 'Mock Mode Active' };
+    
     try {
-      // Test by selecting 1 user
       const { error } = await this.supabase.from('users').select('id').limit(1);
       if (error) throw error;
       return { status: 'OK', message: 'Connected to Supabase' };

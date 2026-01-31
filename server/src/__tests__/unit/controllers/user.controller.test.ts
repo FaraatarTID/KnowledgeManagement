@@ -9,7 +9,8 @@ vi.mock('../../../container.js', () => ({
     getByEmail: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
-    updatePassword: vi.fn()
+    updatePassword: vi.fn(),
+    initialize: vi.fn().mockResolvedValue(undefined)
   }
 }));
 

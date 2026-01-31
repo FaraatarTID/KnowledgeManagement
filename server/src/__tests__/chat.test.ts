@@ -13,7 +13,9 @@ vi.mock('../container.js', () => ({
     }),
     getUserById: vi.fn()
   },
-  userService: {},
+  userService: {
+    initialize: vi.fn().mockResolvedValue(undefined)
+  },
   vectorService: {},
   geminiService: {},
   auditService: {

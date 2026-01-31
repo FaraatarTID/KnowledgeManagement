@@ -20,7 +20,7 @@ const syncService = new SyncService(driveService, vectorService, geminiService);
 const historyService = new HistoryService();
 const configService = new ConfigService();
 const authService = new AuthService();
-const userService = new UserService();
+const userService = new UserService(authService);
 const chatService = new ChatService();
 
 export {

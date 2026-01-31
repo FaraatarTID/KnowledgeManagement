@@ -15,7 +15,8 @@ vi.mock('../container.js', () => ({
   },
   userService: {
     getAll: vi.fn(),
-    getById: vi.fn()
+    getById: vi.fn(),
+    initialize: vi.fn().mockResolvedValue(undefined)
   },
   vectorService: {
     getVectorCount: vi.fn().mockResolvedValue(0),

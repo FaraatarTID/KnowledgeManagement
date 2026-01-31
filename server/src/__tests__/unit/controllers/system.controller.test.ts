@@ -12,7 +12,8 @@ vi.mock('../../../container.js', () => ({
   },
   userService: { 
       getAll: vi.fn(),
-      checkHealth: vi.fn()
+      checkHealth: vi.fn(),
+      initialize: vi.fn().mockResolvedValue(undefined)
   },
   auditService: { getResolutionStats: vi.fn() },
   configService: { getConfig: vi.fn(), updateCategories: vi.fn(), updateDepartments: vi.fn() }
