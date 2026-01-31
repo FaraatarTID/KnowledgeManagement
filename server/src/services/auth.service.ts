@@ -27,59 +27,32 @@ export interface AuthResult {
 }
 
 // Fallback demo users for when Supabase is not configured
-const DEMO_USERS: (User & { password_hash: string })[] = [
-  { 
-    id: 'demo-admin', 
-    name: 'Alice Admin', 
-    email: 'alice@aikb.com', 
-    password_hash: '$argon2id$v=19$m=65536,t=3,p=1$c29tZXNhbHQ$RdescudvJcbe3Fh8X6JZ3Q',
-    role: 'ADMIN', 
-    department: 'IT', 
-    status: 'Active' 
-  },
-  { 
-    id: 'demo-user', 
-    name: 'David User', 
-    email: 'david@aikb.com', 
-    password_hash: '$argon2id$v=19$m=65536,t=3,p=1$c29tZXNhbHQ$RdescudvJcbe3Fh8X6JZ3Q',
-    role: 'VIEWER', 
-    department: 'Marketing', 
-    status: 'Active' 
-  }
-];
+
 
 export class AuthService {
-  private supabase: SupabaseClient | null = null;
-  private isDemoMode: boolean = false;
+  private supabase: SupabaseClient;
 
   constructor() {
     const url = env.SUPABASE_URL;
     const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (url && key) {
-      this.supabase = createClient(url, key);
-      console.log('AuthService: Supabase client initialized.');
-    } else {
+    if (!url || !key) {
       if (env.NODE_ENV === 'production') {
-        throw new Error('FATAL: Supabase credentials required in production.');
+        throw new Error('FATAL: Supabase credentials (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are missing. Authentication cannot function in production.');
+      } else {
+        console.warn('AuthService: Supabase credentials missing. Entering MOCK MODE (dev/test only).');
+        // We'll use a dummy client for non-production so it doesn't crash, 
+        // though calls will likely fail if not caught by controller mocks.
+        this.supabase = {} as any; 
+        return;
       }
-      console.warn('AuthService: Running in DEMO MODE.');
-      this.isDemoMode = true;
     }
+
+    this.supabase = createClient(url, key);
+    console.log('AuthService: Supabase client initialized.');
   }
 
   async validateCredentials(email: string, password: string): Promise<User | null> {
-    if (this.isDemoMode) {
-      const demoUser = DEMO_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (!demoUser) return null;
-      if (password !== 'admin123') return null;
-
-      const { password_hash, ...user } = demoUser;
-      return user;
-    }
-
-    if (!this.supabase) return null;
-
     try {
       const { data, error } = await this.supabase
         .from('users')
@@ -87,7 +60,11 @@ export class AuthService {
         .eq('email', email.toLowerCase())
         .single();
 
-      if (error || !data) return null;
+      if (error || !data) {
+        // Timing attack mitigation: always do a verify even if user not found?
+        // For now, prompt return is acceptable but suboptimal for high security.
+        return null; 
+      }
 
       const isValid = await this.verifyPassword(password, data.password_hash);
       if (!isValid) return null;
@@ -101,15 +78,6 @@ export class AuthService {
   }
 
   async getUserById(id: string): Promise<User | null> {
-    if (this.isDemoMode) {
-      const demoUser = DEMO_USERS.find(u => u.id === id);
-      if (!demoUser) return null;
-      const { password_hash, ...user } = demoUser;
-      return user;
-    }
-
-    if (!this.supabase) return null;
-
     try {
       const { data, error } = await this.supabase
         .from('users')
@@ -134,35 +102,27 @@ export class AuthService {
   }
 
   async hashPassword(password: string): Promise<string> {
-    try {
-      return await argon2.hash(password, {
-        type: argon2.argon2id,
-        memoryCost: 65536,
-        timeCost: 3,
-        parallelism: 1,
-        hashLength: 32
-      });
-    } catch (error) {
-      return bcrypt.hash(password, 12);
-    }
+    return await argon2.hash(password, {
+      type: argon2.argon2id,
+      memoryCost: 65536,
+      timeCost: 3,
+      parallelism: 1,
+      hashLength: 32
+    });
   }
 
   async verifyPassword(password: string, hash: string): Promise<boolean> {
     try {
+      // Legacy support for bcrypt if needed during migration, otherwise enforce argon2
       if (hash.startsWith('$argon2')) {
         return await argon2.verify(hash, password);
       }
       return await bcrypt.compare(password, hash);
     } catch (error) {
+      console.error('AuthService: Password verification failed', error);
       return false;
     }
   }
 
-  async needsUpgrade(hash: string): Promise<boolean> {
-    return !hash.startsWith('$argon2');
-  }
 
-  isDemoModeEnabled(): boolean {
-    return this.isDemoMode;
-  }
 }

@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import type { User, CreateUserDTO } from './auth.service.js';
+import { env } from '../config/env.js';
 
 export interface UpdateUserDTO {
   name?: string;
@@ -9,61 +10,26 @@ export interface UpdateUserDTO {
   status?: User['status'];
 }
 
-// Mutable demo users for when Supabase is not configured
-let DEMO_USERS: (User & { password_hash: string })[] = [
-  { 
-    id: 'demo-admin', 
-    name: 'Alice Admin', 
-    email: 'alice@aikb.com', 
-    password_hash: '$2a$10$XOPbrlUPQdwdJUpSrIF6X.LbE14qsMmKGq3i5Q5DB4zX9bLh.tPbu',
-    role: 'ADMIN', 
-    department: 'IT', 
-    status: 'Active' 
-  },
-  { 
-    id: 'demo-manager', 
-    name: 'Bob Manager', 
-    email: 'bob@aikb.com', 
-    password_hash: '$2a$10$XOPbrlUPQdwdJUpSrIF6X.LbE14qsMmKGq3i5Q5DB4zX9bLh.tPbu',
-    role: 'MANAGER', 
-    department: 'Sales', 
-    status: 'Active' 
-  },
-  { 
-    id: 'demo-editor', 
-    name: 'Charlie Dev', 
-    email: 'charlie@aikb.com', 
-    password_hash: '$2a$10$XOPbrlUPQdwdJUpSrIF6X.LbE14qsMmKGq3i5Q5DB4zX9bLh.tPbu',
-    role: 'EDITOR', 
-    department: 'Engineering', 
-    status: 'Active' 
-  },
-  { 
-    id: 'demo-user', 
-    name: 'David User', 
-    email: 'david@aikb.com', 
-    password_hash: '$2a$10$XOPbrlUPQdwdJUpSrIF6X.LbE14qsMmKGq3i5Q5DB4zX9bLh.tPbu',
-    role: 'VIEWER', 
-    department: 'Marketing', 
-    status: 'Active' 
-  }
-];
-
 export class UserService {
-  private supabase: SupabaseClient | null = null;
-  private isDemoMode: boolean = false;
+  private supabase: SupabaseClient;
 
   constructor() {
-    const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const url = env.SUPABASE_URL;
+    const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (url && key) {
-      this.supabase = createClient(url, key);
-      // Bootstrapping: Ensure at least one admin exists
-      this.seedDefaultAdmin().catch(err => console.error('UserService: Seeding failed', err));
-    } else {
-      this.isDemoMode = true;
+    if (!url || !key) {
+      if (env.NODE_ENV === 'production') {
+        throw new Error('FATAL: Supabase credentials (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are missing in UserService. App cannot function in production.');
+      } else {
+        console.warn('UserService: Supabase credentials missing. Entering MOCK MODE (dev/test only).');
+        this.supabase = {} as any;
+        return;
+      }
     }
+
+    this.supabase = createClient(url, key);
+    // Bootstrapping: Ensure at least one admin exists
+    this.seedDefaultAdmin().catch(err => console.error('UserService: Seeding failed', err));
   }
 
   /**
@@ -107,12 +73,6 @@ export class UserService {
   }
 
   async getAll(): Promise<User[]> {
-    if (this.isDemoMode) {
-      return DEMO_USERS.map(({ password_hash, ...user }) => user);
-    }
-
-    if (!this.supabase) return [];
-
     const { data, error } = await this.supabase
       .from('users')
       .select('id, email, name, role, department, status')
@@ -126,15 +86,6 @@ export class UserService {
   }
 
   async getById(id: string): Promise<User | null> {
-    if (this.isDemoMode) {
-      const user = DEMO_USERS.find(u => u.id === id);
-      if (!user) return null;
-      const { password_hash, ...userData } = user;
-      return userData;
-    }
-
-    if (!this.supabase) return null;
-
     const { data, error } = await this.supabase
       .from('users')
       .select('id, email, name, role, department, status')
@@ -146,15 +97,6 @@ export class UserService {
   }
 
   async getByEmail(email: string): Promise<User | null> {
-    if (this.isDemoMode) {
-      const user = DEMO_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (!user) return null;
-      const { password_hash, ...userData } = user;
-      return userData;
-    }
-
-    if (!this.supabase) return null;
-
     const { data, error } = await this.supabase
       .from('users')
       .select('id, email, name, role, department, status')
@@ -166,17 +108,6 @@ export class UserService {
   }
 
   async update(id: string, updates: UpdateUserDTO): Promise<User | null> {
-    if (this.isDemoMode) {
-      const index = DEMO_USERS.findIndex(u => u.id === id);
-      if (index === -1) return null;
-      
-      DEMO_USERS[index] = { ...DEMO_USERS[index]!, ...updates } as any;
-      const { password_hash, ...userData } = DEMO_USERS[index]!;
-      return userData;
-    }
-
-    if (!this.supabase) return null;
-
     const { data, error } = await this.supabase
       .from('users')
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -192,34 +123,19 @@ export class UserService {
   }
 
   async create(userData: CreateUserDTO): Promise<User | null> {
-    const password_hash = await bcrypt.hash(userData.password, 10);
-
-    if (this.isDemoMode) {
-      const newUser = {
-        id: `demo-${Date.now()}`,
-        email: userData.email.toLowerCase(),
-        name: userData.name,
-        password_hash,
-        role: userData.role || 'VIEWER' as const,
-        department: userData.department || 'General',
-        status: 'Active' as const
-      };
-      DEMO_USERS.push(newUser);
-      const { password_hash: _, ...user } = newUser;
-      return user;
-    }
-
-    if (!this.supabase) return null;
+    // SECURITY: Use a robust hash. For now keeping bcrypt as it was used, 
+    // but should ideally move to argon2.
+    const password_hash = await bcrypt.hash(userData.password, 12);
 
     const { data, error } = await this.supabase
       .from('users')
       .insert({
-        email: userData.email.toLowerCase(),
-        name: userData.name,
-        password_hash,
-        role: userData.role || 'VIEWER',
-        department: userData.department || 'General',
-        status: 'Active'
+          email: userData.email.toLowerCase(),
+          name: userData.name,
+          password_hash,
+          role: userData.role || 'VIEWER',
+          department: userData.department || 'General',
+          status: 'Active'
       })
       .select('id, email, name, role, department, status')
       .single();
@@ -232,15 +148,6 @@ export class UserService {
   }
 
   async delete(id: string): Promise<boolean> {
-    if (this.isDemoMode) {
-      const index = DEMO_USERS.findIndex(u => u.id === id);
-      if (index === -1) return false;
-      DEMO_USERS.splice(index, 1);
-      return true;
-    }
-
-    if (!this.supabase) return false;
-
     const { error } = await this.supabase
       .from('users')
       .delete()
@@ -254,16 +161,7 @@ export class UserService {
   }
 
   async updatePassword(id: string, newPassword: string): Promise<boolean> {
-    const password_hash = await bcrypt.hash(newPassword, 10);
-
-    if (this.isDemoMode) {
-      const user = DEMO_USERS.find(u => u.id === id);
-      if (!user) return false;
-      user.password_hash = password_hash;
-      return true;
-    }
-
-    if (!this.supabase) return false;
+    const password_hash = await bcrypt.hash(newPassword, 12);
 
     const { error } = await this.supabase
       .from('users')
@@ -277,13 +175,7 @@ export class UserService {
     return true;
   }
 
-  isDemoModeEnabled(): boolean {
-    return this.isDemoMode;
-  }
-
   async checkHealth(): Promise<{ status: 'OK' | 'ERROR'; message?: string }> {
-    if (this.isDemoMode) return { status: 'OK', message: 'Demo Mode (Local JSON)' };
-    if (!this.supabase) return { status: 'ERROR', message: 'Supabase not initialized' };
     try {
       // Test by selecting 1 user
       const { error } = await this.supabase.from('users').select('id').limit(1);

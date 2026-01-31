@@ -5,23 +5,11 @@ import {
   Send, 
   Bot, 
   User, 
-  LayoutDashboard, 
-  MessageSquare, 
-  Settings, 
-  PlusCircle, 
-  Search,
-  BookOpen,
   FileText,
-  ShieldCheck,
-  ChevronRight,
-  MoreVertical,
-  Loader2,
-  LogOut,
-  Clock
+  ChevronRight, 
+  Loader2
 } from 'lucide-react';
 
-// Prevent unused import warnings for optional icon variants
-void Send; void Bot; void User; void LayoutDashboard; void MessageSquare; void Settings; void PlusCircle; void Search; void BookOpen; void FileText; void ShieldCheck; void ChevronRight; void MoreVertical; void Loader2; void LogOut; void Clock;
 import { useChatStore } from '@/store/chatStore';
 import api, { authApi } from '@/lib/api';
 import { useRouter } from 'next/navigation';

@@ -98,43 +98,7 @@ function AdminContent() {
     return fallback;
   };
 
-  useEffect(() => {
-    // Verify session using server-side cookie/token via authApi.getMe
-    const init = async () => {
-      try {
-          const freshUser = await authApi.getMe();
-          if (!freshUser) {
-            // No session
-            router.push('/login');
-            return;
-          }
 
-        setCurrentUser(freshUser);
-        if (freshUser.role !== 'ADMIN' && freshUser.role !== 'MANAGER') {
-          alert('Access Denied. You need Admin privileges.');
-          router.push('/');
-          return;
-        }
-        // Sync local copy
-        localStorage.setItem('user', JSON.stringify(freshUser));
-        setIsAuthChecking(false);
-
-        // Auto-sync for admins
-        if (freshUser.role === 'ADMIN') {
-          console.log('Admin detected: Triggering auto-sync...');
-          handleSyncNow();
-        }
-
-        // Fetch admin data
-        fetchData();
-      } catch (error: unknown) {
-          console.error('Admin auth verify failed', error);
-          router.push('/login');
-        }
-    };
-
-    init();
-    }, [searchParams, router]);
 
   
 
@@ -308,6 +272,45 @@ function AdminContent() {
       setIsSyncing(false);
     }
   }, [fetchData]);
+
+  useEffect(() => {
+    // Verify session using server-side cookie/token via authApi.getMe
+    const init = async () => {
+      try {
+          const freshUser = await authApi.getMe();
+          if (!freshUser) {
+            // No session
+            router.push('/login');
+            return;
+          }
+
+        setCurrentUser(freshUser);
+        if (freshUser.role !== 'ADMIN' && freshUser.role !== 'MANAGER') {
+          alert('Access Denied. You need Admin privileges.');
+          router.push('/');
+          return;
+        }
+        // Sync local copy
+        localStorage.setItem('user', JSON.stringify(freshUser));
+        setIsAuthChecking(false);
+
+        // Auto-sync for admins
+        if (freshUser.role === 'ADMIN') {
+          console.log('Admin detected: Triggering auto-sync...');
+          handleSyncNow();
+        }
+
+        // Fetch admin data
+        fetchData();
+      } catch (error: unknown) {
+          console.error('Admin auth verify failed', error);
+          router.push('/login');
+        }
+    };
+
+    init();
+    }, [router, fetchData, handleSyncNow]);
+
 
   const handleRowSync = async (docId: string) => {
     try {

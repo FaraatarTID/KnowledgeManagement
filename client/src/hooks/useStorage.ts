@@ -144,7 +144,6 @@ export const useStorage = () => {
    * Optimized: removed redundant loadData call
    */
   const saveDocuments = async (documents: unknown[], currentChatHistory: unknown[] = []) => {
-    const startTime = Date.now();
     try {
       const json = JSON.stringify(documents);
       await set('aikb-documents', json);
@@ -168,7 +167,6 @@ export const useStorage = () => {
    * Optimized: removed redundant loadData call
    */
   const saveChatHistory = async (chatHistory: unknown[], currentDocuments: unknown[] = []) => {
-    const startTime = Date.now();
     try {
       const json = JSON.stringify(chatHistory);
       await set('aikb-chat-history', json);

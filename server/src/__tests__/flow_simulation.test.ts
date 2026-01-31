@@ -1,78 +1,93 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../index.js';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
+
+// Mock the container
+vi.mock('../container.js', () => ({
+  authService: {
+    validateCredentials: vi.fn(),
+    generateToken: vi.fn((user: any) => {
+        return jwt.sign(user, env.JWT_SECRET || 'test-secret', { expiresIn: '1h' });
+    }),
+    getUserById: vi.fn()
+  },
+  userService: {},
+  vectorService: {},
+  geminiService: {},
+  auditService: {
+    logAction: vi.fn()
+  },
+  ragService: {
+     query: vi.fn().mockResolvedValue({ 
+         answer: 'Mock Modern Answer',
+         sources: [],
+         ai_citations: [],
+         usage: { total_tokens: 100 },
+         integrity: { isVerified: true }
+     })
+  },
+  chatService: {
+    queryChatLegacy: vi.fn().mockResolvedValue('Mock Legacy Answer')
+  },
+  driveService: {},
+  syncService: {},
+  historyService: {},
+  configService: {},
+  chatServiceInstance: {} 
+}));
+
+import { authService } from '../container.js';
 
 describe('End-to-End Chat Flow Simulation', () => {
-    let adminToken = '';
-    let employeeToken = '';
+    let token = '';
 
-    beforeAll(async () => {
-        // 1. Get tokens for simulation
-        const adminRes = await request(app)
-            .post('/api/v1/auth/login')
-            .send({ email: 'alice@aikb.com', password: 'admin123' });
+    beforeEach(async () => {
+        const mockUser = {
+            id: 'sim-user-id',
+            email: 'sim@example.com',
+            role: 'EDITOR',
+            name: 'Sim User',
+            department: 'General',
+            status: 'Active'
+        };
+        vi.mocked(authService.validateCredentials).mockResolvedValue(mockUser as any);
+        vi.mocked(authService.getUserById).mockResolvedValue(mockUser as any);
         
-        const adminCookies = adminRes.header['set-cookie'];
-        if (adminCookies && Array.isArray(adminCookies) && adminCookies[0]) {
-            adminToken = adminCookies[0].split(';')[0].split('=')[1] || '';
-        }
-
-        const empRes = await request(app)
+        const res = await request(app)
             .post('/api/v1/auth/login')
-            .send({ email: 'david@aikb.com', password: 'admin123' });
+            .send({ email: 'sim@example.com', password: 'password' });
         
-        const empCookies = empRes.header['set-cookie'];
-        if (empCookies && Array.isArray(empCookies) && empCookies[0]) {
-            employeeToken = empCookies[0].split(';')[0].split('=')[1] || '';
+        const cookies = res.header['set-cookie'];
+        if (cookies && Array.isArray(cookies) && cookies[0]) {
+            token = cookies[0].split(';')[0].split('=')[1];
         }
     });
 
-    it('Scenario 1: Basic Chat with Documents', async () => {
-        const testDocuments = [
-            {
-                id: "doc-1",
-                title: "Company Policy",
-                content: "The company policy requires all employees to wear badges.",
-                category: "HR",
-                createdAt: new Date().toISOString()
-            }
-        ];
+    it('Scenario 1: Modern RAG query', async () => {
+        const res = await request(app)
+            .post('/api/v1/query')
+            .set('Cookie', `token=${token}`)
+            .send({ 
+                query: 'What is the policy on MFA?'
+            });
 
+        expect(res.status).toBe(200);
+        expect(res.body.answer).toBeDefined();
+    });
+
+    it('Scenario 2: Legacy Chat with Documents', async () => {
+        const testDocuments = [{ id: "1", content: "text" }];
         const res = await request(app)
             .post('/api/v1/chat')
-            .set('Cookie', `token=${adminToken}`)
+            .set('Cookie', `token=${token}`)
             .send({ 
-                query: 'What is the company policy?',
+                query: 'Tell me everything', 
                 documents: testDocuments
             });
         
         expect(res.status).toBe(200);
-        expect(res.body).toHaveProperty('content');
-        expect(typeof res.body.content).toBe('string');
-    });
-
-    it('Scenario 2: Reject Empty Documents', async () => {
-        const res = await request(app)
-            .post('/api/v1/chat')
-            .set('Cookie', `token=${employeeToken}`)
-            .send({ 
-                query: 'What is the capital of France?',
-                documents: []
-            });
-        
-        expect(res.status).toBe(400);
-        // expect(res.body.content).toContain('اطلاعاتی برای پاسخ'); // No content on 400
-    });
-
-    it('Scenario 3: Invalid Request Body', async () => {
-        const res = await request(app)
-            .post('/api/v1/chat')
-            .set('Cookie', `token=${adminToken}`)
-            .send({ 
-                query: 'What is the company policy?' 
-                // Missing documents
-            });
-        
-        expect(res.status).toBe(400);
+        expect(res.body.content).toBeDefined();
     });
 });

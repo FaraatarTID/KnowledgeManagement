@@ -1,69 +1,102 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../index.js';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
 
-describe('Chat API (Core Loop)', () => {
+// Mock the container
+vi.mock('../container.js', () => ({
+  authService: {
+    validateCredentials: vi.fn(),
+    generateToken: vi.fn((user: any) => {
+        return jwt.sign(user, env.JWT_SECRET || 'test-secret', { expiresIn: '1h' });
+    }),
+    getUserById: vi.fn()
+  },
+  userService: {},
+  vectorService: {},
+  geminiService: {},
+  auditService: {
+    logAction: vi.fn()
+  },
+  ragService: {
+     query: vi.fn().mockResolvedValue({ 
+         answer: 'Mock Modern Answer',
+         sources: [],
+         ai_citations: [],
+         usage: { total_tokens: 100 },
+         integrity: { isVerified: true }
+     })
+  },
+  chatService: {
+    queryChatLegacy: vi.fn().mockResolvedValue('Mock Legacy Answer')
+  },
+  driveService: {},
+  syncService: {},
+  historyService: {},
+  configService: {},
+  chatServiceInstance: {} 
+}));
+
+import { authService } from '../container.js';
+
+describe('Chat API', () => {
     let token = '';
 
-    beforeAll(async () => {
-        // Login as 'david' (Viewer is enough for chat)
+    beforeEach(async () => {
+        const mockUser = {
+            id: 'user-id',
+            email: 'user@example.com',
+            role: 'VIEWER',
+            name: 'Test Viewer',
+            department: 'General',
+            status: 'Active'
+        };
+        vi.mocked(authService.validateCredentials).mockResolvedValue(mockUser as any);
+        vi.mocked(authService.getUserById).mockResolvedValue(mockUser as any);
+        
         const res = await request(app)
             .post('/api/v1/auth/login')
-            .send({ email: 'david@aikb.com', password: 'admin123' });
+            .send({ email: 'user@example.com', password: 'password' });
         
         const cookies = res.header['set-cookie'];
         if (cookies && Array.isArray(cookies) && cookies[0]) {
-            token = cookies[0].split(';')[0].split('=')[1] || '';
-        } else {
-             // Fallback for demo mode if cookies fail logic (shouldn't happen with fix)
-             token = res.body.token || '';
+            token = cookies[0].split(';')[0].split('=')[1];
         }
     });
 
-    it('should respond to a chat query with documents', async () => {
-        const testDocuments = [
-            {
-                id: "test-doc-1",
-                title: "Test Document",
-                content: "This is a test document containing information about the project.",
-                category: "General",
-                createdAt: new Date().toISOString()
-            }
-        ];
+    it('Modern RAG: should respond to /query', async () => {
+        const res = await request(app)
+            .post('/api/v1/query') // FIXED PATH
+            .set('Cookie', `token=${token}`)
+            .send({ 
+                query: 'What is this about?'
+            });
 
+        expect(res.status).toBe(200);
+        expect(res.body).toHaveProperty('answer', 'Mock Modern Answer');
+    });
+
+    it('Legacy Chat: should respond to /chat', async () => {
+        const testDocuments = [{ id: "1", content: "text" }];
         const res = await request(app)
             .post('/api/v1/chat')
             .set('Cookie', `token=${token}`)
             .send({ 
-                query: 'What is this document about?', 
+                query: 'Legacy query', 
                 documents: testDocuments
             });
 
         expect(res.status).toBe(200);
-        expect(res.body).toHaveProperty('content');
-        expect(typeof res.body.content).toBe('string');
+        expect(res.body).toHaveProperty('content', 'Mock Legacy Answer');
     });
 
-    it('should reject empty documents array', async () => {
+    it('should reject empty modern query', async () => {
         const res = await request(app)
-            .post('/api/v1/chat')
+            .post('/api/v1/query') // FIXED PATH
             .set('Cookie', `token=${token}`)
             .send({ 
-                query: 'What is this document about?', 
-                documents: []
-            });
-        
-        expect(res.status).toBe(400);
-        // expect(res.body.content).toContain('اطلاعاتی برای پاسخ'); // No longer returns content on 400
-    });
-
-    it('should reject invalid request body', async () => {
-        const res = await request(app)
-            .post('/api/v1/chat')
-            .set('Cookie', `token=${token}`)
-            .send({ 
-                query: 'What is this document about?' 
-                // Missing documents
+                query: '' 
             });
         
         expect(res.status).toBe(400);

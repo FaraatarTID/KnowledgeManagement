@@ -11,30 +11,7 @@ export class AuthController {
   static login: RequestHandler = catchAsync(async (req: Request, res: Response) => {
     // Validation handled by middleware logic, but we need to check the shapes
     // Since we use a union-like refinement, types are optional in the inferred type
-    const { email, password, type } = req.body;
-    
-    // Legacy demo mode support
-    if (type && !email) {
-      if (process.env.NODE_ENV === 'production') {
-        throw new AppError('Demo mode disabled in production', 403);
-      }
-
-      const demoEmail = type === 'admin' ? 'alice@aikb.com' : 'david@aikb.com';
-      const demoPassword = 'admin123';
-      
-      const user = await authService.validateCredentials(demoEmail, demoPassword);
-      if (!user) throw new AppError('Demo credentials configuration error', 500);
-      
-      const token = authService.generateToken(user);
-      res.cookie('token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000
-      });
-      Logger.info('Demo login successful', { user: user.email });
-      return res.json({ token, user });
-    }
+    const { email, password } = req.body;
     
     // Standard Login
     if (!email || !password) {

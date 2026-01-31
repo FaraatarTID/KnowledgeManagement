@@ -73,18 +73,7 @@ describe('AuthController', () => {
             expect(jsonMock).toHaveBeenCalledWith({ token: 'fake-token', user: mockUser });
         });
 
-        it('should handle demo mode login', async () => {
-            const mockUser = { id: 'admin', email: 'alice@aikb.com', role: 'ADMIN' } as any;
-            mockRequest.body = { type: 'admin', email: '' };
-            
-            vi.mocked(authService.validateCredentials).mockResolvedValue(mockUser);
-            vi.mocked(authService.generateToken).mockReturnValue('demo-token');
 
-            await AuthController.login(mockRequest as Request, mockResponse as Response, nextMock);
-
-            expect(authService.validateCredentials).toHaveBeenCalledWith('alice@aikb.com', 'admin123');
-            expect(cookieMock).toHaveBeenCalledWith('token', 'demo-token', expect.any(Object));
-        });
     });
 
     describe('logout', () => {

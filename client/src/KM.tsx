@@ -152,7 +152,7 @@ function AIKBContent() {
         toast.error(msg || 'Failed to save document');
       }
     }
-  }, [documents, saveDocuments]); // Fixed: Now properly depends on documents state
+  }, [documents, chatHistory, saveDocuments]); // Fixed: Added chatHistory as it's passed to saveDocuments
 
   // Optimistic document deletion
   const deleteDocument = useCallback(async (id: string) => {
@@ -274,7 +274,7 @@ function AIKBContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentQuery, documents.length, saveChatHistory]); // Fixed dependencies
+  }, [currentQuery, documents, saveChatHistory]); // Fixed: Added documents as it's passed to saveChatHistory
 
   // Clear chat with confirmation
   const clearChat = useCallback(async () => {
@@ -289,7 +289,7 @@ function AIKBContent() {
     } catch {
       toast.error('Failed to clear chat history');
     }
-  }, [saveChatHistory]);
+  }, [documents, saveChatHistory]); // Fixed: Added documents as it's passed to saveChatHistory
 
   // Handle Enter key in search
   const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {        

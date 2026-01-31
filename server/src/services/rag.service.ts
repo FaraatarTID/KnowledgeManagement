@@ -1,3 +1,4 @@
+import { env } from '../config/env.js';
 import { GeminiService } from './gemini.service.js';
 import { VectorService } from './vector.service.js';
 import { RedactionService } from './redaction.service.js';
@@ -39,8 +40,7 @@ export class RAGService {
     // 3. Filter by Similarity Threshold
     // If the best match score is too low (e.g. < 0.60), we assume it's "noise" and return early.
     // This is a HARD GATE against hallucination on irrelevant data.
-    const MIN_SIMILARITY_SCORE = 0.60;
-    const relevantResults = searchResults.filter(res => (res as any).score >= MIN_SIMILARITY_SCORE);
+    const relevantResults = searchResults.filter(res => (res as any).score >= env.RAG_MIN_SIMILARITY);
 
     if (relevantResults.length === 0) {
       // Audit: Log query with no results
@@ -61,8 +61,7 @@ export class RAGService {
 
     // 4. Build context from results with Token Cap
     // Limit total context size to prevent token exhaustion/cost spikes.
-    // Increased from 20k to 100k to prevent "oversimplification" by providing full document nuances.
-    const MAX_CONTEXT_CHARS = 100000;
+    const MAX_CONTEXT_CHARS = env.RAG_MAX_CONTEXT_CHARS;
     let currentLength = 0;
     const context: string[] = [];
     let isTruncated = false;
@@ -121,8 +120,23 @@ export class RAGService {
       history
     });
 
+    // PARSE JSON RESPONSE
+    let parsedResponse: any;
+    try {
+      parsedResponse = JSON.parse(text);
+    } catch (e) {
+      console.error('RAGService: Failed to parse Gemini JSON response', text);
+      // Fallback if JSON fails
+      parsedResponse = {
+        answer: text,
+        confidence: 'Low',
+        citations: [],
+        missing_information: 'Error parsing AI response structure'
+      };
+    }
+
     // --- INTEGRITY ENGINE: Post-Generation Verification ---
-    const integrityResults = this.verifyIntegrity(text, context);
+    const integrityResults = this.verifyIntegrity(parsedResponse, context);
     if (isTruncated) {
        integrityResults.warning = "Context window limit reached. Some documents were partially omitted.";
        integrityResults.isTruncated = true;
@@ -136,7 +150,7 @@ export class RAGService {
       granted: true,
       resourceId: citations[0]?.id,
       metadata: {
-        citations,
+        citations: parsedResponse.citations, // Use AI-generated citations for audit accuracy
         usage: usageMetadata,
         sourceCount: relevantResults.length,
         integrity: integrityResults,
@@ -145,8 +159,9 @@ export class RAGService {
     });
 
     return {
-      answer: text,
-      sources: citations,
+      answer: parsedResponse.answer,
+      sources: citations, // Keep returning source documents metadata
+      ai_citations: parsedResponse.citations, // Return specific AI citations
       usage: usageMetadata,
       integrity: integrityResults,
       isTruncated
@@ -155,55 +170,37 @@ export class RAGService {
 
   /**
    * Verifies the AI's reported quotes against the actual retrieved context.
-   * SECURITY: Sanitizes extracted quotes to prevent injection attacks.
+   * NOW USES STRUCTURED JSON CITATIONS.
    */
-  private verifyIntegrity(aiText: string, searchContext: string[]): any {
-    // SECURITY: Sanitize function to prevent injection attacks
-    const sanitizeQuote = (text: string): string => {
-      return text
-        .replace(/[<>]/g, '') // Remove potential HTML/XML tags
-        .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
-        .substring(0, 500); // Limit length to prevent DoS
-    };
-
-    // SECURITY: Use non-greedy matching and validate structure
-    const quoteRegex = /\[QUOTE\]:\s*"([^"]{1,500})"/g;
-    const quotes = [];
-    let match;
-    while ((match = quoteRegex.exec(aiText)) !== null) {
-      quotes.push(match[1]);
-    }
-
-    const verifiedQuotes = quotes.map(rawQuote => {
-      const quoteText = sanitizeQuote(rawQuote ?? '');
+  private verifyIntegrity(parsedResponse: any, searchContext: string[]): any {
+    const citations = Array.isArray(parsedResponse.citations) ? parsedResponse.citations : [];
+    
+    const verifiedCitations = citations.map((cit: any) => {
+      const quote = cit.quote || '';
+      // Sanitize slightly
+      const cleanQuote = quote.trim();
       
-      // SECURITY: Check for empty or suspiciously short quotes
-      if (quoteText.length < 3) {
-        return { quote: quoteText, verified: false, reason: 'Too short' };
+      if (cleanQuote.length < 5) {
+        return { ...cit, verified: false, reason: 'Quote too short' };
       }
 
-      // Check if this quote exists in ANY of the source blocks
-      // Use exact string matching instead of regex for security
-      const exists = searchContext.some(ctx => ctx.includes(quoteText));
-      return { quote: quoteText, verified: exists };
+      // Check existence
+      const exists = searchContext.some(ctx => ctx.includes(cleanQuote));
+      return { ...cit, verified: exists };
     });
 
-    const confidenceMatch = aiText.match(/\[CONFIDENCE\]:\s*(High|Medium|Low)/i);
-    const confidence = confidenceMatch?.[1]?.toUpperCase() ?? 'UNKNOWN';
-
-    const hallucinatedQuoteCount = verifiedQuotes.filter(v => !v.verified).length;
-    const isCompromised = hallucinatedQuoteCount > 0;
+    const hallucinatedCount = verifiedCitations.filter((c: any) => !c.verified).length;
+    const isCompromised = hallucinatedCount > 0;
 
     return {
-      confidence,
+      confidence: parsedResponse.confidence || 'Unknown',
       isVerified: !isCompromised,
-      hallucinatedQuoteCount,
-      verifiedQuoteCount: verifiedQuotes.length - hallucinatedQuoteCount,
-      details: verifiedQuotes,
-      // SECURITY: Add integrity score for automated monitoring
-      integrityScore: verifiedQuotes.length > 0 
-        ? (verifiedQuotes.length - hallucinatedQuoteCount) / verifiedQuotes.length 
-        : 0
+      hallucinatedQuoteCount: hallucinatedCount,
+      verifiedQuoteCount: verifiedCitations.length - hallucinatedCount,
+      details: verifiedCitations,
+      integrityScore: verifiedCitations.length > 0 
+        ? (verifiedCitations.length - hallucinatedCount) / verifiedCitations.length 
+        : 1 // If no citations needed (e.g. greeting), integrity is high 
     };
   }
 }

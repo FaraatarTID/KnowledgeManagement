@@ -39,9 +39,6 @@ api.interceptors.response.use(
   }
 );
 
-// SECURITY: Mutex lock to prevent race conditions in localStorage operations
-let localStorageMutex: Promise<void> = Promise.resolve();
-
 // User type used across client for auth responses
 export interface User {
   id: string;
@@ -50,55 +47,17 @@ export interface User {
   [key: string]: unknown;
 }
 
-/**
- * Atomic localStorage operation with mutex
- */
-async function atomicLocalStorageOperation<T>(
-  operation: () => T
-): Promise<T> {
-  // Wait for previous operation to complete
-  await localStorageMutex;
-  
-  // Create new promise for this operation
-  let resolve: ((value: void) => void) | undefined;
-  localStorageMutex = new Promise<void>(r => { resolve = r; });
-  
-  try {
-    const result = operation();
-    return result;
-  } finally {
-    // Release the lock
-    if (resolve) resolve();
-  }
-}
-
 export const authApi = {
   // Request deduplication cache
   _pendingGetMe: null as Promise<User | null> | null,
 
-  // Updated to accept type for role simulation (legacy/demo support)
-  // Real auth will use email/password in body, but keeping signature compatible for now
-  login: async (credentialsOrType?: { email: string, password: string } | 'admin' | 'user') => {
-    let credentials;
-    
-    if (typeof credentialsOrType === 'object') {
-      credentials = credentialsOrType;
-    } else {
-      // Auto-map for legacy/demo support
-      const type = credentialsOrType || 'user';
-      credentials = type === 'admin' 
-        ? { email: 'alice@aikb.com', password: 'admin123' }
-        : { email: 'david@aikb.com', password: 'admin123' };
-    }
-
+  login: async (credentials: { email: string, password: string }) => {
     const response = await api.post('/auth/login', credentials);
     
     if (response.data.user) {
-      await atomicLocalStorageOperation(() => {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('user', JSON.stringify(response.data.user));
-        }
-      });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
     }
     return response.data;
   },
@@ -113,11 +72,9 @@ export const authApi = {
       console.error('Logout error', e);
     } finally {
       try {
-        await atomicLocalStorageOperation(() => {
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('user');
-          }
-        });
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('user');
+        }
       } catch (cleanupError) {
         console.error('Local storage cleanup failed:', cleanupError);
         // Force clear as last resort
@@ -150,11 +107,9 @@ export const authApi = {
       .then(async (response) => {
         const data = response.data as User | null;
         if (data) {
-          await atomicLocalStorageOperation(() => {
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('user', JSON.stringify(data));
-            }
-          });
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('user', JSON.stringify(data));
+          }
         }
         return data;
       })

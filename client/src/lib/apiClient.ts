@@ -1,6 +1,21 @@
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
+export interface QueryResponse {
+  answer: string;
+  sources: { id: string; title: string; sensitivity?: string }[];
+  ai_citations?: { source_title: string; quote: string; relevance: string }[];
+  usage?: { promptTokenCount: number; candidatesTokenCount: number; totalTokenCount: number };
+  integrity?: {
+    confidence: string;
+    isVerified: boolean;
+    hallucinatedQuoteCount: number;
+    verifiedQuoteCount: number;
+    integrityScore: number;
+  };
+}
+
+
 class ApiClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${BASE_URL}${endpoint}`;
@@ -51,8 +66,8 @@ class ApiClient {
     return this.post<{ stats: { successes: number; failures: number } }>('/documents/sync', { documents: docs });
   }
 
-  async query(query: string, signal?: AbortSignal) {
-    return this.request<{ answer: string; sources: any[]; usage: any }>('/query', {
+  async query(query: string, signal?: AbortSignal): Promise<QueryResponse> {
+    return this.request<QueryResponse>('/query', {
       method: 'POST',
       body: JSON.stringify({ query }),
       signal,
