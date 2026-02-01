@@ -10,6 +10,7 @@ import type { AuthRequest } from '../middleware/auth.middleware.js';
 import { Logger } from '../utils/logger.js';
 import { AppError } from '../middleware/error.middleware.js';
 import { catchAsync } from '../utils/catchAsync.js';
+import { executeSaga } from '../utils/saga-transaction.js';
 
 export class DocumentController {
   
@@ -17,70 +18,89 @@ export class DocumentController {
     if (!req.file) throw new AppError('No file uploaded', 400);
 
     const { category, department, title } = req.body;
-    const docId = `manual-${Date.now()}`;
     const fileName = title || req.file.originalname;
 
     Logger.info('Starting document upload', { fileName, size: req.file.size, user: req.user?.email });
 
-    try {
-      // 0. Upload to Google Drive
-      const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-      let driveFileId = docId;
+    // Use saga pattern to ensure consistency: if any step fails, rollback all
+    const result = await executeSaga('document_upload', async (saga) => {
+      const docId = `manual-${Date.now()}`;
 
-      if (driveFolderId && driveFolderId !== 'mock-folder') {
-        driveFileId = await driveService.uploadFile(
-          driveFolderId,
-          fileName,
-          req.file.path,
-          req.file.mimetype
-        );
-      }
+      try {
+        // STEP 1: Upload to Google Drive
+        let driveFileId = docId;
+        const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-      // 1. Persist Metadata Overrides (Stability Feature)
-      // SECURITY: Default to user's department to prevent 'General' leakage
-      const finalDepartment = department || req.user?.department || 'General';
-      
-      await vectorService.updateDocumentMetadata(driveFileId, {
-        title: fileName,
-        category: category || 'General',
-        department: finalDepartment,
-        sensitivity: 'INTERNAL',
-      });
-
-      // 2. Immediate AI Indexing
-      await syncService.indexFile({
-        id: driveFileId,
-        name: fileName,
-        mimeType: req.file.mimetype,
-        modifiedTime: new Date().toISOString()
-      });
-
-      // 3. Record in History
-      await historyService.recordEvent({
-        event_type: 'CREATED',
-        doc_id: driveFileId,
-        doc_name: fileName,
-        details: `Manually uploaded & indexed: ${department || 'General'}/${category || 'General'}`
-      });
-
-      Logger.info('Document upload complete', { docId: driveFileId });
-
-      res.json({ 
-        success: true, 
-        message: 'File uploaded and indexed successfully',
-        docId: driveFileId,
-        file: {
-          filename: req.file.filename,
-          mimetype: req.file.mimetype,
-          size: req.file.size
+        if (driveFolderId && driveFolderId !== 'mock-folder') {
+          driveFileId = await driveService.uploadFile(
+            driveFolderId,
+            fileName,
+            req.file!.path,
+            req.file!.mimetype
+          );
+          saga.addStep('drive_upload', driveFileId);
+          
+          // Compensation: Delete from Drive if later steps fail
+          saga.addCompensation('drive_upload', async () => {
+            try {
+              await driveService.deleteFile(driveFileId);
+              Logger.info('Compensation: Deleted orphaned Drive file', { driveFileId });
+            } catch (e) {
+              Logger.warn('Compensation: Could not delete Drive file', { driveFileId, error: e });
+            }
+          });
         }
-      });
-    } finally {
-      // Cleanup local file
-      if (req.file.path && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
+
+        // STEP 2: Persist Metadata Overrides
+        const finalDepartment = department || req.user?.department || 'General';
+        
+        await vectorService.updateDocumentMetadata(driveFileId, {
+          title: fileName,
+          category: category || 'General',
+          department: finalDepartment,
+          sensitivity: 'INTERNAL',
+        });
+        saga.addStep('metadata_persisted', { driveFileId });
+
+        // STEP 3: Index for AI (may fail)
+        await syncService.indexFile({
+          id: driveFileId,
+          name: fileName,
+          mimeType: req.file!.mimetype,
+          modifiedTime: new Date().toISOString()
+        });
+        saga.addStep('ai_indexed', { driveFileId });
+
+        // STEP 4: Record in History
+        await historyService.recordEvent({
+          event_type: 'CREATED',
+          doc_id: driveFileId,
+          doc_name: fileName,
+          details: `Uploaded & indexed: ${finalDepartment}/${category || 'General'}`
+        });
+        saga.addStep('history_recorded', { driveFileId });
+
+        Logger.info('Document upload complete', { docId: driveFileId });
+
+        return {
+          success: true,
+          message: 'File uploaded and indexed successfully',
+          docId: driveFileId,
+          file: {
+            filename: req.file!.filename,
+            mimetype: req.file!.mimetype,
+            size: req.file!.size
+          }
+        };
+      } finally {
+        // Cleanup local file (always, whether saga succeeded or failed)
+        if (req.file!.path && fs.existsSync(req.file!.path)) {
+          fs.unlinkSync(req.file!.path);
+        }
       }
-    }
+    });
+
+    res.json(result);
   });
 
   static list: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {

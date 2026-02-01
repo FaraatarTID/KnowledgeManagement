@@ -19,22 +19,44 @@ export const errorHandler = (err: Error | AppError, req: Request, res: Response,
   let error = { ...err };
   error.message = err.message;
 
+  // Extract request ID from context middleware
+  const requestId = (req as any).id || (req.headers['x-request-id'] as string) || 'unknown';
+  const userId = (req as any).user?.id || 'anonymous';
+
   // Handle known operational errors
   if (err instanceof AppError) {
+    Logger.warn('Operational error', {
+      requestId,
+      statusCode: err.statusCode,
+      message: err.message,
+      userId,
+      url: req.url,
+      method: req.method
+    });
+
     return res.status(err.statusCode).json({
       status: 'error',
       message: err.message,
-      errorCode: err.name
+      errorCode: err.name,
+      requestId // Include for client support reference
     });
   }
 
-  // Log unknown errors with context
-  Logger.error('Unhandled Error 💥', {
+  // Log unknown errors with full context for debugging
+  Logger.error('Unhandled error occurred', {
+    requestId,
     message: err.message,
+    errorType: err.constructor.name,
     stack: err.stack,
     url: req.url,
     method: req.method,
-    ip: req.ip
+    userId,
+    ip: req.ip,
+    timestamp: new Date().toISOString(),
+    headers: {
+      'user-agent': req.headers['user-agent'],
+      'content-type': req.headers['content-type']
+    }
   });
 
   // SECURITY: Don't leak stack traces in production
@@ -50,23 +72,29 @@ export const errorHandler = (err: Error | AppError, req: Request, res: Response,
       userMessage = 'Invalid input. Please check your data and try again.';
     }
 
+    // Return support ID and request ID for customer support
+    const supportId = `SUP-${requestId}-${Date.now()}`;
+    
     return res.status(500).json({
       status: 'error',
       message: userMessage,
       errorCode: 'INTERNAL_ERROR',
-      supportId: `ERR-${Date.now()}` // For tracking support tickets
+      requestId, // User can reference this ID in logs
+      supportId  // Support team can use this to find the error
     });
   }
 
-  // Detailed error info in development
+  // Detailed error info in development (with request ID for linking)
   return res.status(500).json({
     status: 'error',
     message: err.message,
     errorCode: err.name || 'UNKNOWN_ERROR',
+    requestId, // Include for development debugging
     stack: err.stack,
     details: {
       url: req.url,
       method: req.method,
+      userId,
       ip: req.ip,
       timestamp: new Date().toISOString()
     }

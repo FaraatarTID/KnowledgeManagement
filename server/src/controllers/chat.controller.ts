@@ -10,6 +10,7 @@ export class ChatController {
   /**
    * Modern RAG Query
    * Frontend sends ONLY the query
+   * Returns: { answer, sources, usage, integrity: { hallucinationScore, hallucinationVerdict, ... } }
    */
   static query: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
     // Validation handled by middleware
@@ -26,6 +27,10 @@ export class ChatController {
       }
     });
 
+    // Hallucination verdict is already integrated in integrity field
+    // Client can check result.integrity.hallucinationVerdict === 'reject' to warn user
+    // Client can check result.integrity.hallucinationScore for confidence display
+    
     res.json(result);
   });
 

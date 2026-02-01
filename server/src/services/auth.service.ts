@@ -4,6 +4,9 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { env } from '../config/env.js';
 import type { User, UserRole, CreateUserDTO } from '../types/user.types.js';
+import { createPooledSupabaseClient } from '../utils/supabase-pool.js';
+import { featureFlags } from '../utils/feature-flags.js';
+import { Logger } from '../utils/logger.js';
 
 export interface AuthResult {
   user: User;
@@ -11,7 +14,7 @@ export interface AuthResult {
 }
 
 export class AuthService {
-  private supabase: SupabaseClient;
+  private supabase: any; // Pooled Supabase client
   // Pre-calculated hash for timing attack mitigation
   private static readonly DUMMY_HASH = '$argon2id$v=19$m=65536,t=3,p=1$745p5p5p5p5p5p5p5p5p5w$p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5';
 
@@ -27,24 +30,48 @@ export class AuthService {
       throw new Error('FATAL: Supabase credentials (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are missing. Authentication cannot function.');
     }
 
-    this.supabase = createClient(url, key);
-    console.log('AuthService: Supabase client initialized.');
+    const baseClient = createClient(url, key);
+    // Wrap with connection pooling to prevent resource exhaustion
+    this.supabase = createPooledSupabaseClient(baseClient, 10);
+    
+    Logger.info('AuthService: Supabase client initialized with connection pooling', {
+      maxConnections: 10
+    });
   }
 
   /**
    * Validates user credentials with constant-time comparison and account lockout.
    * Mitigates timing attacks and brute force by:
-   * 1. Always verifying a hash (real or dummy)
-   * 2. Adding random jitter (10-50ms) to execution time
-   * 3. Maintaining minimum execution time (500ms)
+   * 1. Adding jitter BEFORE any computation (not after)
+   * 2. Maintaining minimum execution time (500ms)
+   * 3. Always verifying a hash (real or dummy)
    * 4. Locking account after 5 failed attempts for 15 minutes
+   * 
+   * CRITICAL FIX: Jitter added at START to prevent statistical timing analysis
    */
   async validateCredentials(email: string, password: string): Promise<User | null> {
-    const startTime = Date.now();
+    const MIN_EXEC_TIME = 500; // 500ms minimum floor
     const normalizedEmail = email.toLowerCase().trim();
-
+    
+    // Check if constant-time verification is enabled (feature flag)
+    const useConstantTime = featureFlags.isEnabled('priority_1_3_constant_time_auth', undefined, env.NODE_ENV);
+    
+    if (!useConstantTime) {
+      // Fast auth path (for testing/rollback)
+      return await this.validateCredentialsFast(normalizedEmail, password);
+    }
+    
+    // STEP 1: Add random jitter BEFORE computation (this is the critical fix)
+    const randomJitter = crypto.randomInt(10, 50); // 0-50ms random delay
+    const startTarget = Date.now();
+    
     try {
-      // Query user (may take variable time if user doesn't exist)
+      // Add initial jitter to obscure timing
+      await new Promise(resolve => setTimeout(resolve, randomJitter));
+      
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Query user (database query timing still varies, but jitter already applied)
       const { data, error } = await this.supabase
         .from('users')
         .select('id, email, name, role, department, status, password_hash, failed_login_attempts, locked_until')
@@ -53,9 +80,10 @@ export class AuthService {
 
       // Check if account is locked
       if (data && data.locked_until && new Date(data.locked_until) > new Date()) {
-        console.log(`AuthService: Login attempt on locked account - ${normalizedEmail}`);
-        // Still maintain constant time
-        await this.enforceConstantTime(startTime);
+        Logger.warn(`Auth: Login attempt on locked account - ${normalizedEmail}`);
+        // Still verify dummy hash to maintain constant time
+        await this.verifyPassword(password, AuthService.DUMMY_HASH);
+        await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
         return null;
       }
 
@@ -70,8 +98,8 @@ export class AuthService {
 
       // Check if user is active AFTER hash verification
       if (isValid && !error && data && data.status === 'Inactive') {
-        console.log(`AuthService: Login attempt on inactive account - ${normalizedEmail}`);
-        await this.enforceConstantTime(startTime);
+        Logger.warn(`Auth: Login attempt on inactive account - ${normalizedEmail}`);
+        await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
         return null;
       }
 
@@ -84,7 +112,7 @@ export class AuthService {
         if (newAttempts >= 5) {
           const lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
           updates.locked_until = lockUntil.toISOString();
-          console.log(`AuthService: Account locked due to failed attempts - ${normalizedEmail}`);
+          Logger.warn(`Auth: Account locked due to failed attempts - ${normalizedEmail}`);
         }
 
         await this.supabase
@@ -99,14 +127,14 @@ export class AuthService {
           .from('users')
           .update({ failed_login_attempts: 0, locked_until: null })
           .eq('id', data.id);
-        console.log(`AuthService: Successful login - ${normalizedEmail}`);
-      } else if (!isValid) {
-        console.log(`AuthService: Failed login - ${normalizedEmail}`);
+        Logger.info(`Auth: Successful login - ${normalizedEmail}`);
+      } else if (!isValid && data) {
+        Logger.warn(`Auth: Failed login - ${normalizedEmail}`);
       }
 
       // Migrate legacy BCrypt hashes to Argon2 (only if auth succeeded)
       if (isValid && data && data.password_hash.startsWith('$2')) {
-        console.log(`AuthService: Migrating legacy hash for ${normalizedEmail} to Argon2...`);
+        Logger.info(`Auth: Migrating legacy hash for ${normalizedEmail} to Argon2...`);
         const newHash = await this.hashPassword(password);
         await this.supabase
           .from('users')
@@ -114,33 +142,30 @@ export class AuthService {
           .eq('id', data.id);
       }
 
-      // Enforce constant time delay
-      await this.enforceConstantTime(startTime);
+      // Enforce minimum execution time floor
+      await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
 
       // Return null for failed auth (regardless of whether user exists)
       return isValid && data ? { ...data, password_hash: undefined } as User : null;
 
     } catch (err) {
-      console.error('AuthService: validateCredentials error', err);
+      Logger.error('Auth: validateCredentials error', { error: err });
       
       // Even on database error, maintain constant time
-      await this.enforceConstantTime(startTime);
+      await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
 
       return null;
     }
   }
 
   /**
-   * Enforces minimum execution time to prevent timing attacks.
-   * Adds 10-50ms jitter to prevent statistical analysis.
+   * Ensures minimum execution time to prevent timing attacks.
+   * Jitter should be added BEFORE this is called.
    */
-  private async enforceConstantTime(startTime: number): Promise<void> {
-    const MINIMUM_TIME_MS = 500;
-    const jitterMs = crypto.randomInt(10, 50);
+  private async enforceMinimumTime(startTime: number, minimumMs: number): Promise<void> {
     const elapsed = Date.now() - startTime;
-
-    if (elapsed < MINIMUM_TIME_MS) {
-      const delayMs = MINIMUM_TIME_MS - elapsed + jitterMs;
+    if (elapsed < minimumMs) {
+      const delayMs = minimumMs - elapsed;
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
@@ -250,6 +275,59 @@ export class AuthService {
     } catch (error) {
       console.error('AuthService: Password verification failed', error);
       return false;
+    }
+  }
+
+  /**
+   * Fast auth path (without constant-time verification)
+   * Used for testing or when feature flag is disabled
+   */
+  private async validateCredentialsFast(
+    normalizedEmail: string,
+    password: string
+  ): Promise<User | null> {
+    try {
+      const { data, error } = await this.supabase
+        .from('users')
+        .select('id, email, name, role, department, status, password_hash, failed_login_attempts, locked_until')
+        .eq('email', normalizedEmail)
+        .single();
+
+      // Check if account is locked
+      if (data && data.locked_until && new Date(data.locked_until) > new Date()) {
+        Logger.warn(`Auth: Login attempt on locked account - ${normalizedEmail}`);
+        return null;
+      }
+
+      // Quick password check
+      if (!data) {
+        return null;
+      }
+
+      const isValid = await this.verifyPassword(password, data.password_hash);
+
+      if (!isValid) {
+        const newAttempts = (data.failed_login_attempts || 0) + 1;
+        const updates: any = { failed_login_attempts: newAttempts };
+
+        if (newAttempts >= 5) {
+          updates.locked_until = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        }
+
+        await this.supabase.from('users').update(updates).eq('id', data.id);
+        return null;
+      }
+
+      // Reset on success
+      await this.supabase
+        .from('users')
+        .update({ failed_login_attempts: 0, locked_until: null })
+        .eq('id', data.id);
+
+      return { ...data, password_hash: undefined } as User;
+    } catch (err) {
+      Logger.error('Auth: validateCredentialsFast error', { error: err });
+      return null;
     }
   }
 }

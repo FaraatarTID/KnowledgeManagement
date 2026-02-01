@@ -4,6 +4,7 @@ import { LocalMetadataService } from './localMetadata.service.js';
 import { VertexAI } from '@google-cloud/vertexai';
 import { Logger } from '../utils/logger.js';
 import { VectorSearchCache, MetadataCache } from '../utils/cache.util.js';
+import { cacheInvalidation } from '../utils/cache-invalidation.js';
 
 interface VectorItem {
   id: string;
@@ -31,6 +32,18 @@ export class VectorService {
   private metadataCache: MetadataCache;
 
   constructor(private projectId: string, private location: string, storagePath?: string) {
+    // CRITICAL: Validate Vertex AI connectivity at startup
+    if (!projectId) {
+      throw new Error(
+        'FATAL: GOOGLE_CLOUD_PROJECT_ID is required for Vector Search. ' +
+        'Vertex AI cannot initialize without valid GCP credentials.'
+      );
+    }
+
+    if (process.env.NODE_ENV !== 'test' && !process.env.GOOGLE_CLOUD_CREDENTIALS_PATH) {
+      Logger.warn('⚠️ GOOGLE_CLOUD_CREDENTIALS_PATH not set - Vertex AI may fail at runtime');
+    }
+
     // Initialize Vertex AI client
     this.vertexAI = new VertexAI({
       project: projectId,
@@ -47,7 +60,40 @@ export class VectorService {
 
     Logger.info('VectorService: Initialized with Vertex AI Vector Search', {
       projectId,
-      location
+      location,
+      timestamp: new Date().toISOString()
+    });
+
+    // Register cache invalidation listeners
+    cacheInvalidation.on('document_updated', async (event) => {
+      try {
+        Logger.debug('VectorService: Received cache invalidation: document_updated', { docId: event.docId });
+        this.metadataCache.delete(MetadataCache.generateKey(event.docId));
+        // Clear search cache conservatively; more fine-grained invalidation can be added
+        this.searchCache.clear();
+      } catch (e) {
+        Logger.warn('VectorService: Failed processing document_updated invalidation', { error: e, docId: event.docId });
+      }
+    });
+
+    cacheInvalidation.on('document_deleted', async (event) => {
+      try {
+        Logger.debug('VectorService: Received cache invalidation: document_deleted', { docId: event.docId });
+        this.metadataCache.delete(MetadataCache.generateKey(event.docId));
+        this.searchCache.clear();
+      } catch (e) {
+        Logger.warn('VectorService: Failed processing document_deleted invalidation', { error: e, docId: event.docId });
+      }
+    });
+
+    cacheInvalidation.on('embeddings_refreshed', async (event) => {
+      try {
+        Logger.debug('VectorService: Received cache invalidation: embeddings_refreshed', { docId: event.docId });
+        // Embeddings changed -> clear search cache
+        this.searchCache.clear();
+      } catch (e) {
+        Logger.warn('VectorService: Failed processing embeddings_refreshed invalidation', { error: e, docId: event.docId });
+      }
     });
   }
 
@@ -155,14 +201,10 @@ export class VectorService {
       const indexServiceClient = await (this.vertexAI as any).getIndexServiceClient?.();
       
       if (!indexServiceClient) {
-        // Fallback: Store locally if Vertex AI not available
-        Logger.warn('VectorService: Vertex AI not initialized, storing locally', { 
-          count: items.length 
-        });
-        items.forEach(item => {
-          this.localMetadataService.setOverride(item.metadata.docId, item.metadata);
-        });
-        return;
+        throw new Error(
+          'FATAL: Vertex AI Index Service unavailable. ' +
+          'Vector upsert failed - ensure GOOGLE_CLOUD_CREDENTIALS_PATH is set and GCP project has Vertex AI API enabled.'
+        );
       }
 
       // Batch upsert with retry logic
@@ -193,10 +235,8 @@ export class VectorService {
       Logger.info('VectorService: Upserted to Vertex AI', { count: items.length });
     } catch (error) {
       Logger.error('VectorService: Upsert to Vertex AI failed', { error });
-      // Fallback to local storage on failure
-      items.forEach(item => {
-        this.localMetadataService.setOverride(item.metadata.docId, item.metadata);
-      });
+      // DO NOT FALLBACK - fail loudly so we detect the issue immediately
+      throw error;
     }
   }
 
@@ -208,51 +248,71 @@ export class VectorService {
     try {
       const { embedding, topK, filters = {} } = params;
 
-      // Security: Build restriction filters from user's department and role
+      // SECURITY: Enforce RBAC filtering at API level (not application)
+      // This ensures we retrieve TOP-K from FILTERED subset, not filtered after retrieval
       const restricts = [
+        // Department-based filtering: user can only see docs in their department
         {
           namespace: 'department',
           allow_tokens: [filters.department || 'public']
         },
+        // Role-based filtering: user must have required role to see docs
         {
           namespace: 'roles',
           allow_tokens: [filters.role || 'user']
         }
       ];
 
-      Logger.debug('VectorService: Querying Vertex AI with filters', {
+      Logger.debug('VectorService: Querying Vertex AI with RBAC filters applied at API level', {
         topK,
         department: filters.department,
-        role: filters.role
+        role: filters.role,
+        restricts
       });
 
       // Call Vertex AI Index service
       const indexServiceClient = await (this.vertexAI as any).getIndexServiceClient?.();
       
       if (!indexServiceClient) {
-        // Fallback: Return empty if Vertex AI not initialized
-        Logger.warn('VectorService: Vertex AI not initialized, returning empty results');
-        return [];
+        throw new Error(
+          'FATAL: Vertex AI Index Service unavailable. ' +
+          'Vector search failed - check GCP credentials and Vertex AI API status.'
+        );
       }
 
-      // This would call the actual Vertex AI API:
-      // const response = await indexServiceClient.findNeighbors({
-      //   indexEndpoint: this.indexEndpoint,
-      //   neighbors: [{
-      //     datapoint: { datapoint_id: 'query', feature_vector: embedding },
-      //     restricts
-      //   }],
-      //   returnFullDatapoint: true,
-      //   perCrowdingAttributeNeighborCount: topK
-      // });
+      // CRITICAL: Filters are applied BEFORE similarity scoring
+      // This ensures:
+      // 1. User can only see documents in their department
+      // 2. User can only see documents for their role
+      // 3. Top-K is calculated from the FILTERED set, not all vectors
+      // 
+      // Example: If user has role 'IC' and department 'Engineering':
+      //   - Vector index contains 10M vectors
+      //   - After RBAC filters: 100K vectors in Engineering with IC role
+      //   - Top-K=10 returns best 10 from those 100K (not from all 10M)
+      
+      const response = await indexServiceClient.findNeighbors({
+        indexEndpoint: this.indexEndpoint,
+        neighbors: [{
+          datapoint: { datapoint_id: 'query', feature_vector: embedding },
+          restricts // APPLIED HERE: filters are enforced by Vertex AI
+        }],
+        returnFullDatapoint: true,
+        perCrowdingAttributeNeighborCount: topK
+      });
 
-      // For now, return empty to indicate API not yet callable
-      // (requires proper GCP authentication and index setup)
-      Logger.info('VectorService: Query made to Vertex AI', { topK });
-      return [];
+      // Add telemetry for RBAC filtering
+      Logger.info('VectorService: RBAC-filtered query executed', {
+        topK,
+        resultsReturned: response.neighbors?.length || 0,
+        department: filters.department,
+        role: filters.role
+      });
+
+      return response.neighbors || [];
     } catch (error) {
       Logger.error('VectorService: Query to Vertex AI failed', { error });
-      return [];
+      throw error; // Fail loudly, don't silently return empty
     }
   }
 
@@ -293,6 +353,13 @@ export class VectorService {
       
       // Clear search cache since vectors changed
       this.searchCache.clear();
+
+      // Emit distributed invalidation event so other services can react
+      try {
+        await cacheInvalidation.deleteDocument(docId);
+      } catch (e) {
+        Logger.warn('VectorService: cacheInvalidation.deleteDocument failed', { error: e, docId });
+      }
       
       Logger.info('VectorService: Deleted document and invalidated caches', { docId });
     } catch (e) {
@@ -393,6 +460,13 @@ export class VectorService {
       
       // Clear search cache since metadata (and thus results) may have changed
       this.searchCache.clear();
+
+      // Emit distributed invalidation event so other services can react
+      try {
+        await cacheInvalidation.invalidateDocument(docId);
+      } catch (e) {
+        Logger.warn('VectorService: cacheInvalidation.invalidateDocument failed', { error: e, docId });
+      }
       
       Logger.info('VectorService: Updated metadata and invalidated caches', { docId });
     } catch (e) {

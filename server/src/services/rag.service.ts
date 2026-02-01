@@ -293,8 +293,6 @@ export class RAGService {
         }
       };
     }
-      isTruncated
-    };
   }
 
   /**
