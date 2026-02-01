@@ -243,10 +243,23 @@ export class AuthService {
   }
 
   generateToken(user: User): string {
+    // SECURITY: Include iat/nbf claims for validation; strict 24h expiry
+    const now = Math.floor(Date.now() / 1000);
     return jwt.sign(
-      { id: user.id, email: user.email, name: user.name, role: user.role, department: user.department },
+      { 
+        id: user.id, 
+        email: user.email, 
+        name: user.name, 
+        role: user.role, 
+        department: user.department,
+        iat: now,  // Issued at (verified in middleware)
+        nbf: now   // Not before (strict)
+      },
       env.JWT_SECRET,
-      { expiresIn: '24h' }
+      { 
+        expiresIn: '24h',
+        algorithm: 'HS256'  // Explicit algorithm to prevent algorithm confusion attacks
+      }
     );
   }
 

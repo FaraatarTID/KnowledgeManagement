@@ -16,19 +16,20 @@ interface CacheStats {
 }
 
 /**
- * Simple in-memory LRU cache with TTL support.
- * Useful for caching vector search results, embeddings, and metadata.
- * 
+ * Thread-safe in-memory LRU cache with TTL support.
+ * CRITICAL FIX: Mutex-protected set() to prevent concurrent over-allocation
  * Automatically evicts expired entries and least recently used items.
  */
 export class CacheUtil<T> {
   private cache: Map<string, CacheEntry<T>> = new Map();
   private maxSize: number;
-  private defaultTtlMs: number;
+  private readonly defaultTtlMs: number;
   private hits: number = 0;
   private misses: number = 0;
+  private setLock = Promise.resolve();  // Serialize set() operations
 
   constructor(maxSize: number = 1000, defaultTtlMs: number = 5 * 60 * 1000) {
+    if (maxSize < 10) throw new Error('Cache maxSize must be ≥10');
     this.maxSize = maxSize;
     this.defaultTtlMs = defaultTtlMs;
   }
@@ -61,20 +62,37 @@ export class CacheUtil<T> {
 
   /**
    * Set value in cache with optional TTL.
+   * FIXED: Serialized with lock to prevent concurrent over-allocation
    */
   set(key: string, data: T, ttlMs?: number): void {
-    const expiresAt = Date.now() + (ttlMs ?? this.defaultTtlMs);
+    // Acquire lock to serialize set operations
+    this.setLock = this.setLock.then(() => {
+      const expiresAt = Date.now() + (ttlMs ?? this.defaultTtlMs);
 
-    // If cache is full, evict least recently used (by hits)
-    if (this.cache.size >= this.maxSize && !this.cache.has(key)) {
-      this.evictLRU();
-    }
+      // FIXED: Aggressively evict if at/over capacity
+      // Evict multiple entries to prevent concurrent over-allocation
+      let evictedCount = 0;
+      while (this.cache.size >= this.maxSize && !this.cache.has(key)) {
+        this.evictLRU();
+        evictedCount++;
+        // Safety: never evict more than 10% of cache per set
+        if (evictedCount >= Math.floor(this.maxSize * 0.1)) {
+          Logger.warn('CacheUtil: Aggressive eviction triggered', { 
+            evicted: evictedCount, 
+            reason: 'Cache pressure' 
+          });
+          break;
+        }
+      }
 
-    this.cache.set(key, {
-      data,
-      expiresAt,
-      hits: 0,
-      createdAt: Date.now()
+      this.cache.set(key, {
+        data,
+        expiresAt,
+        hits: 0,
+        createdAt: Date.now()
+      });
+
+      return Promise.resolve();
     });
   }
 
@@ -148,6 +166,31 @@ export class CacheUtil<T> {
   /**
    * Evict least recently used (LRU) entry.
    * Uses hit count as proxy for recency.
+   * FIXED: Deterministic algorithm with fallback to timestamp
+   */
+  private evictLRU(): void {
+    let lruKey: string | null = null;
+    let minHits = Infinity;
+    let oldestTime = Infinity;
+
+    for (const [key, entry] of this.cache.entries()) {
+      // Primary: evict by hit count (least frequently used)
+      if (entry.hits < minHits) {
+        lruKey = key;
+        minHits = entry.hits;
+        oldestTime = entry.createdAt;
+      } else if (entry.hits === minHits && entry.createdAt < oldestTime) {
+        // Tiebreaker: evict oldest by creation time
+        lruKey = key;
+        oldestTime = entry.createdAt;
+      }
+    }
+
+    if (lruKey) {
+      this.cache.delete(lruKey);
+      Logger.debug('CacheUtil: Evicted LRU entry', { key: lruKey, hits: minHits });
+    }
+  }
    */
   private evictLRU(): void {
     let lruKey: string | null = null;

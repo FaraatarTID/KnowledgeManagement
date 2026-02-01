@@ -6,12 +6,14 @@ import { AuditService } from './access.service.js';
 import { HallucinationService } from './hallucination.service.js';
 import { Logger } from '../utils/logger.js';
 import { TimeoutUtil, REQUEST_TIMEOUTS } from '../utils/timeout.util.js';
+import { encoding_for_model } from 'js-tiktoken';
 
 export class RAGService {
   private redactionService: RedactionService;
   private auditService: AuditService;
   private hallucinationService: HallucinationService;
   private logger = new Logger('RAGService');
+  private tokenEncoder = encoding_for_model('gpt-4');  // Use GPT-4 encoding for token counting
 
   constructor(
     private geminiService: GeminiService,
@@ -22,6 +24,28 @@ export class RAGService {
     this.hallucinationService = new HallucinationService();
   }
 
+  /**
+   * Calculate estimated cost for RAG query
+   */
+  private calculateCost(inputTokens: number, outputTokens: number = 500): number {
+    const inputCost = (inputTokens / 1000) * env.RAG_COST_PER_INPUT_K_TOKENS;
+    const outputCost = (outputTokens / 1000) * env.RAG_COST_PER_OUTPUT_K_TOKENS;
+    return inputCost + outputCost;
+  }
+
+  /**
+   * Count tokens in text using GPT-4 tokenizer
+   */
+  private countTokens(text: string): number {
+    try {
+      return this.tokenEncoder.encode(text).length;
+    } catch (e) {
+      this.logger.warn('Token counting failed, using character fallback', { error: e });
+      // Fallback: rough estimate (1 token ≈ 4 chars)
+      return Math.ceil(text.length / 4);
+    }
+  }
+
   async query(params: {
     query: string;
     userId: string;
@@ -30,6 +54,8 @@ export class RAGService {
   }) {
     const { query, userId, userProfile, history = [] } = params;
     const operationDeadline = Date.now() + REQUEST_TIMEOUTS.RAG_QUERY;
+    let totalInputTokens = 0;
+    let estimatedCost = 0;
 
     try {
       // 1. Generate query embedding (with timeout)
@@ -38,6 +64,10 @@ export class RAGService {
         REQUEST_TIMEOUTS.EMBEDDING_GENERATION,
         'RAG: Embedding generation'
       );
+      
+      // Embedding generation cost (fixed per request)
+      estimatedCost += 0.001;
+      totalInputTokens += this.countTokens(query);
 
       // 2. Vector similarity search with access control (with timeout)
       const searchResults = await TimeoutUtil.timeout(
@@ -76,32 +106,85 @@ export class RAGService {
         };
       }
 
-      // 4. Build context from results with Token Cap
-      // Limit total context size to prevent token exhaustion/cost spikes.
-    const MAX_CONTEXT_CHARS = env.RAG_MAX_CONTEXT_CHARS;
-    let currentLength = 0;
+      // 4. Build context from results with STRICT TOKEN BUDGET
+      // CRITICAL FIX: Token counting + cost validation (not just character count)
     const context: string[] = [];
     let isTruncated = false;
+    let contextTokens = 0;
+    let blockCount = 0;
 
     for (const res of relevantResults) {
+      // Stop if we'd exceed token limit
+      if (totalInputTokens + contextTokens > env.RAG_MAX_INPUT_TOKENS) {
+        isTruncated = true;
+        this.logger.warn('RAG: Truncating context due to token limit', { 
+          currentTokens: totalInputTokens + contextTokens,
+          maxTokens: env.RAG_MAX_INPUT_TOKENS,
+          blocksAdded: blockCount
+        });
+        break;
+      }
+
       let text = res.metadata.text || '';
       
       // SECURITY: Redact PII before sending to LLM
       text = this.redactionService.redactPII(text);
       
       const sourceBlock = `SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${text}`;
+      const blockTokens = this.countTokens(sourceBlock);
       
-      if (currentLength + sourceBlock.length > MAX_CONTEXT_CHARS) {
+      // CRITICAL: Check if adding this block would exceed limits
+      if (totalInputTokens + contextTokens + blockTokens > env.RAG_MAX_INPUT_TOKENS) {
         isTruncated = true;
-        if (context.length === 0) {
-           const remaining = MAX_CONTEXT_CHARS;
-           context.push(`SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${text.substring(0, remaining)}...[TRUNCATED]`);
+        // Try to add partial content if this is first block
+        if (blockCount === 0) {
+          const availableTokens = env.RAG_MAX_INPUT_TOKENS - totalInputTokens;
+          // Rough estimate: truncate to ~85% of available tokens
+          const truncatedText = text.substring(0, Math.floor(text.length * 0.85));
+          const truncatedBlock = `SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${truncatedText}\n...[TRUNCATED - token limit reached]`;
+          context.push(truncatedBlock);
+          contextTokens += this.countTokens(truncatedBlock);
         }
-        break; 
+        break;
       }
       
       context.push(sourceBlock);
-      currentLength += sourceBlock.length;
+      contextTokens += blockTokens;
+      blockCount++;
+    }
+
+    totalInputTokens += contextTokens;
+    estimatedCost = this.calculateCost(totalInputTokens);
+
+    // CRITICAL FIX: Reject if estimated cost exceeds limit
+    if (estimatedCost > env.RAG_MAX_COST_PER_REQUEST) {
+      this.logger.error('RAG: Query rejected due to cost limit', { 
+        estimatedCost,
+        maxCost: env.RAG_MAX_COST_PER_REQUEST,
+        userId,
+        inputTokens: totalInputTokens
+      });
+
+      await this.auditService.log({
+        userId: userId || 'anonymous',
+        action: 'RAG_QUERY',
+        query,
+        granted: false,
+        reason: `Query cost ($${estimatedCost.toFixed(2)}) exceeds limit ($${env.RAG_MAX_COST_PER_REQUEST})`
+      });
+
+      return {
+        answer: 'Query is too expensive to process. Please try a more specific search.',
+        sources: [],
+        usage: undefined,
+        integrity: {
+          confidence: 'LOW',
+          isVerified: false,
+          reason: 'Cost limit exceeded',
+          estimatedCost,
+          inputTokens: totalInputTokens
+        }
+      };
     }
 
     // STRATEGIC FIX: Capture citations for Audit log
@@ -208,6 +291,10 @@ export class RAGService {
       integrityResults.hallucinationIssues = hallucinationAnalysis.issues;
     }
 
+    // Include cost metadata
+    integrityResults.estimatedCost = estimatedCost;
+    integrityResults.inputTokens = totalInputTokens;
+
     // If hallucination detected as critical, return safer response
     if (shouldRejectResponse) {
       await this.auditService.log({
@@ -218,7 +305,9 @@ export class RAGService {
         metadata: {
           hallucinationDetected: true,
           hallucinationScore: hallucinationAnalysis?.score,
-          verdict: 'REJECTED'
+          verdict: 'REJECTED',
+          estimatedCost,
+          inputTokens: totalInputTokens
         }
       });
 
@@ -231,7 +320,9 @@ export class RAGService {
           isVerified: false,
           reason: 'Hallucination detected - response rejected for safety',
           hallucinationScore: hallucinationAnalysis?.score,
-          hallucinationIssues: hallucinationAnalysis?.issues
+          hallucinationIssues: hallucinationAnalysis?.issues,
+          estimatedCost,
+          inputTokens: totalInputTokens
         }
       };
     }

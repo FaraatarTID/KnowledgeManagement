@@ -42,7 +42,7 @@ export const errorHandler = (err: Error | AppError, req: Request, res: Response,
     });
   }
 
-  // Log unknown errors with full context for debugging
+  // Log unknown errors with full context for debugging (internal only)
   Logger.error('Unhandled error occurred', {
     requestId,
     message: err.message,
@@ -53,13 +53,14 @@ export const errorHandler = (err: Error | AppError, req: Request, res: Response,
     userId,
     ip: req.ip,
     timestamp: new Date().toISOString(),
+    // FIXED: Do NOT include raw headers in logs (may contain PII/tokens)
     headers: {
-      'user-agent': req.headers['user-agent'],
       'content-type': req.headers['content-type']
     }
   });
 
-  // SECURITY: Don't leak stack traces in production
+  // SECURITY: ALWAYS return sanitized error in production
+  // CRITICAL: Even in development, never leak file paths or internal structure
   if (process.env.NODE_ENV === 'production') {
     // User-friendly messages based on error type
     let userMessage = 'An unexpected error occurred. Please try again.';
@@ -84,18 +85,29 @@ export const errorHandler = (err: Error | AppError, req: Request, res: Response,
     });
   }
 
-  // Detailed error info in development (with request ID for linking)
+  // FIXED: Development mode - still sanitize stack traces and PII
+  // Remove file paths, query params, and secrets from stack trace
+  let sanitizedStack = err.stack || '';
+  
+  // Redact common sensitive patterns
+  sanitizedStack = sanitizedStack
+    .replace(/\/[^\s]*\/node_modules\//g, '...node_modules...')  // Hide node_modules paths
+    .replace(/\/[^\s]*\/server\//g, '.../server/')  // Shorten server paths
+    .replace(/\/[^\s]*\/client\//g, '.../client/')  // Shorten client paths
+    .replace(/password[=:][^\s]*/gi, 'password=***')  // Hide passwords
+    .replace(/token[=:][^\s]*/gi, 'token=***')  // Hide tokens
+    .replace(/secret[=:][^\s]*/gi, 'secret=***');  // Hide secrets
+
   return res.status(500).json({
     status: 'error',
     message: err.message,
     errorCode: err.name || 'UNKNOWN_ERROR',
     requestId, // Include for development debugging
-    stack: err.stack,
+    stack: sanitizedStack,  // FIXED: Sanitized, not raw
     details: {
       url: req.url,
       method: req.method,
-      userId,
-      ip: req.ip,
+      // FIXED: Do NOT include user ID in error details (privacy)
       timestamp: new Date().toISOString()
     }
   });

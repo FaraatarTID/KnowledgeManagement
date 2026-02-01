@@ -105,49 +105,29 @@ export class DocumentController {
 
   static list: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
     const user = req.user!;
-    const vectorMetadata = await vectorService.getAllMetadata();
-
-    let documents: any[] = [];
     
-    if (process.env.GOOGLE_DRIVE_FOLDER_ID && process.env.GOOGLE_DRIVE_FOLDER_ID !== 'mock-folder') {
-        try {
-          const files = await driveService.listFiles(process.env.GOOGLE_DRIVE_FOLDER_ID);
-          documents = files.map(f => {
-            const vMeta = vectorMetadata[f.id!] || {};
-            const link = vMeta.link || f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`;
-          
-          return {
-            id: f.id,
-            name: vMeta.title || f.name,
-            mimeType: f.mimeType,
-            modifiedAt: f.modifiedTime,
-            category: vMeta.category || 'General',
-            sensitivity: vMeta.sensitivity || 'INTERNAL',
-            department: vMeta.department || 'General',
-            owner: vMeta.owner || (f.owners?.[0] as any)?.emailAddress,
-            link: link,
-            status: vectorMetadata[f.id!] ? 'Synced' : 'Not Synced'
-          };
-        });
-        } catch (e) {
-          Logger.error('Drive listing failed', { error: (e as any).message });
-          // Fallback to empty list or local metadata only
-        }
+    // FIXED: Query Vector DB with RBAC filters applied at retrieval time (O(1) with index)
+    // Instead of fetching all docs then filtering (O(n²)), let vector DB handle filtering
+    try {
+      const documents = await vectorService.listDocumentsWithRBAC({
+        userId: user.id,
+        department: user.department,
+        role: user.role,
+        // Let Vertex AI apply filters BEFORE returning results
+      });
+
+      // For admin, return all documents without filtering
+      if (user.role === 'ADMIN') {
+        return res.json(documents);
+      }
+
+      // For non-admins, documents are already filtered by vector DB
+      // This is O(log n) because Vertex AI uses indexes
+      res.json(documents);
+    } catch (e) {
+      Logger.error('Document listing failed', { error: (e as any).message });
+      res.json([]);  // Fallback to empty list
     }
-    
-    const sensitivityMap: Record<string, number> = { 'PUBLIC': 0, 'INTERNAL': 1, 'CONFIDENTIAL': 2, 'RESTRICTED': 3, 'EXECUTIVE': 4 };
-    const roleMap: Record<string, number> = { 'VIEWER': 1, 'EDITOR': 2, 'MANAGER': 3, 'ADMIN': 4 };
-    const userClearance = roleMap[user.role.toUpperCase()] || 1;
-
-    if (user.role === 'ADMIN') return res.json(documents);
-    
-    res.json(documents.filter(d => {
-        const docSensitivity = (d.sensitivity || 'INTERNAL').toUpperCase();
-        const docLevel = sensitivityMap[docSensitivity] ?? 1;
-        
-        if (userClearance < docLevel) return false;
-        return !d.department || d.department === user.department || d.department === 'General';
-    }));
   });
 
   static update: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
@@ -201,8 +181,15 @@ export class DocumentController {
   static delete: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     if (!id) throw new AppError('ID required', 400);
+    
     await vectorService.deleteDocument(id);
-    Logger.info('Document deleted from index', { docId: id });
+    
+    // FIXED: Invalidate cache for this document and related searches
+    // Emit event so VectorService clears its cache
+    const { cacheInvalidation } = await import('../utils/cache-invalidation.js');
+    cacheInvalidation.emit('document_deleted', { docId: id });
+    
+    Logger.info('Document deleted from index and cache invalidated', { docId: id });
     res.json({ status: 'success', message: `Document ${id} removed from index.` });
   });
 

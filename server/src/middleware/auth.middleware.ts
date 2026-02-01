@@ -37,6 +37,19 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
   try {
     const decoded = jwt.verify(token, secret) as AuthUser;
     
+    // SECURITY: Validate token timing claims to prevent clock skew attacks
+    const payload = jwt.decode(token) as any;
+    const iat = (payload?.iat || 0) * 1000;
+    const now = Date.now();
+    
+    if (iat > now) {
+      return res.status(401).json({ error: 'Token issued in future (clock skew)' });
+    }
+    if (now - iat > 24 * 60 * 60 * 1000) {
+      // Token is older than 24h (shouldn't happen with valid JWT, but defense in depth)
+      return res.status(401).json({ error: 'Token age exceeds validity window' });
+    }
+    
     // SECURITY: Real-time User State Check
     // If Supabase is configured, verify the user still exists and is Active
     const authService = await getAuthService();
@@ -50,6 +63,23 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
       return res.status(403).json({ error: 'Account is deactivated' });
     }
 
+    // SECURITY: CRITICAL - Verify role hasn't been escalated/changed
+    // If JWT role doesn't match DB role, attacker may have forged token
+    if (user.role !== decoded.role) {
+      Logger.warn('SECURITY: Role mismatch detected - possible privilege escalation attempt', {
+        userId: decoded.id,
+        email: decoded.email,
+        tokenRole: decoded.role,
+        dbRole: user.role,
+        ip: req.ip,
+        userAgent: req.get('user-agent')
+      });
+      return res.status(401).json({ 
+        error: 'Your permissions have changed. Please log in again.',
+        code: 'ROLE_CHANGED'
+      });
+    }
+
     // Pass latest user data from DB instead of stale JWT data
     req.user = user;
     next();
@@ -57,6 +87,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
     }
+    Logger.warn('JWT verification failed', { error: error.message, ip: req.ip });
     return res.status(401).json({ error: 'Invalid token' });
   }
 };

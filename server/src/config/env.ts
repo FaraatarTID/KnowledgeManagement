@@ -4,7 +4,9 @@ import 'dotenv/config';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('3001'),
-  JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters long."),
+  JWT_SECRET: z.string()
+    .min(64, "JWT_SECRET must be at least 64 characters long (use: node -e 'console.log(require(\"crypto\").randomBytes(32).toString(\"hex\"))')")
+    .regex(/^[a-f0-9]{64,}$/, "JWT_SECRET must be hex-encoded random bytes"),
   
   // Google Cloud
   GOOGLE_CLOUD_PROJECT_ID: z.string(),
@@ -23,6 +25,10 @@ const envSchema = z.object({
   // RAG Config
   RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.60),
   RAG_MAX_CONTEXT_CHARS: z.coerce.number().int().positive().default(100000),
+  RAG_MAX_INPUT_TOKENS: z.coerce.number().int().positive().default(8000),
+  RAG_MAX_COST_PER_REQUEST: z.coerce.number().positive().default(0.50), // $0.50 per request
+  RAG_COST_PER_INPUT_K_TOKENS: z.coerce.number().positive().default(0.0075), // $0.0075 per 1K input tokens
+  RAG_COST_PER_OUTPUT_K_TOKENS: z.coerce.number().positive().default(0.01), // $0.01 per 1K output tokens
 
   // Security
   ALLOWED_ORIGINS: z.string().default('http://localhost:3000,http://127.0.0.1:3000'),
