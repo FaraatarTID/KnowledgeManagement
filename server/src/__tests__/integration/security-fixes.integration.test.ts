@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import jwt from 'jsonwebtoken';
 import { CacheUtil } from '../../utils/cache.util.js';
+import { VectorService } from '../../services/vector.service.js';
 
 /**
  * Security Fixes Validation Tests
@@ -116,14 +117,30 @@ describe('Security Fixes: Phase 1 (CRITICAL)', () => {
 
   describe('1.4 Document Filtering Performance', () => {
     it('should use vector DB filtering instead of post-processing', async () => {
-      // FIXED: listDocumentsWithRBAC calls Vertex AI with filters
-      // Query time should be O(log n) with index, not O(n²)
-      
-      // Before fix: 10K docs × 100 concurrent users = 1M comparisons
-      // After fix: Vector DB returns only visible docs (pre-filtered)
-      
-      // This is validated through architecture review, not unit test
-      expect(true).toBe(true); // Placeholder for integration test
+      const vectorService = new VectorService('test-project', 'us-central1');
+      const findNeighbors = vi.fn().mockResolvedValue({ neighbors: [{ id: 'doc-1' }] });
+
+      (vectorService as any).vertexAI = {
+        getIndexServiceClient: async () => ({
+          findNeighbors
+        })
+      };
+
+      await vectorService.similaritySearch({
+        embedding: [0.1, 0.2, 0.3],
+        topK: 5,
+        filters: {
+          department: 'engineering',
+          role: 'viewer'
+        }
+      });
+
+      expect(findNeighbors).toHaveBeenCalledTimes(1);
+      const callArgs = findNeighbors.mock.calls[0][0];
+      expect(callArgs.neighbors[0].restricts).toEqual([
+        { namespace: 'department', allow_tokens: ['engineering'] },
+        { namespace: 'roles', allow_tokens: ['viewer'] }
+      ]);
     });
   });
 

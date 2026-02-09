@@ -98,9 +98,14 @@ export class VectorService {
   }
 
   getVectorCount(): Promise<number> {
-    // P1.1: Return cached count or fetch from Vertex AI
-    // For now, return promise that resolves to count
-    return Promise.resolve(0); // Placeholder until Vertex AI integration complete
+    try {
+      // Prefer local metadata count as a fast fallback.
+      const localCount = Object.keys(this.localMetadataService.getAllOverrides()).length;
+      return Promise.resolve(localCount);
+    } catch (error) {
+      Logger.warn('VectorService: Failed to compute vector count from local metadata', { error });
+      return Promise.resolve(0);
+    }
   }
 
   async flush(): Promise<void> {

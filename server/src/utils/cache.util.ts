@@ -191,23 +191,6 @@ export class CacheUtil<T> {
       Logger.debug('CacheUtil: Evicted LRU entry', { key: lruKey, hits: minHits });
     }
   }
-   */
-  private evictLRU(): void {
-    let lruKey: string | null = null;
-    let minHits = Infinity;
-
-    for (const [key, entry] of this.cache.entries()) {
-      if (entry.hits < minHits) {
-        minHits = entry.hits;
-        lruKey = key;
-      }
-    }
-
-    if (lruKey) {
-      this.cache.delete(lruKey);
-      Logger.debug('CacheUtil: Evicted LRU entry', { key: lruKey });
-    }
-  }
 }
 
 /**
