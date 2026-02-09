@@ -13,7 +13,7 @@ jobs:
       SUPPORT_LEGACY_CHAT: 'false'
     strategy:
       matrix:
-        node-version: [18.x]
+        node-version: [20.x]
 
     steps:
       - name: Checkout
