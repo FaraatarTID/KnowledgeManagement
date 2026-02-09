@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import AIKB from '@/KM';
 
 // Mock debounce
 vi.mock('@/hooks/useDebounce', () => ({
-  useDebounce: (value: any) => value,
+  useDebounce: <T,>(value: T) => value,
 }));
 
 // Mock components
@@ -26,13 +27,12 @@ vi.mock('@/components/ToastContainer', () => ({
 describe('Document Sync Logic Gap Fix', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (global.fetch as any) = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    (global.fetch as ReturnType<typeof vi.fn>) = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
         success: true,
         stats: { total: 1, successes: 1, failures: 0 }
-      }),
-    });
+      }), { status: 200 })
+    );
   });
 
   it('should sync document to backend when added', async () => {
@@ -61,7 +61,7 @@ describe('Document Sync Logic Gap Fix', () => {
   });
 
   it('should handle sync failure gracefully', async () => {
-    (global.fetch as any).mockRejectedValue(new Error('Network error'));
+    (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Network error'));
 
     render(<AIKB />);
 

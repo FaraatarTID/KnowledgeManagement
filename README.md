@@ -13,6 +13,7 @@ AIKB is an enterprise knowledge management system combining semantic search, sec
 - 📖 [User Guide](USER_GUIDE.md) - For end users
 - 🔧 [Developer Guide](QUICK_REFERENCE.md) - Quick commands
 - 🗂️ [Complete Summary](COMPLETE_PROJECT_SUMMARY.md) - All 15 Priority items
+- 🏛️ [Architecture Docs](docs/architecture/overview.md) - System boundaries & ADRs
 - 📡 [API Docs](http://localhost:3001/api/docs) - Interactive Swagger UI (when running)
 - 🚀 [Deployment Guide](server/docs/RUNBOOK_DEPLOYMENT.md) - Deploy to production
 

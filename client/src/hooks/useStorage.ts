@@ -19,7 +19,6 @@ export const useStorage = () => {
    * Load data with corruption detection and recovery
    */
   const loadData = async (): Promise<StorageData> => {
-    const startTime = Date.now();
     let docsResult: unknown | undefined;
     let chatResult: unknown | undefined;
     let backupResult: unknown | undefined;
@@ -58,8 +57,9 @@ export const useStorage = () => {
 
       return { documents, chatHistory, timestamp: Date.now() };
 
-    } catch (error: any) {
-      console.warn('STORAGE_LOAD_FAILED', { error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn('STORAGE_LOAD_FAILED', { error: message });
 
       if (typeof backupResult === 'string') {
         try {
