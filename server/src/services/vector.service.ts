@@ -54,7 +54,7 @@ export class VectorService {
     this.indexName = `projects/${projectId}/locations/${location}/indexes/km-vectors`;
     this.indexEndpoint = `projects/${projectId}/locations/${location}/indexEndpoints/km-endpoint`;
 
-    this.localMetadataService = new LocalMetadataService();
+    this.localMetadataService = new LocalMetadataService(storagePath);
     this.searchCache = new VectorSearchCache();
     this.metadataCache = new MetadataCache();
 
