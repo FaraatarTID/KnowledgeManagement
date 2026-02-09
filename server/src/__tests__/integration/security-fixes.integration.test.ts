@@ -117,6 +117,8 @@ describe('Security Fixes: Phase 1 (CRITICAL)', () => {
 
   describe('1.4 Document Filtering Performance', () => {
     it('should use vector DB filtering instead of post-processing', async () => {
+      const previousEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'development';
       const vectorService = new VectorService('test-project', 'us-central1');
       const findNeighbors = vi.fn().mockResolvedValue({ neighbors: [{ id: 'doc-1' }] });
 
@@ -134,6 +136,8 @@ describe('Security Fixes: Phase 1 (CRITICAL)', () => {
           role: 'viewer'
         }
       });
+
+      process.env.NODE_ENV = previousEnv;
 
       expect(findNeighbors).toHaveBeenCalledTimes(1);
       const callArgs = findNeighbors.mock.calls[0][0];

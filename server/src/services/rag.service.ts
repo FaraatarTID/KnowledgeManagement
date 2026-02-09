@@ -12,7 +12,7 @@ export class RAGService {
   private redactionService: RedactionService;
   private auditService: AuditService;
   private hallucinationService: HallucinationService;
-  private logger = new Logger('RAGService');
+  private logger = Logger;
   private tokenEncoder: { encode: (text: string) => number[] } | null = null;
   private tokenEncoderFailed = false;
 
@@ -193,7 +193,7 @@ export class RAGService {
         sources: [],
         usage: undefined,
         integrity: {
-          confidence: 'LOW',
+          confidence: 'Low',
           isVerified: false,
           reason: 'Cost limit exceeded',
           estimatedCost,
@@ -223,7 +223,7 @@ export class RAGService {
         answer: "I couldn't find any documents in the knowledge base that match your query.",
         sources: [],
         usage: undefined,
-        integrity: { confidence: 'LOW', isVerified: false, reason: 'No context' }
+        integrity: { confidence: 'Low', isVerified: false, reason: 'No context' }
       };
     }
 
@@ -331,7 +331,7 @@ export class RAGService {
         sources: citations.slice(0, 3),
         usage: usageMetadata,
         integrity: {
-          confidence: 'LOW',
+          confidence: 'Low',
           isVerified: false,
           reason: 'Hallucination detected - response rejected for safety',
           hallucinationScore: hallucinationAnalysis?.score,
@@ -393,7 +393,7 @@ export class RAGService {
         ai_citations: [],
         usage: undefined,
         integrity: {
-          confidence: 'LOW',
+          confidence: 'Low',
           isVerified: false,
           reason: error instanceof Error ? error.message : 'Unknown error'
         }

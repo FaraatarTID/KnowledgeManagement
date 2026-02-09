@@ -180,7 +180,13 @@ export class VectorService {
     try {
       if (process.env.NODE_ENV === 'test') {
         items.forEach(item => {
-          this.localMetadataService.setOverride(item.metadata.docId, item.metadata);
+          const docId = item.metadata.docId || item.id;
+          this.localMetadataService.setOverride(docId, item.metadata);
+          this.localMetadataService.setOverride(item.id, {
+            ...item.metadata,
+            id: item.id,
+            __vectorEntry: true
+          });
         });
         Logger.debug('VectorService: Skipping Vertex AI upsert in test mode', { count: items.length });
         return;
@@ -430,6 +436,9 @@ export class VectorService {
       const vectors: VectorItem[] = [];
 
       for (const [docId, data] of Object.entries(metadata)) {
+        if (process.env.NODE_ENV === 'test' && !(data as any).__vectorEntry) {
+          continue;
+        }
         vectors.push({
           id: data.id || `vector-${docId}`,
           values: [], // Would need to fetch actual embeddings from Vertex AI
