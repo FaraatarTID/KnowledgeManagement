@@ -1,5 +1,25 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { Request } from 'express';
+
+const getIpKey = (req: Request) => ipKeyGenerator(req);
+
+export const buildGlobalLimiterKey = (req: Request) => {
+  const userId = (req as any).user?.id;
+  return userId ? `user:${userId}` : `ip:${getIpKey(req)}`;
+};
+
+export const buildAuthLimiterKey = (req: Request) => {
+  const email = (req.body?.email || '').toLowerCase().trim();
+  if (!email) {
+    return `ip:${getIpKey(req)}`;
+  }
+  return `auth:${email}`;
+};
+
+export const buildResourceLimiterKey = (req: Request) => {
+  const userId = (req as any).user?.id;
+  return userId ? `resource:${userId}` : `resource:${getIpKey(req)}`;
+};
 
 // Global API rate limiter
 export const globalLimiter = rateLimit({
@@ -8,12 +28,7 @@ export const globalLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   message: { error: 'Too many requests from this IP, please try again later.' },
-  keyGenerator: (req: Request) => {
-    // Use user ID if authenticated, otherwise use IP
-    // Behind reverse proxy, IP may be same for all requests
-    const userId = (req as any).user?.id;
-    return userId ? `user:${userId}` : `ip:${req.ip}`;
-  }
+  keyGenerator: buildGlobalLimiterKey
 });
 
 // Stricter limiter for sensitive auth routes (login)
@@ -24,15 +39,7 @@ export const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many login attempts, please try again after 15 minutes.' },
-  keyGenerator: (req: Request) => {
-    // Rate limit by email address (from body) to prevent account enumeration
-    // Even if multiple IPs used (compromised account), email is limited
-    const email = (req.body?.email || '').toLowerCase().trim();
-    if (!email) {
-      return `ip:${req.ip}`; // Fallback if no email
-    }
-    return `auth:${email}`;
-  },
+  keyGenerator: buildAuthLimiterKey,
   skip: (req: Request) => {
     // Don't rate limit localhost in development
     return req.ip === '127.0.0.1' && process.env.NODE_ENV === 'development';
@@ -46,10 +53,5 @@ export const resourceLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'You are making too many complex requests, please slow down.' },
-  keyGenerator: (req: Request) => {
-    // Rate limit per authenticated user
-    // Prevents single user from overwhelming the system
-    const userId = (req as any).user?.id;
-    return userId ? `resource:${userId}` : `resource:${req.ip}`;
-  }
+  keyGenerator: buildResourceLimiterKey
 });

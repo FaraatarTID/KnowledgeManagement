@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import AIKB from '@/KM';
 
 // Mock the debounce hook
 vi.mock('@/hooks/useDebounce', () => ({
-  useDebounce: (value: any) => value,
+  useDebounce: <T,>(value: T) => value,
 }));
 
 // Mock components
@@ -26,10 +27,9 @@ vi.mock('@/components/ToastContainer', () => ({
 describe('AIKB Component - Critical Fixes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (global.fetch as any) = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ content: 'Test AI response' }),
-    });
+    (global.fetch as ReturnType<typeof vi.fn>) = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ content: 'Test AI response' }), { status: 200 })
+    );
   });
 
   describe('1. RAG Architecture Fix', () => {
@@ -69,11 +69,13 @@ describe('AIKB Component - Critical Fixes', () => {
         expect(global.fetch).toHaveBeenCalled();
       });
 
-      const syncCalls = (global.fetch as any).mock.calls.filter((c: any) => !c[0].includes('/sync'));
+      const syncCalls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (c: unknown[]) => !String(c[0]).includes('/sync')
+      );
       const chatCall = syncCalls[0];
       
       if (chatCall) {
-        const requestBody = JSON.parse(chatCall[1].body);
+        const requestBody = JSON.parse((chatCall[1] as RequestInit).body as string);
         expect(requestBody).toHaveProperty('query');
         expect(requestBody).not.toHaveProperty('documents');
         expect(requestBody.query).toBe('What is this?');
@@ -83,12 +85,12 @@ describe('AIKB Component - Critical Fixes', () => {
 
   describe('2. Optimistic UI', () => {
     it('should show user message immediately before server response', async () => {
-      let resolveFetch: (value: any) => void;
-      const fetchPromise = new Promise(resolve => {
+      let resolveFetch: (value: Response) => void;
+      const fetchPromise = new Promise<Response>(resolve => {
         resolveFetch = resolve;
       });
 
-      (global.fetch as any).mockImplementationOnce(() => fetchPromise);
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementationOnce(() => fetchPromise);
 
       render(<AIKB />);
 
@@ -122,10 +124,7 @@ describe('AIKB Component - Critical Fixes', () => {
       });
 
       await act(async () => {
-        resolveFetch({
-          ok: true,
-          json: async () => ({ content: 'AI response' }),
-        });
+        resolveFetch(new Response(JSON.stringify({ content: 'AI response' }), { status: 200 }));
       });
 
       await waitFor(() => {

@@ -1,4 +1,5 @@
 import React, { Component, ReactNode } from 'react';
+import { captureClientError, initErrorTracking } from '@/utils/errorTracking';
 
 interface Props {
   children: ReactNode;
@@ -28,15 +29,10 @@ class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
     
-    // Log to error tracking service in production
-    if (process.env.NODE_ENV === 'production') {
-      // TODO: Integrate with error tracking service
-      console.error('Production Error:', {
-        message: error.message,
-        stack: error.stack,
-        componentStack: errorInfo.componentStack
-      });
-    }
+    initErrorTracking();
+    captureClientError(error, {
+      componentStack: errorInfo.componentStack
+    });
 
     this.setState({ errorInfo });
   }

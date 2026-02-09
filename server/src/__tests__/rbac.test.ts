@@ -20,16 +20,25 @@ vi.mock('../container.js', () => ({
   },
   vectorService: {
     getVectorCount: vi.fn().mockResolvedValue(0),
-    upsert: vi.fn()
+    upsert: vi.fn(),
+    updateDocumentMetadata: vi.fn(),
+    listDocumentsWithRBAC: vi.fn().mockResolvedValue([])
   },
   geminiService: {},
   auditService: {
     logAction: vi.fn()
   },
   ragService: {},
-  driveService: {},
-  syncService: {},
-  historyService: {},
+  driveService: {
+    uploadFile: vi.fn().mockResolvedValue('mock-file-id'),
+    deleteFile: vi.fn()
+  },
+  syncService: {
+    indexFile: vi.fn().mockResolvedValue(undefined)
+  },
+  historyService: {
+    recordEvent: vi.fn().mockResolvedValue(undefined)
+  },
   configService: {},
   chatService: {}
 }));

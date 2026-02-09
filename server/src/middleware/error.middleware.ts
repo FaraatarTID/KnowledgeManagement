@@ -14,6 +14,7 @@ export class AppError extends Error {
 }
 
 import { Logger } from '../utils/logger.js';
+import { captureError } from '../utils/error-tracking.js';
 
 export const errorHandler = (err: Error | AppError, req: Request, res: Response, next: NextFunction) => {
   let error = { ...err };
@@ -57,6 +58,14 @@ export const errorHandler = (err: Error | AppError, req: Request, res: Response,
     headers: {
       'content-type': req.headers['content-type']
     }
+  });
+
+  captureError(err, {
+    requestId,
+    userId,
+    url: req.url,
+    method: req.method,
+    ip: req.ip
   });
 
   // SECURITY: ALWAYS return sanitized error in production

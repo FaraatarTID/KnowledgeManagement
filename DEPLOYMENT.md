@@ -97,6 +97,9 @@ EMBEDDING_MODEL=text-embedding-004
 
 # Security
 ALLOWED_ORIGINS=https://your-app.com,https://admin-portal.com
+
+# Observability (Optional)
+SENTRY_DSN=your-sentry-dsn
 ```
 
 > [!TIP]
@@ -107,6 +110,10 @@ ALLOWED_ORIGINS=https://your-app.com,https://admin-portal.com
 ## 🪵 Industrial Monitoring
 
 In production (`NODE_ENV=production`), the system outputs **Structured JSON Logs**. These are designed for high-end observability tools like Datadog, Grafana Loki, or Splunk.
+
+### Error Tracking (Optional)
+
+If you use Sentry, set `SENTRY_DSN` in the server `.env` (and `NEXT_PUBLIC_SENTRY_DSN` in the client `.env`) to capture unhandled exceptions with request IDs for faster incident triage.
 
 ### Key Telemetry to Watch:
 
