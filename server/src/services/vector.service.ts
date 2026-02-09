@@ -179,15 +179,17 @@ export class VectorService {
 
     try {
       if (process.env.NODE_ENV === 'test') {
-        items.forEach(item => {
+        await Promise.all(items.flatMap(item => {
           const docId = item.metadata.docId || item.id;
-          this.localMetadataService.setOverride(docId, item.metadata);
-          this.localMetadataService.setOverride(item.id, {
-            ...item.metadata,
-            id: item.id,
-            __vectorEntry: true
-          });
-        });
+          return [
+            this.localMetadataService.setOverride(docId, item.metadata),
+            this.localMetadataService.setOverride(item.id, {
+              ...item.metadata,
+              id: item.id,
+              __vectorEntry: true
+            })
+          ];
+        }));
         Logger.debug('VectorService: Skipping Vertex AI upsert in test mode', { count: items.length });
         return;
       }
