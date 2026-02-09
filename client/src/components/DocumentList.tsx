@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, BookOpen, Trash2, FileText } from 'lucide-react';
+import { Search, BookOpen, Trash2 } from 'lucide-react';
 
 interface Doc {
   id: string;
@@ -81,7 +81,9 @@ export function DocumentList({
                   {doc.category}
                 </span>
                 <span className="text-gray-400">
-                  {new Date(doc.createdAt ?? Date.now()).toLocaleDateString('fa-IR')}
+                  {doc.createdAt
+                    ? new Date(doc.createdAt).toLocaleDateString('fa-IR')
+                    : 'نامشخص'}
                 </span>
               </div>
             </div>

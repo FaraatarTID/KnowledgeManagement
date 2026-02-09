@@ -17,7 +17,7 @@ vi.mock('@/hooks/useStorage', () => ({
 
 // Mock debounce
 vi.mock('@/hooks/useDebounce', () => ({
-  useDebounce: (value: any) => value,
+  useDebounce: <T,>(value: T) => value,
 }));
 
 // Mock components
@@ -38,26 +38,23 @@ vi.mock('@/components/ToastContainer', () => ({
 describe('QueryAI Race Condition Prevention', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (global.fetch as any) = vi.fn();
+    global.fetch = vi.fn();
   });
 
   it('should handle rapid-fire queries without message corruption', async () => {
     const fetchCalls: Array<{ query: string; timestamp: number; response: string }> = [];
     
-    (global.fetch as any).mockImplementation((url: string, options?: any) => {
-      const body = JSON.parse(options.body);
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((_url: RequestInfo, options?: RequestInit) => {
+      const body = JSON.parse(options?.body as string);
       const query = body.query;
       const delay = Math.random() * 150 + 50;
       
-      return new Promise(resolve => {
+      return new Promise<Response>(resolve => {
         setTimeout(() => {
           const response = `AI response for: ${query}`;
           fetchCalls.push({ query, timestamp: Date.now(), response });
           
-          resolve({
-            ok: true,
-            json: async () => ({ content: response })
-          });
+          resolve(new Response(JSON.stringify({ content: response }), { status: 200 }));
         }, delay);
       });
     });
@@ -101,13 +98,10 @@ describe('QueryAI Race Condition Prevention', () => {
   }, 10000);
 
   it('should handle fetch timeout gracefully', async () => {
-    (global.fetch as any).mockImplementation(() => {
-      return new Promise((resolve) => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      return new Promise<Response>((resolve) => {
         setTimeout(() => {
-          resolve({
-            ok: true,
-            json: async () => ({ content: 'Too late' })
-          });
+          resolve(new Response(JSON.stringify({ content: 'Too late' }), { status: 200 }));
         }, 50000);
       });
     });
