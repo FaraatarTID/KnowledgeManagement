@@ -6,6 +6,13 @@ export interface MetadataOverride {
   category?: string;
   sensitivity?: string;
   department?: string;
+  owner?: string;
+  link?: string;
+  docId?: string;
+  id?: string;
+  values?: number[];
+  __vectorEntry?: boolean;
+  [key: string]: unknown;
 }
 
 export class LocalMetadataService {
@@ -33,5 +40,24 @@ export class LocalMetadataService {
        return current;
     });
   }
-}
 
+  async removeOverride(docId: string) {
+    await this.store.update(current => {
+      if (docId in current) {
+        delete current[docId];
+      }
+      return current;
+    });
+  }
+
+  async removeOverrides(docIds: string[]) {
+    await this.store.update(current => {
+      docIds.forEach(docId => {
+        if (docId in current) {
+          delete current[docId];
+        }
+      });
+      return current;
+    });
+  }
+}

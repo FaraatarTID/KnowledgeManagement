@@ -10,12 +10,15 @@ import { env } from "./config/env.js";
 import { globalLimiter } from "./middleware/rateLimit.middleware.js";
 import { contextMiddleware } from "./middleware/context.middleware.js";
 import { Logger } from "./utils/logger.js";
+import { initErrorTracking } from "./utils/error-tracking.js";
 
 Logger.info('--- BACKEND STARTUP SEQUENCE ---', {
   time: new Date().toISOString(),
   cwd: process.cwd(),
   node_env: env.NODE_ENV
 });
+
+initErrorTracking();
 
 const app = express();
 const port = env.PORT || 3001;
