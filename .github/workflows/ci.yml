@@ -44,6 +44,6 @@ jobs:
       - name: Install & Build client
         working-directory: ./client
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
           npm run build
           npm run lint
