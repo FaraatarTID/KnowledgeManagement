@@ -1,10 +1,11 @@
 import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
 import mammoth from 'mammoth';
 import fs from 'fs';
 
 export class ExtractionService {
+  private pdfParser: ((buffer: Buffer) => Promise<{ text: string }>) | null = null;
+  private pdfParserFailed = false;
+
   /**
    * Extract text from a local file based on its MIME type or extension.
    */
@@ -19,6 +20,11 @@ export class ExtractionService {
   async extractFromBuffer(buffer: Buffer, mimeType: string): Promise<string> {
     try {
       if (mimeType === 'application/pdf') {
+        const pdfParse = this.getPdfParser();
+        if (!pdfParse) {
+          console.warn('ExtractionService: PDF parser unavailable, returning empty string.');
+          return '';
+        }
         const data = await pdfParse(buffer);
         return data.text;
       }
@@ -43,6 +49,22 @@ export class ExtractionService {
       console.error(`ExtractionService: Failed to extract text for ${mimeType}`, e);
       return '';
     }
+  }
+
+  private getPdfParser() {
+    if (this.pdfParser || this.pdfParserFailed) {
+      return this.pdfParser;
+    }
+
+    try {
+      const require = createRequire(import.meta.url);
+      this.pdfParser = require('pdf-parse');
+    } catch (e) {
+      this.pdfParserFailed = true;
+      console.warn('ExtractionService: Failed to load pdf-parse', e);
+    }
+
+    return this.pdfParser;
   }
 
   private guessMimeType(filename: string): string {

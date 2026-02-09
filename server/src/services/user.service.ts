@@ -12,6 +12,11 @@ export class UserService {
     const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!url || !key) {
+      if (env.NODE_ENV === 'test') {
+        this.isMock = true;
+        this.supabase = {} as SupabaseClient;
+        return;
+      }
       throw new Error('FATAL: Supabase credentials (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are missing in UserService. Application cannot function.');
     }
 

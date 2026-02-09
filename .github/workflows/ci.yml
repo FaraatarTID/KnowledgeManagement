@@ -13,7 +13,7 @@ jobs:
       SUPPORT_LEGACY_CHAT: 'false'
     strategy:
       matrix:
-        node-version: [18.x]
+        node-version: [20.x]
 
     steps:
       - name: Checkout
@@ -31,6 +31,7 @@ jobs:
       - name: Install & Test server
         working-directory: ./server
         env:
+          NODE_ENV: test
           GOOGLE_CLOUD_PROJECT_ID: aikb-mock-project
           GEMINI_MODEL: gemini-2.5-flash-lite-001
           EMBEDDING_MODEL: text-embedding-004
@@ -43,6 +44,6 @@ jobs:
       - name: Install & Build client
         working-directory: ./client
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
           npm run build
           npm run lint

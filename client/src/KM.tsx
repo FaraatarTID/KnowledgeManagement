@@ -15,6 +15,7 @@ import { DocumentList } from '@/components/DocumentList';
 function AIKBContent() {
   type Doc = { id: string; title?: string; content?: string; category?: string; createdAt?: string };
   type ChatMsg = { id: string; type: 'user' | 'ai'; content: string; timestamp: string; sources?: { id: string; title?: string }[] };
+  type ApiDocument = { id: string };
 
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatMsg[]>([]);
@@ -34,7 +35,7 @@ function AIKBContent() {
 
     try {
       // Delta-Sync: Fetch existing IDs first to avoid redundant indexing
-      const existingDocs = await api.get<any[]>('/documents');
+      const existingDocs = await api.get<ApiDocument[]>('/documents');
       const existingIds = new Set(existingDocs.map(d => d.id));
       
       const missingDocs = docsToSync.filter(doc => !existingIds.has(doc.id));

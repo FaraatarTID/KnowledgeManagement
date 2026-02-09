@@ -1,10 +1,23 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { Message } from '@/components/Message';
 
+type MessageSource = {
+  id: string;
+  title: string;
+};
+
+type ChatMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  sources?: MessageSource[];
+};
+
 describe('Message Component', () => {
-  const createMockMsg = (overrides = {}) => ({
+  const createMockMsg = (overrides: Partial<ChatMessage> = {}): ChatMessage => ({
     id: '1',
     role: 'user',
     content: 'test content',
@@ -14,13 +27,13 @@ describe('Message Component', () => {
 
   it('renders user message correctly', () => {
     const msg = createMockMsg({ role: 'user', content: 'User question' });
-    render(<Message msg={msg as any} />);
+    render(<Message msg={msg} />);
     expect(screen.getByText('User question')).toBeInTheDocument();
   });
 
   it('renders assistant message correctly', () => {
     const msg = createMockMsg({ role: 'assistant', content: 'AI Response' });
-    render(<Message msg={msg as any} />);
+    render(<Message msg={msg} />);
     expect(screen.getByText('AI Response')).toBeInTheDocument();
   });
 
@@ -29,7 +42,7 @@ describe('Message Component', () => {
         role: 'assistant', 
         sources: [{ id: '1', title: 'Doc A' }, { id: '2', title: 'Doc B' }] 
     });
-    render(<Message msg={msg as any} />);
+    render(<Message msg={msg} />);
     
     expect(screen.getByText('Doc A')).toBeInTheDocument();
     expect(screen.getByText('Doc B')).toBeInTheDocument();
@@ -39,7 +52,7 @@ describe('Message Component', () => {
     const date = new Date();
     date.setHours(12, 0, 0);
     const msg = createMockMsg({ timestamp: date });
-    render(<Message msg={msg as any} />);
+    render(<Message msg={msg} />);
     expect(screen.getByText(/12:00/)).toBeInTheDocument();
   });
 });

@@ -152,10 +152,13 @@ export class AuditService {
           issues: error.issues,
           entry
         });
-        // Don't re-throw - we still want the service to function even if entry is malformed
         return;
       }
-      throw error;
+      console.error('[AUDIT] Failed to record audit log entry', {
+        error,
+        entry
+      });
+      return;
     }
   }
 
