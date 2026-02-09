@@ -13,7 +13,8 @@ vi.mock('../../../container.js', () => ({
   vectorService: {
     updateDocumentMetadata: vi.fn(),
     getAllMetadata: vi.fn(),
-    deleteDocument: vi.fn()
+    deleteDocument: vi.fn(),
+    listDocumentsWithRBAC: vi.fn()
   },
   syncService: {
     indexFile: vi.fn(),
@@ -70,17 +71,9 @@ describe('DocumentController', () => {
     describe('list', () => {
         it('should list files filtering by department for viewer', async () => {
              mockRequest.user = { role: 'VIEWER', department: 'HR' };
-             vi.mocked(vectorService.getAllMetadata).mockResolvedValue({});
-             vi.mocked(driveService.listFiles).mockResolvedValue([
-                 { id: '1', name: 'HR Doc', owners: [] } as any,
-                 { id: '2', name: 'IT Doc', owners: [] } as any
+             vi.mocked(vectorService.listDocumentsWithRBAC).mockResolvedValue([
+                 { id: '1', title: 'HR Doc', department: 'HR' }
              ]);
-             
-             // Mock vector metadata to assign departments
-             vi.mocked(vectorService.getAllMetadata).mockResolvedValue({
-                 '1': { department: 'HR' },
-                 '2': { department: 'IT' }
-             });
 
              await DocumentController.list(mockRequest, mockResponse, nextMock);
              

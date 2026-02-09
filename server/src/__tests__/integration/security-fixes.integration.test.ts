@@ -154,13 +154,14 @@ describe('Security Fixes: Phase 1 (CRITICAL)', () => {
 
       // SagaTransaction would retry this function
       let attempts = 0;
-      while (attempts < 2 && callCount < 3) {
+      const maxAttempts = 3;
+      while (attempts < maxAttempts && callCount < 3) {
         try {
           await failTwiceThenSucceed();
           break;
         } catch (e) {
           attempts++;
-          if (attempts >= 2) throw e;
+          if (attempts >= maxAttempts) throw e;
           await new Promise(r => setTimeout(r, 100 * Math.pow(2, attempts)));
         }
       }

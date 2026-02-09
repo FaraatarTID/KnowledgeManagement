@@ -6,14 +6,15 @@ import { AuditService } from './access.service.js';
 import { HallucinationService } from './hallucination.service.js';
 import { Logger } from '../utils/logger.js';
 import { TimeoutUtil, REQUEST_TIMEOUTS } from '../utils/timeout.util.js';
-import { encoding_for_model } from 'js-tiktoken';
+import { createRequire } from 'module';
 
 export class RAGService {
   private redactionService: RedactionService;
   private auditService: AuditService;
   private hallucinationService: HallucinationService;
   private logger = new Logger('RAGService');
-  private tokenEncoder = encoding_for_model('gpt-4');  // Use GPT-4 encoding for token counting
+  private tokenEncoder: { encode: (text: string) => number[] } | null = null;
+  private tokenEncoderFailed = false;
 
   constructor(
     private geminiService: GeminiService,
@@ -37,13 +38,27 @@ export class RAGService {
    * Count tokens in text using GPT-4 tokenizer
    */
   private countTokens(text: string): number {
-    try {
-      return this.tokenEncoder.encode(text).length;
-    } catch (e) {
-      this.logger.warn('Token counting failed, using character fallback', { error: e });
-      // Fallback: rough estimate (1 token ≈ 4 chars)
-      return Math.ceil(text.length / 4);
+    if (!this.tokenEncoder && !this.tokenEncoderFailed) {
+      try {
+        const require = createRequire(import.meta.url);
+        const { encoding_for_model } = require('js-tiktoken');
+        this.tokenEncoder = encoding_for_model('gpt-4');
+      } catch (e) {
+        this.tokenEncoderFailed = true;
+        this.logger.warn('Token encoder unavailable, using character fallback', { error: e });
+      }
     }
+
+    if (this.tokenEncoder) {
+      try {
+        return this.tokenEncoder.encode(text).length;
+      } catch (e) {
+        this.logger.warn('Token counting failed, using character fallback', { error: e });
+      }
+    }
+
+    // Fallback: rough estimate (1 token ≈ 4 chars)
+    return Math.ceil(text.length / 4);
   }
 
   async query(params: {

@@ -1,5 +1,7 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { Request } from 'express';
+
+const getIpKey = (req: Request) => ipKeyGenerator(req);
 
 // Global API rate limiter
 export const globalLimiter = rateLimit({
@@ -12,7 +14,7 @@ export const globalLimiter = rateLimit({
     // Use user ID if authenticated, otherwise use IP
     // Behind reverse proxy, IP may be same for all requests
     const userId = (req as any).user?.id;
-    return userId ? `user:${userId}` : `ip:${req.ip}`;
+    return userId ? `user:${userId}` : `ip:${getIpKey(req)}`;
   }
 });
 
@@ -29,7 +31,7 @@ export const authLimiter = rateLimit({
     // Even if multiple IPs used (compromised account), email is limited
     const email = (req.body?.email || '').toLowerCase().trim();
     if (!email) {
-      return `ip:${req.ip}`; // Fallback if no email
+      return `ip:${getIpKey(req)}`; // Fallback if no email
     }
     return `auth:${email}`;
   },
@@ -50,6 +52,6 @@ export const resourceLimiter = rateLimit({
     // Rate limit per authenticated user
     // Prevents single user from overwhelming the system
     const userId = (req as any).user?.id;
-    return userId ? `resource:${userId}` : `resource:${req.ip}`;
+    return userId ? `resource:${userId}` : `resource:${getIpKey(req)}`;
   }
 });
