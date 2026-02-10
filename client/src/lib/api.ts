@@ -107,12 +107,24 @@ export const authApi = {
     authApi._pendingGetMe = api.get('/auth/me')
       .then(async (response) => {
         const data = response.data as User | null;
-        if (data) {
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('user', JSON.stringify(data));
-          }
+        if (data && typeof window !== 'undefined') {
+          localStorage.setItem('user', JSON.stringify(data));
         }
         return data;
+      })
+      .catch((err: unknown) => {
+        if (axios.isAxiosError(err)) {
+          const status = err.response?.status;
+          // Treat auth/bootstrap/server hiccups as no active session for this call.
+          // This prevents uncaught promise noise in page initialization flows.
+          if (status === 401 || status === 403 || status === 404 || status === 500 || status === 503) {
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('user');
+            }
+            return null;
+          }
+        }
+        throw err;
       })
       .finally(() => {
         authApi._pendingGetMe = null;
