@@ -156,10 +156,13 @@ export class DocumentController {
 
     await vectorService.updateDocumentMetadata(id, { title, category, sensitivity, department });
     
+    const isManualDocument = id.startsWith('manual-');
     let driveRenameStatus = 'skipped';
-    if (title) {
+    if (title && !isManualDocument) {
         const success = await driveService.renameFile(id, title);
         driveRenameStatus = success ? 'success' : 'failed';
+    } else if (title && isManualDocument) {
+      driveRenameStatus = 'not_applicable';
     }
 
     await historyService.recordEvent({
@@ -181,17 +184,27 @@ export class DocumentController {
   static delete: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     if (!id) throw new AppError('ID required', 400);
+    const userEmail = req.user?.email || 'unknown';
+    const isManualDocument = id.startsWith('manual-');
 
-    // For synced Google Drive docs, also delete the source file so it does not reappear on next sync.
-    // Keep manual/local docs (manual-*) untouched in external storage.
-    if (!id.startsWith('manual-')) {
+    // For synced Google Drive docs, delete source file first.
+    // If this fails, fail fast instead of pretending deletion succeeded.
+    if (!isManualDocument) {
       try {
         await driveService.deleteFile(id);
       } catch (error: any) {
-        Logger.warn('Failed to delete source file from Google Drive; continuing with index cleanup', {
+        await historyService.recordEvent({
+          event_type: 'DELETE_FAILED',
+          doc_id: id,
+          doc_name: id,
+          details: `Delete requested by ${userEmail}. Drive delete failed: ${error?.message || 'unknown error'}`
+        });
+
+        Logger.warn('Failed to delete source file from Google Drive; aborting delete to avoid re-import', {
           docId: id,
           error: error?.message
         });
+        throw new AppError(`Unable to delete source file from Google Drive: ${error?.message || 'unknown error'}`, 502);
       }
     }
 
@@ -201,6 +214,13 @@ export class DocumentController {
     // Emit event so VectorService clears its cache
     const { cacheInvalidation } = await import('../utils/cache-invalidation.js');
     await cacheInvalidation.deleteDocument(id);
+
+    await historyService.recordEvent({
+      event_type: 'DELETED',
+      doc_id: id,
+      doc_name: id,
+      details: `Deleted by ${userEmail}. Source: ${isManualDocument ? 'local/manual' : 'google-drive'}`
+    });
 
     Logger.info('Document deleted from storage/index and cache invalidated', { docId: id });
     res.json({ status: 'success', message: `Document ${id} removed.` });
@@ -292,4 +312,3 @@ export class DocumentController {
     });
   });
 }
-

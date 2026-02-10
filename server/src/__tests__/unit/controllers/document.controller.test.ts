@@ -115,21 +115,49 @@ describe('DocumentController', () => {
     describe('delete', () => {
         it('should delete drive-backed document from source and index', async () => {
             mockRequest.params = { id: '123' };
+            mockRequest.user = { email: 'admin@aikb.com' };
 
             await DocumentController.delete(mockRequest, mockResponse, nextMock);
 
             expect(driveService.deleteFile).toHaveBeenCalledWith('123');
             expect(vectorService.deleteDocument).toHaveBeenCalledWith('123');
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                event_type: 'DELETED',
+                doc_id: '123'
+            }));
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));
         });
 
         it('should skip drive delete for manual documents', async () => {
             mockRequest.params = { id: 'manual-123' };
+            mockRequest.user = { email: 'admin@aikb.com' };
 
             await DocumentController.delete(mockRequest, mockResponse, nextMock);
 
             expect(driveService.deleteFile).not.toHaveBeenCalled();
             expect(vectorService.deleteDocument).toHaveBeenCalledWith('manual-123');
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                event_type: 'DELETED',
+                doc_id: 'manual-123'
+            }));
+        });
+
+        it('should fail delete when drive deletion fails for drive-backed documents', async () => {
+            mockRequest.params = { id: 'drive-123' };
+            mockRequest.user = { email: 'admin@aikb.com' };
+            vi.mocked(driveService.deleteFile).mockRejectedValue(new Error('forbidden'));
+
+            await DocumentController.delete(mockRequest, mockResponse, nextMock);
+
+            expect(vectorService.deleteDocument).not.toHaveBeenCalled();
+            expect(nextMock).toHaveBeenCalledWith(expect.objectContaining({
+                statusCode: 502,
+                message: expect.stringContaining('Unable to delete source file')
+            }));
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                event_type: 'DELETE_FAILED',
+                doc_id: 'drive-123'
+            }));
         });
     });
 
@@ -151,6 +179,23 @@ describe('DocumentController', () => {
             expect(driveService.renameFile).toHaveBeenCalledWith('1', 'New Title');
             expect(historyService.recordEvent).toHaveBeenCalled();
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));
+        });
+
+        it('should skip drive rename for manual documents', async () => {
+            mockRequest.params = { id: 'manual-1' };
+            mockRequest.body = { title: 'New Local Title' };
+            mockRequest.user = { email: 'alice@aikb.com', role: 'EDITOR' };
+
+            vi.mocked(vectorService.getAllMetadata).mockResolvedValue({
+                'manual-1': { owner: 'alice@aikb.com', category: 'IT' }
+            });
+
+            await DocumentController.update(mockRequest, mockResponse, nextMock);
+
+            expect(driveService.renameFile).not.toHaveBeenCalled();
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                details: expect.stringContaining('Drive Rename: not_applicable')
+            }));
         });
 
         it('should reject update when user is not owner or admin', async () => {
