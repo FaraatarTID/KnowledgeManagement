@@ -62,11 +62,15 @@ export const useStorage = () => {
 
       if (backupResult) {
         try {
-          const backup = backupResult as any;
+          const backup = backupResult as {
+            docs?: unknown[];
+            chat?: unknown[];
+            timestamp?: number;
+          };
           const recovered = {
             documents: Array.isArray(backup.docs) ? backup.docs : [],
             chatHistory: Array.isArray(backup.chat) ? backup.chat : [],
-            timestamp: backup.timestamp || Date.now()
+            timestamp: typeof backup.timestamp === 'number' ? backup.timestamp : Date.now()
           };
           
           await Promise.all([
