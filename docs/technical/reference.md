@@ -4,6 +4,9 @@
 
 ---
 
+> [!IMPORTANT]
+> For validated, implementation-accurate mappings of ports, env vars, API routes, security controls, data paths, and RBAC, use **[Implementation Cross-Reference](implementation-cross-reference.md)** as the source of truth.
+
 ## 🚀 Quick Start (5 Minutes)
 
 ### Installation & Setup
