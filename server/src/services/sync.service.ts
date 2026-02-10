@@ -35,43 +35,49 @@ export class SyncService {
 
   async syncAll(folderId: string) {
     if (this.isSyncing) {
-       console.warn('SyncService: Sync already in progress. Ignoring request.');
+       Logger.warn('SyncService: Sync already in progress. Ignoring request.');
        return { status: 'already_syncing' };
     }
 
     this.isSyncing = true;
-    console.log('SyncService: Starting full sync...');
-    
-    // 1. List all files
-    const files = await this.driveService.listFiles(folderId);
-    console.log(`SyncService: Found ${files.length} files.`);
+    Logger.info('SyncService: Starting full sync...');
 
-    let processedRequestCount = 0;
-    const itemsToUpsert: any[] = [];
+    try {
+      // 1. List all files
+      const files = await this.driveService.listFiles(folderId);
+      Logger.info('SyncService: Files discovered for sync', { fileCount: files.length });
 
-    // 2. Process each file
-    for (const file of files) {
-      if (!file.id || !file.name) continue;
-      
-      // Skip folders
-      if (file.mimeType?.includes('folder')) continue;
+      let processedRequestCount = 0;
 
-      try {
-        await this.indexFile(file as any);
-        processedRequestCount++;
-      } catch (e) {
-        console.error(`SyncService: Failed to process ${file.name}`, e);
+      // 2. Process each file
+      for (const file of files) {
+        if (!file.id || !file.name) continue;
+
+        // Skip folders
+        if (file.mimeType?.includes('folder')) continue;
+
+        try {
+          await this.indexFile(file as any, undefined, { allowDuringFullSync: true });
+          processedRequestCount++;
+        } catch (e) {
+          Logger.error('SyncService: Failed to process file during full sync', {
+            fileName: file.name,
+            fileId: file.id,
+            error: e
+          });
+        }
       }
+
+      // 3. Prune deleted documents
+      Logger.info('SyncService: Pruning deleted documents...');
+      const driveIds = new Set(files.filter(f => f.id).map(f => f.id!));
+      await this.pruneDeletedDocuments(driveIds);
+
+      Logger.info('SyncService: Sync complete.', { processed: processedRequestCount });
+      return { status: 'success', processed: processedRequestCount };
+    } finally {
+      this.isSyncing = false;
     }
-
-    // 3. Prune deleted documents
-    console.log('SyncService: Pruning deleted documents...');
-    const driveIds = new Set(files.filter(f => f.id).map(f => f.id!));
-    await this.pruneDeletedDocuments(driveIds);
-
-    this.isSyncing = false;
-    console.log('SyncService: Sync complete.');
-    return { status: 'success', processed: processedRequestCount };
   }
 
   /**
@@ -102,9 +108,16 @@ export class SyncService {
    * Main entry point for indexing a file.
    * Everything is wrapped in a transaction with rollback capability.
    */
-  async indexFile(file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }, initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string }): Promise<string> {
-    if (this.isSyncing) {
-       console.warn(`SyncService: Cannot index ${file.name} while a full sync is in progress.`);
+  async indexFile(
+    file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] },
+    initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string },
+    options?: { allowDuringFullSync?: boolean }
+  ): Promise<string> {
+    if (this.isSyncing && !options?.allowDuringFullSync) {
+       Logger.warn('SyncService: Cannot index file while a full sync is in progress.', {
+         fileName: file.name,
+         fileId: file.id
+       });
        throw new Error('System is currently performing a full synchronization. Please try again in a few minutes.');
     }
 

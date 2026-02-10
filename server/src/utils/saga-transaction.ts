@@ -223,10 +223,17 @@ export async function executeSaga<T>(
     Logger.info(`SagaTransaction: Completed successfully`, saga.getStatus());
     return result;
   } catch (error) {
-    Logger.error(`SagaTransaction: Failed, rolling back`, {
+    const failureMeta = {
       ...saga.getStatus(),
       error: error instanceof Error ? error.message : error
-    });
+    };
+
+    if (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
+      Logger.warn(`SagaTransaction: Failed, rolling back (expected in some tests)`, failureMeta);
+    } else {
+      Logger.error(`SagaTransaction: Failed, rolling back`, failureMeta);
+    }
+
     await saga.rollback();
     throw error;
   }

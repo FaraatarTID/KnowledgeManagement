@@ -70,7 +70,7 @@ describe('AuthController', () => {
             expect(statusMock).not.toHaveBeenCalledWith(400);
             expect(statusMock).not.toHaveBeenCalledWith(401);
             expect(cookieMock).toHaveBeenCalledWith('token', 'fake-token', expect.any(Object));
-            expect(jsonMock).toHaveBeenCalledWith({ token: 'fake-token', user: mockUser });
+            expect(jsonMock).toHaveBeenCalledWith({ user: mockUser });
         });
 
 

@@ -30,7 +30,7 @@ const envSchema = z.object({
     .regex(/[a-z]/, "INITIAL_ADMIN_PASSWORD must contain at least one lowercase letter")
     .regex(/[0-9]/, "INITIAL_ADMIN_PASSWORD must contain at least one number")
     .regex(/[^A-Za-z0-9]/, "INITIAL_ADMIN_PASSWORD must contain at least one special character")
-    .default('Admin@123456'),
+    .optional(),
   INITIAL_ADMIN_NAME: z.string().default('System Administrator'),
 
   // AI Config
@@ -56,7 +56,23 @@ export type Env = Omit<z.infer<typeof envSchema>, 'JWT_SECRET'> & { JWT_SECRET: 
 
 const validateEnv = (): Env => {
   try {
-    const parsed = envSchema.parse(process.env);
+    const testDefaults = process.env.NODE_ENV === 'test' ? {
+      GOOGLE_DRIVE_FOLDER_ID: process.env.GOOGLE_DRIVE_FOLDER_ID || 'mock-folder-id',
+      INITIAL_ADMIN_EMAIL: process.env.INITIAL_ADMIN_EMAIL || 'admin@aikb.com',
+      INITIAL_ADMIN_PASSWORD: process.env.INITIAL_ADMIN_PASSWORD || 'TestAdmin@12345',
+      INITIAL_ADMIN_NAME: process.env.INITIAL_ADMIN_NAME || 'System Administrator',
+      JWT_SECRET: process.env.JWT_SECRET || '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      GOOGLE_CLOUD_PROJECT_ID: process.env.GOOGLE_CLOUD_PROJECT_ID || 'aikb-test-project',
+      GCP_REGION: process.env.GCP_REGION || 'us-central1',
+      GCP_KEY_FILE: process.env.GCP_KEY_FILE || 'key.json',
+      GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-flash-latest',
+      EMBEDDING_MODEL: process.env.EMBEDDING_MODEL || 'text-embedding-004',
+      RAG_MIN_SIMILARITY: process.env.RAG_MIN_SIMILARITY || '0.60',
+      RAG_MAX_CONTEXT_CHARS: process.env.RAG_MAX_CONTEXT_CHARS || '100000',
+      ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || 'http://localhost:3000',
+    } : {};
+
+    const parsed = envSchema.parse({ ...process.env, ...testDefaults });
 
     const resolved: Env = { ...parsed, JWT_SECRET: parsed.JWT_SECRET ?? "" };
 
@@ -71,6 +87,10 @@ const validateEnv = (): Env => {
     
     // Additional conditional logic
     if (resolved.NODE_ENV === 'production' || resolved.NODE_ENV === 'development') {
+       if (!resolved.INITIAL_ADMIN_PASSWORD) {
+          throw new Error('INITIAL_ADMIN_PASSWORD is mandatory in development/production to prevent insecure default admin credentials.');
+       }
+
        if (resolved.VECTOR_STORE_MODE === 'VERTEX' && !resolved.GOOGLE_CLOUD_PROJECT_ID) {
           throw new Error('GOOGLE_CLOUD_PROJECT_ID is mandatory when VECTOR_STORE_MODE is VERTEX.');
        }
@@ -99,24 +119,6 @@ const validateEnv = (): Env => {
       console.error('❌ Failed to parse environment variables:', error);
     }
     
-    if (process.env.NODE_ENV === 'test') {
-       console.warn('⚠️  Validation failed in TEST mode. Providing minimal defaults.');
-       return {
-         NODE_ENV: 'test',
-         PORT: '3001',
-         JWT_SECRET: 'test-secret-at-least-thirty-two-characters-long',
-         GOOGLE_CLOUD_PROJECT_ID: 'aikb-test-project',
-         GOOGLE_DRIVE_FOLDER_ID: 'mock-folder-id',
-         GCP_REGION: 'us-central1',
-         GCP_KEY_FILE: 'key.json',
-         GEMINI_MODEL: 'gemini-flash-latest',
-         EMBEDDING_MODEL: 'text-embedding-004',
-         RAG_MIN_SIMILARITY: 0.60,
-         RAG_MAX_CONTEXT_CHARS: 100000,
-         ALLOWED_ORIGINS: 'http://localhost:3000',
-         ...process.env
-       } as any;
-    }
     process.exit(1);
   }
 };
