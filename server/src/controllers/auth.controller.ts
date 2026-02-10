@@ -31,7 +31,7 @@ export class AuthController {
     });
     
     Logger.info('User login successful', { user: user.email });
-    res.json({ token, user });
+    res.json({ user });
   });
 
   static logout: RequestHandler = catchAsync(async (req: Request, res: Response) => {

@@ -14,6 +14,28 @@ export enum LogLevel {
  * Uses Winston for high-performance, asynchronous logging.
  */
 export class Logger {
+  private static normalizeMeta(meta: any, depth = 0): any {
+    if (depth > 4) return '[Truncated]';
+    if (meta instanceof Error) {
+      return {
+        name: meta.name,
+        message: meta.message,
+        stack: meta.stack,
+      };
+    }
+    if (Array.isArray(meta)) {
+      return meta.map((item) => this.normalizeMeta(item, depth + 1));
+    }
+    if (meta && typeof meta === 'object') {
+      const normalized: Record<string, any> = {};
+      for (const [key, value] of Object.entries(meta)) {
+        normalized[key] = this.normalizeMeta(value, depth + 1);
+      }
+      return normalized;
+    }
+    return meta;
+  }
+
   private static logger = winston.createLogger({
     level: process.env.LOG_LEVEL || 'info',
     format: winston.format.combine(
@@ -51,18 +73,18 @@ export class Logger {
   }
 
   static info(message: string, meta?: any) {
-    this.logger.info(message, { ...meta, ...this.getContext() });
+    this.logger.info(message, { ...this.normalizeMeta(meta), ...this.getContext() });
   }
 
   static warn(message: string, meta?: any) {
-    this.logger.warn(message, { ...meta, ...this.getContext() });
+    this.logger.warn(message, { ...this.normalizeMeta(meta), ...this.getContext() });
   }
 
   static error(message: string, meta?: any) {
-    this.logger.error(message, { ...meta, ...this.getContext() });
+    this.logger.error(message, { ...this.normalizeMeta(meta), ...this.getContext() });
   }
 
   static debug(message: string, meta?: any) {
-    this.logger.debug(message, { ...meta, ...this.getContext() });
+    this.logger.debug(message, { ...this.normalizeMeta(meta), ...this.getContext() });
   }
 }

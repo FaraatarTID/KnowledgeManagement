@@ -21,4 +21,5 @@ export interface MetadataStore {
   checkHealth(): boolean;
   disconnect?(): void;
   listDocuments?(params: { department?: string; limit?: number; offset?: number }): Promise<MetadataOverride[]>;
+  listVectorEntries?(params: { limit?: number; offset?: number }): Promise<Array<{ id: string; data: MetadataOverride }>>;
 }
