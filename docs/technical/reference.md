@@ -78,6 +78,29 @@ npm test -- --watch                      # Watch mode
 npm test -- priority-fixes.integration    # Integration tests
 ```
 
+### npm Proxy Environment (CI/Dev Hygiene)
+
+If you see warnings like `Unknown env config "http-proxy"`, your shell/CI likely exports legacy `npm_config_*proxy*` variables.
+
+```bash
+npm run doctor:proxy                       # Detect legacy npm proxy env vars
+npm run doctor:proxy:strict                # Same check, exits non-zero if legacy vars are found
+```
+
+Use standard proxy variables instead of legacy npm-specific ones:
+
+```bash
+export HTTP_PROXY=http://proxy:8080
+export HTTPS_PROXY=http://proxy:8080
+unset npm_config_http_proxy npm_config_https_proxy NPM_CONFIG_HTTP_PROXY NPM_CONFIG_HTTPS_PROXY
+```
+
+For CI, enforce strict hygiene (fail fast if legacy vars are present):
+
+```bash
+npm run test:ci
+```
+
 ### Type Checking
 
 ```bash

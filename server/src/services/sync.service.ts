@@ -35,43 +35,49 @@ export class SyncService {
 
   async syncAll(folderId: string) {
     if (this.isSyncing) {
-       console.warn('SyncService: Sync already in progress. Ignoring request.');
+       Logger.warn('SyncService: Sync already in progress. Ignoring request.');
        return { status: 'already_syncing' };
     }
 
     this.isSyncing = true;
-    console.log('SyncService: Starting full sync...');
-    
-    // 1. List all files
-    const files = await this.driveService.listFiles(folderId);
-    console.log(`SyncService: Found ${files.length} files.`);
+    Logger.info('SyncService: Starting full sync...');
 
-    let processedRequestCount = 0;
-    const itemsToUpsert: any[] = [];
+    try {
+      // 1. List all files
+      const files = await this.driveService.listFiles(folderId);
+      Logger.info('SyncService: Files discovered for sync', { fileCount: files.length });
 
-    // 2. Process each file
-    for (const file of files) {
-      if (!file.id || !file.name) continue;
-      
-      // Skip folders
-      if (file.mimeType?.includes('folder')) continue;
+      let processedRequestCount = 0;
 
-      try {
-        await this.indexFile(file as any);
-        processedRequestCount++;
-      } catch (e) {
-        console.error(`SyncService: Failed to process ${file.name}`, e);
+      // 2. Process each file
+      for (const file of files) {
+        if (!file.id || !file.name) continue;
+
+        // Skip folders
+        if (file.mimeType?.includes('folder')) continue;
+
+        try {
+          await this.indexFile(file as any, undefined, { allowDuringFullSync: true });
+          processedRequestCount++;
+        } catch (e) {
+          Logger.error('SyncService: Failed to process file during full sync', {
+            fileName: file.name,
+            fileId: file.id,
+            error: e
+          });
+        }
       }
+
+      // 3. Prune deleted documents
+      Logger.info('SyncService: Pruning deleted documents...');
+      const driveIds = new Set(files.filter(f => f.id).map(f => f.id!));
+      await this.pruneDeletedDocuments(driveIds);
+
+      Logger.info('SyncService: Sync complete.', { processed: processedRequestCount });
+      return { status: 'success', processed: processedRequestCount };
+    } finally {
+      this.isSyncing = false;
     }
-
-    // 3. Prune deleted documents
-    console.log('SyncService: Pruning deleted documents...');
-    const driveIds = new Set(files.filter(f => f.id).map(f => f.id!));
-    await this.pruneDeletedDocuments(driveIds);
-
-    this.isSyncing = false;
-    console.log('SyncService: Sync complete.');
-    return { status: 'success', processed: processedRequestCount };
   }
 
   /**
@@ -85,7 +91,7 @@ export class SyncService {
     for (const docId of localIds) {
       // Only prune documents that look like they came from Drive (manual- prefix is for uploads)
       if (!docId.startsWith('manual-') && !currentDriveIds.has(docId)) {
-         console.log(`SyncService: Pruning deleted document ${docId}`);
+         Logger.info('SyncService: Pruning deleted document', { docId });
          await this.vectorService.deleteDocument(docId);
          pruneCount++;
       }
@@ -102,14 +108,21 @@ export class SyncService {
    * Main entry point for indexing a file.
    * Everything is wrapped in a transaction with rollback capability.
    */
-  async indexFile(file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] }, initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string }): Promise<string> {
-    if (this.isSyncing) {
-       console.warn(`SyncService: Cannot index ${file.name} while a full sync is in progress.`);
+  async indexFile(
+    file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] },
+    initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string },
+    options?: { allowDuringFullSync?: boolean }
+  ): Promise<string> {
+    if (this.isSyncing && !options?.allowDuringFullSync) {
+       Logger.warn('SyncService: Cannot index file while a full sync is in progress.', {
+         fileName: file.name,
+         fileId: file.id
+       });
        throw new Error('System is currently performing a full synchronization. Please try again in a few minutes.');
     }
 
     const transactionId = `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    console.log(`[Transaction ${transactionId}] Starting index for ${file.name}`);
+    Logger.info('SyncService: Starting index transaction', { transactionId, fileName: file.name, fileId: file.id });
     
     // SECURITY: Detect if this is an update or a new document
     const allMeta = await this.vectorService.getAllMetadata();
@@ -148,7 +161,7 @@ export class SyncService {
       }
 
       if (!textContent) {
-        console.warn(`[Transaction ${transactionId}] No content extracted for ${file.name}`);
+        Logger.warn('SyncService: No content extracted', { transactionId, fileName: file.name, fileId: file.id });
         return file.id;
       }
 
@@ -204,7 +217,7 @@ export class SyncService {
 
       // 4. Persistence with Rollback Guard
       rollbackActions.unshift(async () => {
-        console.log(`[Rollback ${transactionId}] Removing vectors for ${file.id}`);
+        Logger.warn('SyncService: Rolling back indexed vectors for failed transaction', { transactionId, docId: file.id });
         await this.vectorService.deleteDocument(file.id);
       });
 
@@ -227,16 +240,16 @@ export class SyncService {
         });
       }
 
-      console.log(`[Transaction ${transactionId}] Completed successfully.`);
+      Logger.info('SyncService: Index transaction completed', { transactionId, fileName: file.name, fileId: file.id });
       return file.id;
 
     } catch (e: any) {
-      console.error(`[Transaction ${transactionId}] Process failed:`, e.message);
+      Logger.error('SyncService: Index transaction failed', { transactionId, fileName: file.name, fileId: file.id, error: e });
       
       // SECURITY: Rollback only if it was a new document attempt 
       if (!existed && rollbackActions.length > 0) {
         for (const action of rollbackActions) {
-          try { await action(); } catch (err) { console.error('Rollback action failed', err); }
+          try { await action(); } catch (err) { Logger.error('SyncService: Rollback action failed', { transactionId, error: err }); }
         }
       }
 
@@ -255,7 +268,7 @@ export class SyncService {
    * Rollback any partial changes for a document
    */
   private async rollbackIndexTransaction(docId: string, transactionId: string): Promise<void> {
-    console.log(`[Rollback ${transactionId}] Rolling back index for ${docId}`);
+    Logger.warn('SyncService: Rolling back index transaction', { transactionId, docId });
     try {
       await this.vectorService.deleteDocument(docId);
       await this.updateSyncStatus(docId, {
@@ -265,7 +278,7 @@ export class SyncService {
         lastSync: new Date().toISOString()
       });
     } catch (e) {
-      console.error(`[Rollback ${transactionId}] Failed to rollback:`, e);
+      Logger.error('SyncService: Rollback transaction failed', { transactionId, docId, error: e });
     }
   }
 
@@ -276,7 +289,7 @@ export class SyncService {
          return current;
       });
     } catch (e: any) {
-      console.error('SYNC_STATUS_UPDATE_FAILED', e.message);
+      Logger.error('SyncService: Failed to update sync status', { docId, error: e });
     }
   }
 
@@ -345,7 +358,7 @@ export class SyncService {
   }
 
   private async logExtractionFailure(file: { id: string, name: string, mimeType?: string }, error: any, operation: string) {
-    console.warn(`SyncService: Extraction failure on ${file.name} during ${operation}: ${error.message}`);
+    Logger.warn('SyncService: Extraction failure', { fileName: file.name, fileId: file.id, operation, error });
     await this.historyService.recordEvent({
       event_type: 'EXTRACTION_FAILED',
       doc_id: file.id,

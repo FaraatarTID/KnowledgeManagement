@@ -214,9 +214,13 @@ export class VectorService {
     filters?: { department?: string; role?: string };
   }): Promise<any[]> {
     const { embedding, topK, filters = {} } = params;
+    const maxCandidates = Math.max(topK, env.VECTOR_LOCAL_MAX_CANDIDATES);
     
     // 1. Get all vector entries from metadata store
-    const allVectors = await this.getAllVectors();
+    const allVectors = await this.getAllVectors({
+      maxCount: maxCandidates,
+      reason: 'similarity_search'
+    });
     
     // 2. Perform RBAC filtering
     // This replicates the logic applied by Vertex AI filtering at retrieval time
@@ -233,17 +237,37 @@ export class VectorService {
       return deptMatch && roleMatch;
     });
 
-    // 3. Compute similarity and sort
-    const scored = filtered.map(v => ({
-      id: v.id,
-      score: this.cosineSimilarity(embedding, v.values),
-      metadata: v.metadata
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
+    // 3. Compute similarity with bounded top-K selection (avoids full-sort at scale)
+    const topMatches: Array<{ id: string; score: number; metadata: VectorItem['metadata'] }> = [];
+    for (const vector of filtered) {
+      const candidate = {
+        id: vector.id,
+        score: this.cosineSimilarity(embedding, vector.values),
+        metadata: vector.metadata
+      };
+
+      if (topMatches.length < topK) {
+        topMatches.push(candidate);
+        continue;
+      }
+
+      let lowestScoreIndex = 0;
+      for (let i = 1; i < topMatches.length; i++) {
+        if (topMatches[i].score < topMatches[lowestScoreIndex].score) {
+          lowestScoreIndex = i;
+        }
+      }
+
+      if (candidate.score > topMatches[lowestScoreIndex].score) {
+        topMatches[lowestScoreIndex] = candidate;
+      }
+    }
+
+    const scored = topMatches.sort((a, b) => b.score - a.score);
 
     Logger.info('VectorService: Local RBAC-filtered query executed', {
-      totalVectors: allVectors.length,
+      totalVectorsScanned: allVectors.length,
+      maxCandidates,
       filteredCount: filtered.length,
       topKCount: scored.length,
       bestScore: scored[0]?.score || 0
@@ -342,7 +366,6 @@ export class VectorService {
       await storeVectorEntries();
       Logger.info('VectorService: Upserted to Vertex AI', { count: items.length });
     } catch (error) {
-      Logger.error('VectorService: Upsert to Vertex AI failed', { error });
       // DO NOT FALLBACK - fail loudly so we detect the issue immediately
       throw error;
     }
@@ -516,11 +539,17 @@ export class VectorService {
     }
   }
 
-  async getAllVectors(): Promise<VectorItem[]> {
+  async getAllVectors(options?: { maxCount?: number; reason?: string }): Promise<VectorItem[]> {
     try {
-      // This is an expensive operation at scale
-      // In production Vertex AI, this would use streaming or pagination
-      Logger.warn('VectorService: getAllVectors called - expensive operation at scale');
+      const maxCount = options?.maxCount;
+      if (!maxCount) {
+        const meta = { reason: options?.reason || 'unspecified' };
+        if (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
+          Logger.debug('VectorService: getAllVectors called without a cap (expected in some tests)', meta);
+        } else {
+          Logger.warn('VectorService: getAllVectors called without a cap - expensive operation at scale', meta);
+        }
+      }
 
       // Retrieve from Vertex AI (if available)
       const indexServiceClient = await (this.vertexAI as any)?.getIndexServiceClient?.();
@@ -530,11 +559,37 @@ export class VectorService {
         // For now return empty pending full Vertex AI SDK integration
       }
 
-      // Fallback: Return locally stored vector entries (metadata + values when available)
-      const metadata = this.metadataStore.getAllOverrides();
       const vectors: VectorItem[] = [];
 
+      if (this.metadataStore.listVectorEntries && maxCount) {
+        const rows = await this.metadataStore.listVectorEntries({
+          limit: maxCount,
+          offset: 0
+        });
+
+        for (const row of rows) {
+          vectors.push({
+            id: row.data.id || row.id,
+            values: Array.isArray((row.data as any).values) ? (row.data as any).values : [],
+            metadata: row.data as any
+          });
+        }
+
+        return vectors;
+      }
+
+      // Fallback: Return locally stored vector entries (metadata + values when available)
+      const metadata = this.metadataStore.getAllOverrides();
+
       for (const [docId, data] of Object.entries(metadata)) {
+        if (maxCount && vectors.length >= maxCount) {
+          Logger.warn('VectorService: getAllVectors reached capped candidate limit', {
+            maxCount,
+            reason: options?.reason || 'unspecified'
+          });
+          break;
+        }
+
         if (!(data as any).__vectorEntry) {
           continue;
         }
@@ -630,7 +685,18 @@ export class VectorService {
       await this.upsertToVertexAI(items);
       Logger.debug('VectorService: Upserted vectors', { count: vectors.length });
     } catch (e) {
-      Logger.error('VectorService: Failed to upsert vectors', { error: e, count: vectors.length });
+      const meta = { error: e, count: vectors.length };
+      const isExpectedVertexFailureInTest =
+        (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') &&
+        e instanceof Error &&
+        e.message.includes('Vertex AI Index Service unavailable');
+
+      if (isExpectedVertexFailureInTest) {
+        Logger.warn('VectorService: Failed to upsert vectors (expected in fail-loud tests)', meta);
+      } else {
+        Logger.error('VectorService: Failed to upsert vectors', meta);
+      }
+
       throw e;
     }
   }

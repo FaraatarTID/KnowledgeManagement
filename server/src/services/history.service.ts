@@ -29,7 +29,7 @@ export class HistoryService {
       this.isLocalMode = true;
       Logger.info('HistoryService: Supabase missing. Initialized in LOCAL MODE (SQLite).');
     } else {
-      console.warn('HistoryService: Supabase and SQLite missing. Entering MOCK MODE.');
+      Logger.info('HistoryService: Supabase and SQLite missing; entering MOCK MODE (expected in some tests).');
       this.isMock = true;
     }
   }
