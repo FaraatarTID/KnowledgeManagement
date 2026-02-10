@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const insertMock = vi.fn();
 const selectAllMock = vi.fn();
@@ -17,14 +17,21 @@ vi.mock('uuid', () => ({
 import { HistoryService } from '../../../services/history.service.js';
 
 describe('HistoryService', () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.NODE_ENV = 'test';
     delete process.env.SUPABASE_URL;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     insertMock.mockReset();
     selectAllMock.mockReset();
     fromMock.mockReset();
+  });
+
+  afterAll(() => {
+    process.env.NODE_ENV = originalNodeEnv;
   });
 
   const sqlite = {
@@ -91,5 +98,10 @@ describe('HistoryService', () => {
 
     expect(history).toEqual([{ id: 'h1', event_type: 'DELETED' }]);
     expect(selectAllMock).toHaveBeenCalledWith(10);
+  });
+
+  it('throws in non-test mode when no storage backend is configured', () => {
+    process.env.NODE_ENV = 'development';
+    expect(() => new HistoryService()).toThrow(/FATAL:/);
   });
 });

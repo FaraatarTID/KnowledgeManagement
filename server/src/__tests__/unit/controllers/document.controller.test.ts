@@ -43,7 +43,7 @@ describe('DocumentController', () => {
             status: statusMock,
             json: jsonMock
         };
-        vi.clearAllMocks();
+        vi.resetAllMocks();
         process.env.GOOGLE_DRIVE_FOLDER_ID = 'real-folder';
     });
 
@@ -86,15 +86,15 @@ describe('DocumentController', () => {
     });
 
     describe('syncAll', () => {
-        it('should return demo response when drive folder is not configured', async () => {
+        it('should return operational error when drive folder is not configured', async () => {
             process.env.GOOGLE_DRIVE_FOLDER_ID = '';
 
             await DocumentController.syncAll(mockRequest, mockResponse, nextMock);
 
             expect(syncService.syncAll).not.toHaveBeenCalled();
-            expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
-                status: 'success',
-                processed: 0
+            expect(nextMock).toHaveBeenCalledWith(expect.objectContaining({
+                statusCode: 503,
+                message: expect.stringContaining('Google Drive is not configured')
             }));
         });
 
@@ -142,6 +142,21 @@ describe('DocumentController', () => {
             }));
         });
 
+        it('should skip drive delete when drive is not configured', async () => {
+            mockRequest.params = { id: 'doc-local-1' };
+            mockRequest.user = { email: 'admin@aikb.com' };
+            process.env.GOOGLE_DRIVE_FOLDER_ID = '';
+
+            await DocumentController.delete(mockRequest, mockResponse, nextMock);
+
+            expect(driveService.deleteFile).not.toHaveBeenCalled();
+            expect(vectorService.deleteDocument).toHaveBeenCalledWith('doc-local-1');
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                event_type: 'DELETED',
+                details: expect.stringContaining('Source: local/manual')
+            }));
+        });
+
         it('should fail delete when drive deletion fails for drive-backed documents', async () => {
             mockRequest.params = { id: 'drive-123' };
             mockRequest.user = { email: 'admin@aikb.com' };
@@ -157,6 +172,20 @@ describe('DocumentController', () => {
             expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
                 event_type: 'DELETE_FAILED',
                 doc_id: 'drive-123'
+            }));
+        });
+
+        it('should canonicalize chunk ids on delete', async () => {
+            mockRequest.params = { id: 'doc3_chunk0' };
+            mockRequest.user = { email: 'admin@aikb.com' };
+
+            await DocumentController.delete(mockRequest, mockResponse, nextMock);
+
+            expect(driveService.deleteFile).toHaveBeenCalledWith('doc3');
+            expect(vectorService.deleteDocument).toHaveBeenCalledWith('doc3');
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                event_type: 'DELETED',
+                doc_id: 'doc3'
             }));
         });
     });
@@ -196,6 +225,22 @@ describe('DocumentController', () => {
             expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
                 details: expect.stringContaining('Drive Rename: not_applicable')
             }));
+        });
+
+        it('should canonicalize chunk ids on update', async () => {
+            mockRequest.params = { id: 'doc3_chunk0' };
+            mockRequest.body = { title: 'Doc 3' };
+            mockRequest.user = { email: 'alice@aikb.com', role: 'EDITOR' };
+
+            vi.mocked(vectorService.getAllMetadata).mockResolvedValue({
+                'doc3': { owner: 'alice@aikb.com', category: 'IT' }
+            });
+            vi.mocked(driveService.renameFile).mockResolvedValue(true);
+
+            await DocumentController.update(mockRequest, mockResponse, nextMock);
+
+            expect(vectorService.updateDocumentMetadata).toHaveBeenCalledWith('doc3', expect.anything());
+            expect(driveService.renameFile).toHaveBeenCalledWith('doc3', 'Doc 3');
         });
 
         it('should reject update when user is not owner or admin', async () => {

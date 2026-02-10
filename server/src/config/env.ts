@@ -58,7 +58,7 @@ export type Env = Omit<z.infer<typeof envSchema>, 'JWT_SECRET'> & { JWT_SECRET: 
 const validateEnv = (): Env => {
   try {
     const testDefaults = process.env.NODE_ENV === 'test' ? {
-      GOOGLE_DRIVE_FOLDER_ID: process.env.GOOGLE_DRIVE_FOLDER_ID || 'mock-folder-id',
+      GOOGLE_DRIVE_FOLDER_ID: process.env.GOOGLE_DRIVE_FOLDER_ID || '',
       INITIAL_ADMIN_EMAIL: process.env.INITIAL_ADMIN_EMAIL || 'admin@aikb.com',
       INITIAL_ADMIN_PASSWORD: process.env.INITIAL_ADMIN_PASSWORD || 'TestAdmin@12345',
       INITIAL_ADMIN_NAME: process.env.INITIAL_ADMIN_NAME || 'System Administrator',

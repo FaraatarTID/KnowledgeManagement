@@ -30,8 +30,12 @@ export class HistoryService {
       this.isLocalMode = true;
       Logger.info('HistoryService: Supabase missing. Initialized in LOCAL MODE (SQLite).');
     } else {
-      Logger.info('HistoryService: Supabase and SQLite missing; entering MOCK MODE (expected in some tests).');
-      this.isMock = true;
+      if (process.env.NODE_ENV === 'test') {
+        Logger.info('HistoryService: Supabase and SQLite missing; entering MOCK MODE for tests.');
+        this.isMock = true;
+      } else {
+        throw new Error('FATAL: Supabase credentials and Local Storage both unavailable in HistoryService.');
+      }
     }
   }
 
