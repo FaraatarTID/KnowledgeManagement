@@ -556,9 +556,27 @@ export class VectorService {
         // For now return empty pending full Vertex AI SDK integration
       }
 
+      const vectors: VectorItem[] = [];
+
+      if (this.metadataStore.listVectorEntries && maxCount) {
+        const rows = await this.metadataStore.listVectorEntries({
+          limit: maxCount,
+          offset: 0
+        });
+
+        for (const row of rows) {
+          vectors.push({
+            id: row.data.id || row.id,
+            values: Array.isArray((row.data as any).values) ? (row.data as any).values : [],
+            metadata: row.data as any
+          });
+        }
+
+        return vectors;
+      }
+
       // Fallback: Return locally stored vector entries (metadata + values when available)
       const metadata = this.metadataStore.getAllOverrides();
-      const vectors: VectorItem[] = [];
 
       for (const [docId, data] of Object.entries(metadata)) {
         if (maxCount && vectors.length >= maxCount) {

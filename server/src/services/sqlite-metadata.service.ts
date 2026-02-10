@@ -186,6 +186,30 @@ export class SqliteMetadataService implements MetadataStore {
     }
   }
 
+
+  async listVectorEntries(params: { limit?: number; offset?: number }): Promise<Array<{ id: string; data: MetadataOverride }>> {
+    try {
+      const limit = params.limit || 1000;
+      const offset = params.offset || 0;
+
+      const query = `
+        SELECT id, data
+        FROM metadata
+        WHERE json_extract(data, '$.__vectorEntry') = 1
+        ORDER BY updated_at DESC
+        LIMIT ? OFFSET ?
+      `;
+
+      const rows = this.db.prepare(query).all(limit, offset) as { id: string; data: string }[];
+      return rows.map((row) => ({
+        id: row.id,
+        data: JSON.parse(row.data)
+      }));
+    } catch (error) {
+      Logger.error('SqliteMetadataService: listVectorEntries failed', { error });
+      return [];
+    }
+  }
   getDatabase(): Database.Database {
     return this.db;
   }

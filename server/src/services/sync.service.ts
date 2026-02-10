@@ -91,7 +91,7 @@ export class SyncService {
     for (const docId of localIds) {
       // Only prune documents that look like they came from Drive (manual- prefix is for uploads)
       if (!docId.startsWith('manual-') && !currentDriveIds.has(docId)) {
-         console.log(`SyncService: Pruning deleted document ${docId}`);
+         Logger.info('SyncService: Pruning deleted document', { docId });
          await this.vectorService.deleteDocument(docId);
          pruneCount++;
       }
@@ -122,7 +122,7 @@ export class SyncService {
     }
 
     const transactionId = `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    console.log(`[Transaction ${transactionId}] Starting index for ${file.name}`);
+    Logger.info('SyncService: Starting index transaction', { transactionId, fileName: file.name, fileId: file.id });
     
     // SECURITY: Detect if this is an update or a new document
     const allMeta = await this.vectorService.getAllMetadata();
@@ -161,7 +161,7 @@ export class SyncService {
       }
 
       if (!textContent) {
-        console.warn(`[Transaction ${transactionId}] No content extracted for ${file.name}`);
+        Logger.warn('SyncService: No content extracted', { transactionId, fileName: file.name, fileId: file.id });
         return file.id;
       }
 
@@ -217,7 +217,7 @@ export class SyncService {
 
       // 4. Persistence with Rollback Guard
       rollbackActions.unshift(async () => {
-        console.log(`[Rollback ${transactionId}] Removing vectors for ${file.id}`);
+        Logger.warn('SyncService: Rolling back indexed vectors for failed transaction', { transactionId, docId: file.id });
         await this.vectorService.deleteDocument(file.id);
       });
 
@@ -240,16 +240,16 @@ export class SyncService {
         });
       }
 
-      console.log(`[Transaction ${transactionId}] Completed successfully.`);
+      Logger.info('SyncService: Index transaction completed', { transactionId, fileName: file.name, fileId: file.id });
       return file.id;
 
     } catch (e: any) {
-      console.error(`[Transaction ${transactionId}] Process failed:`, e.message);
+      Logger.error('SyncService: Index transaction failed', { transactionId, fileName: file.name, fileId: file.id, error: e });
       
       // SECURITY: Rollback only if it was a new document attempt 
       if (!existed && rollbackActions.length > 0) {
         for (const action of rollbackActions) {
-          try { await action(); } catch (err) { console.error('Rollback action failed', err); }
+          try { await action(); } catch (err) { Logger.error('SyncService: Rollback action failed', { transactionId, error: err }); }
         }
       }
 
@@ -268,7 +268,7 @@ export class SyncService {
    * Rollback any partial changes for a document
    */
   private async rollbackIndexTransaction(docId: string, transactionId: string): Promise<void> {
-    console.log(`[Rollback ${transactionId}] Rolling back index for ${docId}`);
+    Logger.warn('SyncService: Rolling back index transaction', { transactionId, docId });
     try {
       await this.vectorService.deleteDocument(docId);
       await this.updateSyncStatus(docId, {
@@ -278,7 +278,7 @@ export class SyncService {
         lastSync: new Date().toISOString()
       });
     } catch (e) {
-      console.error(`[Rollback ${transactionId}] Failed to rollback:`, e);
+      Logger.error('SyncService: Rollback transaction failed', { transactionId, docId, error: e });
     }
   }
 
@@ -289,7 +289,7 @@ export class SyncService {
          return current;
       });
     } catch (e: any) {
-      console.error('SYNC_STATUS_UPDATE_FAILED', e.message);
+      Logger.error('SyncService: Failed to update sync status', { docId, error: e });
     }
   }
 
@@ -358,7 +358,7 @@ export class SyncService {
   }
 
   private async logExtractionFailure(file: { id: string, name: string, mimeType?: string }, error: any, operation: string) {
-    console.warn(`SyncService: Extraction failure on ${file.name} during ${operation}: ${error.message}`);
+    Logger.warn('SyncService: Extraction failure', { fileName: file.name, fileId: file.id, operation, error });
     await this.historyService.recordEvent({
       event_type: 'EXTRACTION_FAILED',
       doc_id: file.id,
