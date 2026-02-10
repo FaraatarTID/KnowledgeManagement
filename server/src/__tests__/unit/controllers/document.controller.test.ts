@@ -210,10 +210,30 @@ describe('DocumentController', () => {
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));
         });
 
-        it('should skip drive rename for manual documents', async () => {
+        it('should mark drive rename as not_configured when drive is disabled', async () => {
             mockRequest.params = { id: 'manual-1' };
             mockRequest.body = { title: 'New Local Title' };
             mockRequest.user = { email: 'alice@aikb.com', role: 'EDITOR' };
+            process.env.GOOGLE_DRIVE_FOLDER_ID = '';
+
+            vi.mocked(vectorService.getAllMetadata).mockResolvedValue({
+                'manual-1': { owner: 'alice@aikb.com', category: 'IT' }
+            });
+
+            await DocumentController.update(mockRequest, mockResponse, nextMock);
+
+            expect(driveService.renameFile).not.toHaveBeenCalled();
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                details: expect.stringContaining('Drive Rename: not_configured')
+            }));
+        });
+
+
+        it('should mark drive rename as not_applicable for manual docs when drive is configured', async () => {
+            mockRequest.params = { id: 'manual-1' };
+            mockRequest.body = { title: 'New Local Title' };
+            mockRequest.user = { email: 'alice@aikb.com', role: 'EDITOR' };
+            process.env.GOOGLE_DRIVE_FOLDER_ID = 'real-folder';
 
             vi.mocked(vectorService.getAllMetadata).mockResolvedValue({
                 'manual-1': { owner: 'alice@aikb.com', category: 'IT' }

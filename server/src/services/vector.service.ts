@@ -461,14 +461,9 @@ export class VectorService {
         .filter(v => v.metadata.docId === docId)
         .map(v => v.id);
 
-      if (vectorIdsToDelete.length === 0) {
-        Logger.info('VectorService: No vectors found for document', { docId });
-        return;
-      }
-
       // Delete from Vertex AI (if available)
       const indexServiceClient = await (this.vertexAI as any)?.getIndexServiceClient?.();
-      if (indexServiceClient) {
+      if (indexServiceClient && vectorIdsToDelete.length > 0) {
         // Call Vertex AI API to remove datapoints
         // const response = await indexServiceClient.removeDatapoints({
         //   indexName: this.indexName,
@@ -489,6 +484,8 @@ export class VectorService {
         .map(([key]) => key);
       if (vectorKeysToRemove.length > 0) {
         await this.metadataStore.removeOverrides(vectorKeysToRemove);
+      } else {
+        Logger.info('VectorService: No vector entries found for document; removed metadata only', { docId });
       }
 
       // Invalidate metadata cache
