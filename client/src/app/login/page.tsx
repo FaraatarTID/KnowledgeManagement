@@ -36,8 +36,12 @@ export default function LoginPage() {
       let msg = 'Login failed. Please check your credentials.';
       if (typeof error === 'object' && error !== null) {
         const e = error as Record<string, unknown>;
+        const code = e['code'];
         const resp = e['response'];
-        if (typeof resp === 'object' && resp !== null) {
+
+        if (code === 'ERR_NETWORK') {
+          msg = 'Cannot reach the backend API. Ensure server is running on port 3001 or set NEXT_PUBLIC_API_URL correctly.';
+        } else if (typeof resp === 'object' && resp !== null) {
           const data = (resp as Record<string, unknown>)['data'];
           if (typeof data === 'object' && data !== null && typeof (data as Record<string, unknown>)['error'] === 'string') {
             msg = String((data as Record<string, unknown>)['error']);

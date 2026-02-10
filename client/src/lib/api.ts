@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { resolveApiBaseUrl } from './apiBaseUrl';
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1',
+  baseURL: resolveApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },

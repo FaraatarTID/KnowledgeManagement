@@ -543,9 +543,12 @@ export class VectorService {
     try {
       const maxCount = options?.maxCount;
       if (!maxCount) {
-        Logger.warn('VectorService: getAllVectors called without a cap - expensive operation at scale', {
-          reason: options?.reason || 'unspecified'
-        });
+        const meta = { reason: options?.reason || 'unspecified' };
+        if (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
+          Logger.debug('VectorService: getAllVectors called without a cap (expected in some tests)', meta);
+        } else {
+          Logger.warn('VectorService: getAllVectors called without a cap - expensive operation at scale', meta);
+        }
       }
 
       // Retrieve from Vertex AI (if available)
