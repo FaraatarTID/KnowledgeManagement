@@ -67,6 +67,27 @@ describe('DocumentController', () => {
             expect(historyService.recordEvent).toHaveBeenCalled();
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
         });
+
+
+        it('should return success when upload indexing fails', async () => {
+            mockRequest.file = { path: 'tmp/path', mimetype: 'app/pdf', originalname: 'test.pdf' };
+            mockRequest.body = { category: 'IT' };
+
+            vi.mocked(driveService.uploadFile).mockResolvedValue('file-id-1');
+            vi.mocked(syncService.indexFile).mockRejectedValue(new Error('embedding service unavailable'));
+
+            await DocumentController.upload(mockRequest, mockResponse, nextMock);
+
+            expect(vectorService.updateDocumentMetadata).toHaveBeenCalledWith('file-id-1', expect.anything());
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                event_type: 'CREATED',
+                details: expect.stringContaining('Uploaded (index pending)')
+            }));
+            expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
+                success: true,
+                indexingStatus: 'pending'
+            }));
+        });
     });
 
     describe('list', () => {
@@ -86,15 +107,15 @@ describe('DocumentController', () => {
     });
 
     describe('syncAll', () => {
-        it('should return operational error when drive folder is not configured', async () => {
+        it('should skip full sync when drive folder is not configured', async () => {
             process.env.GOOGLE_DRIVE_FOLDER_ID = '';
 
             await DocumentController.syncAll(mockRequest, mockResponse, nextMock);
 
             expect(syncService.syncAll).not.toHaveBeenCalled();
-            expect(nextMock).toHaveBeenCalledWith(expect.objectContaining({
-                statusCode: 503,
-                message: expect.stringContaining('Google Drive is not configured')
+            expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
+                status: 'skipped',
+                processed: 0
             }));
         });
 

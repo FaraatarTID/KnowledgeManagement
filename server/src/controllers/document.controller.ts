@@ -71,29 +71,47 @@ export class DocumentController {
         });
         saga.addStep('metadata_persisted', { driveFileId });
 
-        // STEP 3: Index for AI (may fail)
-        await syncService.indexFile({
-          id: driveFileId,
-          name: fileName,
-          mimeType: req.file!.mimetype,
-          modifiedTime: new Date().toISOString()
-        });
-        saga.addStep('ai_indexed', { driveFileId });
+        // STEP 3: Index for AI (best-effort)
+        let indexingStatus: 'indexed' | 'pending' = 'indexed';
+        let indexingError: string | undefined;
+
+        try {
+          await syncService.indexFile({
+            id: driveFileId,
+            name: fileName,
+            mimeType: req.file!.mimetype,
+            modifiedTime: new Date().toISOString()
+          });
+          saga.addStep('ai_indexed', { driveFileId });
+        } catch (indexError: any) {
+          indexingStatus = 'pending';
+          indexingError = indexError?.message || 'unknown indexing error';
+
+          Logger.warn('Upload completed but AI indexing failed; keeping document metadata', {
+            docId: driveFileId,
+            error: indexingError
+          });
+        }
 
         // STEP 4: Record in History
         await historyService.recordEvent({
           event_type: 'CREATED',
           doc_id: driveFileId,
           doc_name: fileName,
-          details: `Uploaded & indexed: ${finalDepartment}/${category || 'General'}`
+          details: indexingStatus === 'indexed'
+            ? `Uploaded & indexed: ${finalDepartment}/${category || 'General'}`
+            : `Uploaded (index pending): ${finalDepartment}/${category || 'General'}. Reason: ${indexingError}`
         });
-        saga.addStep('history_recorded', { driveFileId });
+        saga.addStep('history_recorded', { driveFileId, indexingStatus });
 
-        Logger.info('Document upload complete', { docId: driveFileId });
+        Logger.info('Document upload complete', { docId: driveFileId, indexingStatus });
 
         return {
           success: true,
-          message: 'File uploaded and indexed successfully',
+          message: indexingStatus === 'indexed'
+            ? 'File uploaded and indexed successfully'
+            : 'File uploaded successfully. AI indexing is currently unavailable and will need retry.',
+          indexingStatus,
           docId: driveFileId,
           file: {
             filename: req.file!.filename,
@@ -265,7 +283,8 @@ export class DocumentController {
   static syncAll: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
     if (!folderId) {
-      throw new AppError('Google Drive is not configured for sync operations.', 503);
+      Logger.info('Sync requested but Google Drive is not configured; skipping full sync');
+      return res.json({ status: 'skipped', processed: 0, message: 'Google Drive is not configured. Full sync skipped.' });
     }
 
     Logger.info('Starting full sync');
