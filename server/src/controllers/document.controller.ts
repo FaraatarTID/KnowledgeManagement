@@ -31,7 +31,7 @@ export class DocumentController {
         let driveFileId = docId;
         const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-        if (driveFolderId && driveFolderId !== 'mock-folder') {
+        if (driveFolderId && driveFolderId !== 'mock-folder' && driveFolderId !== 'mock-folder-id') {
           driveFileId = await driveService.uploadFile(
             driveFolderId,
             fileName,
@@ -156,10 +156,13 @@ export class DocumentController {
 
     await vectorService.updateDocumentMetadata(id, { title, category, sensitivity, department });
     
+    const isManualDocument = id.startsWith('manual-');
     let driveRenameStatus = 'skipped';
-    if (title) {
+    if (title && !isManualDocument) {
         const success = await driveService.renameFile(id, title);
         driveRenameStatus = success ? 'success' : 'failed';
+    } else if (title && isManualDocument) {
+      driveRenameStatus = 'not_applicable';
     }
 
     await historyService.recordEvent({
@@ -181,16 +184,46 @@ export class DocumentController {
   static delete: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     if (!id) throw new AppError('ID required', 400);
-    
+    const userEmail = req.user?.email || 'unknown';
+    const isManualDocument = id.startsWith('manual-');
+
+    // For synced Google Drive docs, delete source file first.
+    // If this fails, fail fast instead of pretending deletion succeeded.
+    if (!isManualDocument) {
+      try {
+        await driveService.deleteFile(id);
+      } catch (error: any) {
+        await historyService.recordEvent({
+          event_type: 'DELETE_FAILED',
+          doc_id: id,
+          doc_name: id,
+          details: `Delete requested by ${userEmail}. Drive delete failed: ${error?.message || 'unknown error'}`
+        });
+
+        Logger.warn('Failed to delete source file from Google Drive; aborting delete to avoid re-import', {
+          docId: id,
+          error: error?.message
+        });
+        throw new AppError(`Unable to delete source file from Google Drive: ${error?.message || 'unknown error'}`, 502);
+      }
+    }
+
     await vectorService.deleteDocument(id);
-    
+
     // FIXED: Invalidate cache for this document and related searches
     // Emit event so VectorService clears its cache
     const { cacheInvalidation } = await import('../utils/cache-invalidation.js');
     await cacheInvalidation.deleteDocument(id);
-    
-    Logger.info('Document deleted from index and cache invalidated', { docId: id });
-    res.json({ status: 'success', message: `Document ${id} removed from index.` });
+
+    await historyService.recordEvent({
+      event_type: 'DELETED',
+      doc_id: id,
+      doc_name: id,
+      details: `Deleted by ${userEmail}. Source: ${isManualDocument ? 'local/manual' : 'google-drive'}`
+    });
+
+    Logger.info('Document deleted from storage/index and cache invalidated', { docId: id });
+    res.json({ status: 'success', message: `Document ${id} removed.` });
   });
 
   static syncOne: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
@@ -212,22 +245,39 @@ export class DocumentController {
   });
 
   static syncAll: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
-    if (!process.env.GOOGLE_DRIVE_FOLDER_ID || process.env.GOOGLE_DRIVE_FOLDER_ID === 'mock-folder') {
-      throw new AppError('Google Drive folder ID is not configured. Sync cannot proceed.', 400);
+    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    const isDemoMode = !folderId || folderId === 'mock-folder' || folderId === 'mock-folder-id';
+
+    if (isDemoMode) {
+      Logger.info('Sync requested in demo mode (Google Drive not configured).');
+      return res.json({
+        status: 'success',
+        processed: 0,
+        message: 'Demo Sync: Google Drive is not configured, so no files were imported.'
+      });
     }
 
     Logger.info('Starting full sync');
-    const result = await syncService.syncAll(process.env.GOOGLE_DRIVE_FOLDER_ID);
-    
-    await historyService.recordEvent({
-      event_type: 'UPDATED',
-      doc_id: 'global-sync',
-      doc_name: 'Knowledge Base Sync',
-      details: `Full cloud sync completed. Processed: ${result.processed}`
-    });
 
-    Logger.info('Full sync completed', { result });
-    res.json(result);
+    try {
+      const result = await syncService.syncAll(folderId);
+
+      await historyService.recordEvent({
+        event_type: 'UPDATED',
+        doc_id: 'global-sync',
+        doc_name: 'Knowledge Base Sync',
+        details: `Full cloud sync completed. Processed: ${result.processed}`
+      });
+
+      Logger.info('Full sync completed', { result });
+      return res.json({ ...result, message: 'Sync complete' });
+    } catch (error: any) {
+      Logger.warn('Full sync failed; returning user-friendly operational error', {
+        error: error?.message,
+        code: error?.code
+      });
+      throw new AppError(`Sync failed: ${error?.message || 'Google Drive connection problem'}`, 503);
+    }
   });
 
   static syncBatch: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
@@ -262,4 +312,3 @@ export class DocumentController {
     });
   });
 }
-

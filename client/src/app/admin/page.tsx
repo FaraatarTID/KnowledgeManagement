@@ -321,6 +321,21 @@ function AdminContent() {
     }
   };
 
+  const handleDeleteDocument = async (docId: string) => {
+    if (!window.confirm('Are you sure you want to delete this document? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/documents/${docId}`);
+      setDocuments(prev => prev.filter(d => String((d as Record<string, unknown>)['id']) !== docId));
+      alert('Document deleted successfully');
+    } catch (error) {
+      console.error('Delete document failed', error);
+      alert(extractErrorMessage(error, 'Failed to delete document'));
+    }
+  };
+
   const openEditModal = (doc: Record<string, unknown>) => {
     console.log('Admin: Opening Edit Modal for doc:', doc);
     setEditingDoc(doc);
@@ -544,12 +559,7 @@ function AdminContent() {
                                               <HardDrive size={16} />
                                             </button>
                                             <button 
-                                              onClick={() => {
-                                                 if(window.confirm('Are you sure you want to delete this document? This cannot be undone.')) {
-                                                   alert('Document deleted (simulated)');
-                                                   setDocuments(prev => prev.filter(d => String((d as Record<string, unknown>)['id']) !== id));
-                                                 }
-                                              }}
+                                              onClick={() => handleDeleteDocument(id)}
                                               className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                                               title="Delete Document"
                                             >

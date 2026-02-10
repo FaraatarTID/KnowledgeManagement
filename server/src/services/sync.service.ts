@@ -22,10 +22,11 @@ export class SyncService {
     private driveService: DriveService,
     private vectorService: VectorService,
     private geminiService: GeminiService,
+    historyService?: HistoryService,
     statusStoragePath?: string
   ) {
     this.parsingService = new ParsingService();
-    this.historyService = new HistoryService();
+    this.historyService = historyService || new HistoryService();
     this.localMetadataService = new LocalMetadataService();
     this.extractionService = new ExtractionService();
     

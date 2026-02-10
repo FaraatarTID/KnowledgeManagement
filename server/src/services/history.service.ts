@@ -16,6 +16,7 @@ export class HistoryService {
   private sqlite?: any; // SqliteMetadataService
   private isLocalMode: boolean = false;
   private isMock: boolean = false;
+  private mockEvents: Array<Record<string, any>> = [];
 
   constructor(sqlite?: any) {
     this.sqlite = sqlite;
@@ -34,25 +35,50 @@ export class HistoryService {
     }
   }
 
+  private writeToSqlite(event: HistoryEvent) {
+    if (!this.sqlite) {
+      throw new Error('SQLite service unavailable');
+    }
+
+    this.sqlite.getDatabase()
+      .prepare('INSERT INTO history (id, event_type, doc_id, doc_name, details, user_id, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(
+        uuidv4(),
+        event.event_type,
+        event.doc_id || null,
+        event.doc_name || null,
+        event.details || null,
+        event.user_id || null,
+        JSON.stringify(event)
+      );
+  }
+
+  private canFallbackToSqlite(): boolean {
+    return !this.isLocalMode && !!this.sqlite;
+  }
+
   async recordEvent(event: HistoryEvent) {
     if (this.isMock) {
-      console.log(`[MOCK HISTORY] ${event.event_type}: ${event.doc_name} (${event.doc_id}) - ${event.details || 'N/A'}`);
+      this.mockEvents.unshift({
+        id: uuidv4(),
+        created_at: new Date().toISOString(),
+        ...event
+      });
+
+      if (this.mockEvents.length > 1000) {
+        this.mockEvents = this.mockEvents.slice(0, 1000);
+      }
+
+      Logger.info('HistoryService: Recorded in-memory history event (MOCK MODE)', {
+        eventType: event.event_type,
+        docId: event.doc_id
+      });
       return;
     }
 
     try {
       if (this.isLocalMode) {
-        this.sqlite.getDatabase()
-          .prepare('INSERT INTO history (id, event_type, doc_id, doc_name, details, user_id, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run(
-            uuidv4(),
-            event.event_type,
-            event.doc_id || null,
-            event.doc_name || null,
-            event.details || null,
-            event.user_id || null,
-            JSON.stringify(event)
-          );
+        this.writeToSqlite(event);
       } else if (this.supabase) {
         const { error } = await this.supabase
           .from('document_history')
@@ -63,18 +89,34 @@ export class HistoryService {
             }
           ]);
 
-        if (error) throw error;
+        if (error) {
+          throw error;
+        }
       }
     } catch (e) {
-      Logger.error('HistoryService: Failed to record event', e);
+      if (this.canFallbackToSqlite()) {
+        Logger.warn('HistoryService: Supabase record failed, trying SQLite fallback.', {
+          error: e instanceof Error ? e.message : String(e)
+        });
+      } else {
+        Logger.error('HistoryService: Failed to record event', e);
+      }
+
+      // Fallback: when Supabase write fails but SQLite exists, keep local audit trail.
+      if (this.canFallbackToSqlite()) {
+        try {
+          this.writeToSqlite(event);
+          Logger.warn('HistoryService: Fell back to SQLite history after Supabase failure.');
+        } catch (sqliteError) {
+          Logger.error('HistoryService: SQLite fallback also failed', sqliteError);
+        }
+      }
     }
   }
 
   async getHistory(limit: number = 100) {
     if (this.isMock) {
-      return [
-        { id: 'mock-1', created_at: new Date().toISOString(), event_type: 'UPDATED', doc_name: 'Policy A', doc_id: 'd1', details: 'Manual sync triggered' }
-      ];
+      return this.mockEvents.slice(0, limit);
     }
 
     try {
@@ -95,7 +137,26 @@ export class HistoryService {
       }
       return [];
     } catch (e) {
-      Logger.error('HistoryService: Failed to fetch history', e);
+      if (this.canFallbackToSqlite()) {
+        Logger.warn('HistoryService: Supabase history fetch failed, trying SQLite fallback.', {
+          error: e instanceof Error ? e.message : String(e)
+        });
+      } else {
+        Logger.error('HistoryService: Failed to fetch history', e);
+      }
+
+      if (this.canFallbackToSqlite()) {
+        try {
+          Logger.warn('HistoryService: Falling back to SQLite history fetch after Supabase failure.');
+          const rows = this.sqlite.getDatabase()
+            .prepare('SELECT * FROM history ORDER BY created_at DESC LIMIT ?')
+            .all(limit);
+          return rows;
+        } catch (sqliteError) {
+          Logger.error('HistoryService: SQLite fallback fetch failed', sqliteError);
+        }
+      }
+
       return [];
     }
   }
