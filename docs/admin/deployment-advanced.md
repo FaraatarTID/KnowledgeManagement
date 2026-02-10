@@ -94,7 +94,7 @@ SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
 
 # AI Config
-GEMINI_MODEL=gemini-2.5-flash-lite-001
+GEMINI_MODEL=gemini-flash-latest
 EMBEDDING_MODEL=text-embedding-004
 
 # Security

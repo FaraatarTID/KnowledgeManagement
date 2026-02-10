@@ -50,12 +50,15 @@ _Best for large corporations with millions of documents._
    VECTOR_STORE_MODE=VERTEX
    ```
 
-### C. Set the Security Secret
+### C. Set the Security Secret (Recommended for all modes)
 
 Look for `JWT_SECRET`. It must be a **hex-encoded** secret (lowercase `a-f` + `0-9`) and should be generated as **64 hex characters** (32 random bytes).
 
 - **To generate one**: Open a terminal and run: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 - Copy and paste the result into `JWT_SECRET=...`
+
+> [!NOTE]
+> In **Easy Mode** (`VECTOR_STORE_MODE=LOCAL`), if `JWT_SECRET` is not provided, the server will auto-generate a temporary secret at startup. This is convenient for first-time setup but **all active sessions are invalidated on restart**. For stable logins, set `JWT_SECRET` explicitly.
 
 ---
 

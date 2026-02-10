@@ -30,7 +30,7 @@ export class GeminiService {
   private readonly HALF_OPEN_SUCCESS_THRESHOLD = 2;
 
   constructor(projectIdOrApiKey: string, location: string = 'us-central1', isApiKey: boolean = false) {
-    const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite-001';
+    const modelName = process.env.GEMINI_MODEL || 'gemini-flash-latest';
     const embedName = process.env.EMBEDDING_MODEL || 'text-embedding-004';
 
     if (isApiKey) {
