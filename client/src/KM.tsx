@@ -244,8 +244,9 @@ function AIKBContent() {
       } else {
         toast.error(`خطا در پشتیبان‌گیری: ${result.error || 'خطای ناشناخته'}`);
       }
-    } catch (error: any) {
-      toast.error(`خطا در اتصال: ${error.message || 'ارتباط با سرور برقرار نشد'}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'ارتباط با سرور برقرار نشد';
+      toast.error(`خطا در اتصال: ${message}`);
     } finally {
       setIsLoading(false);
     }
