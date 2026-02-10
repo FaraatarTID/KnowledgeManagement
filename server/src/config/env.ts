@@ -38,6 +38,7 @@ const envSchema = z.object({
   // AI Config
   GEMINI_MODEL: z.string().default('gemini-flash-latest'),
   EMBEDDING_MODEL: z.string().default('text-embedding-004'),
+  AI_STUDIO_EMBEDDING_MODEL: z.string().default('gemini-embedding-001'),
   
   // RAG Config
   RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.60),
@@ -82,6 +83,7 @@ const validateEnv = (): Env => {
       VECTOR_LOCAL_MAX_CANDIDATES: process.env.VECTOR_LOCAL_MAX_CANDIDATES || '5000',
       GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-flash-latest',
       EMBEDDING_MODEL: process.env.EMBEDDING_MODEL || 'text-embedding-004',
+      AI_STUDIO_EMBEDDING_MODEL: process.env.AI_STUDIO_EMBEDDING_MODEL || 'gemini-embedding-001',
       RAG_MIN_SIMILARITY: process.env.RAG_MIN_SIMILARITY || '0.60',
       RAG_MAX_CONTEXT_CHARS: process.env.RAG_MAX_CONTEXT_CHARS || '100000',
       ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || 'http://localhost:3000',
