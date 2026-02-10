@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import 'dotenv/config';
+import { randomBytes } from 'crypto';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('3001'),
   JWT_SECRET: z.string()
     .min(64, "JWT_SECRET must be at least 64 characters long (use: node -e 'console.log(require(\"crypto\").randomBytes(32).toString(\"hex\"))')")
-    .regex(/^[a-f0-9]{64,}$/, "JWT_SECRET must be hex-encoded random bytes"),
+    .regex(/^[a-f0-9]{64,}$/, "JWT_SECRET must be hex-encoded random bytes")
+    .optional(),
   
   // Google Cloud / AI Studio
   GOOGLE_CLOUD_PROJECT_ID: z.string().optional(),
@@ -32,7 +34,7 @@ const envSchema = z.object({
   INITIAL_ADMIN_NAME: z.string().default('System Administrator'),
 
   // AI Config
-  GEMINI_MODEL: z.string().default('gemini-2.5-flash-lite-001'),
+  GEMINI_MODEL: z.string().default('gemini-flash-latest'),
   EMBEDDING_MODEL: z.string().default('text-embedding-004'),
   
   // RAG Config
@@ -50,32 +52,43 @@ const envSchema = z.object({
   SENTRY_DSN: z.string().url().optional(),
 });
 
-export type Env = z.infer<typeof envSchema>;
+export type Env = Omit<z.infer<typeof envSchema>, 'JWT_SECRET'> & { JWT_SECRET: string };
 
 const validateEnv = (): Env => {
   try {
     const parsed = envSchema.parse(process.env);
+
+    const resolved: Env = { ...parsed, JWT_SECRET: parsed.JWT_SECRET ?? "" };
+
+    if (!resolved.JWT_SECRET) {
+      if (resolved.VECTOR_STORE_MODE === 'LOCAL') {
+        resolved.JWT_SECRET = randomBytes(32).toString('hex');
+        console.warn('⚠️  JWT_SECRET not set in Easy Mode (LOCAL). Generated an ephemeral secret for this process; existing sessions will be invalidated after restart.');
+      } else {
+        throw new Error('JWT_SECRET is mandatory when VECTOR_STORE_MODE is VERTEX.');
+      }
+    }
     
     // Additional conditional logic
-    if (parsed.NODE_ENV === 'production' || parsed.NODE_ENV === 'development') {
-       if (parsed.VECTOR_STORE_MODE === 'VERTEX' && !parsed.GOOGLE_CLOUD_PROJECT_ID) {
+    if (resolved.NODE_ENV === 'production' || resolved.NODE_ENV === 'development') {
+       if (resolved.VECTOR_STORE_MODE === 'VERTEX' && !resolved.GOOGLE_CLOUD_PROJECT_ID) {
           throw new Error('GOOGLE_CLOUD_PROJECT_ID is mandatory when VECTOR_STORE_MODE is VERTEX.');
        }
        
-       if (parsed.VECTOR_STORE_MODE === 'LOCAL' && !parsed.GOOGLE_API_KEY) {
+       if (resolved.VECTOR_STORE_MODE === 'LOCAL' && !resolved.GOOGLE_API_KEY) {
           throw new Error('GOOGLE_API_KEY is mandatory when VECTOR_STORE_MODE is LOCAL (Easy Mode).');
        }
 
-       if (!parsed.SUPABASE_URL || !parsed.SUPABASE_SERVICE_ROLE_KEY || parsed.SUPABASE_URL === '') {
+       if (!resolved.SUPABASE_URL || !resolved.SUPABASE_SERVICE_ROLE_KEY || resolved.SUPABASE_URL === '') {
           console.warn('⚠️  Supabase credentials missing. Switching to LOCAL STORAGE MODE (SQLite).');
        }
        
-       if (parsed.GOOGLE_CLOUD_PROJECT_ID && parsed.GOOGLE_CLOUD_PROJECT_ID.includes('mock') && parsed.NODE_ENV === 'production') {
+       if (resolved.GOOGLE_CLOUD_PROJECT_ID && resolved.GOOGLE_CLOUD_PROJECT_ID.includes('mock') && resolved.NODE_ENV === 'production') {
           throw new Error('GOOGLE_CLOUD_PROJECT_ID cannot be a mock project in production.');
        }
     }
     
-    return parsed;
+    return resolved;
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.error('❌ Invalid environment variables:');
@@ -96,7 +109,7 @@ const validateEnv = (): Env => {
          GOOGLE_DRIVE_FOLDER_ID: 'mock-folder-id',
          GCP_REGION: 'us-central1',
          GCP_KEY_FILE: 'key.json',
-         GEMINI_MODEL: 'gemini-2.5-flash-lite-001',
+         GEMINI_MODEL: 'gemini-flash-latest',
          EMBEDDING_MODEL: 'text-embedding-004',
          RAG_MIN_SIMILARITY: 0.60,
          RAG_MAX_CONTEXT_CHARS: 100000,

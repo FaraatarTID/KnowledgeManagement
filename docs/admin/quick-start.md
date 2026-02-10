@@ -18,6 +18,9 @@ This is the "Brain" of the system.
 
 ---
 
+> [!NOTE]
+> Easy Mode can auto-generate a temporary `JWT_SECRET` if you leave it blank, but logins will reset after each server restart. For stable sessions, set a fixed `JWT_SECRET` in `server/.env`.
+
 ### 📂 Step 2: Connect your Google Drive
 
 This tells the AI where your documents are.
