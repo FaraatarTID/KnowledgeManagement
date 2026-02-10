@@ -19,7 +19,6 @@ Logger.info('--- BACKEND STARTUP SEQUENCE ---', {
 });
 
 initErrorTracking();
-
 const app = express();
 const port = env.PORT || 3001;
 

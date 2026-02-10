@@ -14,10 +14,11 @@ const envSchema = z.object({
   GOOGLE_CLOUD_PROJECT_ID: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(),
   VECTOR_STORE_MODE: z.enum(['VERTEX', 'LOCAL']).default('LOCAL'),
+  GEMINI_BACKEND: z.enum(['AUTO', 'VERTEX', 'AI_STUDIO']).default('AUTO'),
   VECTOR_LOCAL_MAX_CANDIDATES: z.coerce.number().int().positive().default(5000),
   GCP_REGION: z.string().default('us-central1'),
   GCP_KEY_FILE: z.string().default('google-key.json'),
-  GOOGLE_DRIVE_FOLDER_ID: z.string(),
+  GOOGLE_DRIVE_FOLDER_ID: z.string().optional(),
   
   // Database / Supabase
   SUPABASE_URL: z.string().url().or(z.literal('')).optional(),
@@ -54,6 +55,18 @@ const envSchema = z.object({
 });
 
 export type Env = Omit<z.infer<typeof envSchema>, 'JWT_SECRET'> & { JWT_SECRET: string };
+
+
+const resolveGeminiBackend = (
+  geminiBackend: 'AUTO' | 'VERTEX' | 'AI_STUDIO',
+  hasApiKey: boolean
+): 'VERTEX' | 'AI_STUDIO' => {
+  if (geminiBackend === 'AUTO') {
+    return hasApiKey ? 'AI_STUDIO' : 'VERTEX';
+  }
+
+  return geminiBackend;
+};
 
 const validateEnv = (): Env => {
   try {
@@ -97,8 +110,25 @@ const validateEnv = (): Env => {
           throw new Error('GOOGLE_CLOUD_PROJECT_ID is mandatory when VECTOR_STORE_MODE is VERTEX.');
        }
        
-       if (resolved.VECTOR_STORE_MODE === 'LOCAL' && !resolved.GOOGLE_API_KEY) {
-          throw new Error('GOOGLE_API_KEY is mandatory when VECTOR_STORE_MODE is LOCAL (Easy Mode).');
+       const resolvedGeminiBackend = resolveGeminiBackend(
+          resolved.GEMINI_BACKEND,
+          Boolean(resolved.GOOGLE_API_KEY)
+       );
+
+       if (resolved.GEMINI_BACKEND === 'AUTO' && resolved.GOOGLE_API_KEY && resolved.GOOGLE_CLOUD_PROJECT_ID) {
+          console.warn('⚠️  GEMINI_BACKEND=AUTO with both GOOGLE_API_KEY and GOOGLE_CLOUD_PROJECT_ID set. Defaulting to AI_STUDIO. Set GEMINI_BACKEND explicitly to avoid ambiguity.');
+       }
+
+       if (resolvedGeminiBackend === 'AI_STUDIO' && !resolved.GOOGLE_API_KEY) {
+          throw new Error('GOOGLE_API_KEY is mandatory when GEMINI_BACKEND resolves to AI_STUDIO.');
+       }
+
+       if (resolvedGeminiBackend === 'VERTEX' && !resolved.GOOGLE_CLOUD_PROJECT_ID) {
+          throw new Error('GOOGLE_CLOUD_PROJECT_ID is mandatory when GEMINI_BACKEND resolves to VERTEX.');
+       }
+
+       if (!resolved.GOOGLE_DRIVE_FOLDER_ID) {
+          console.warn('⚠️  GOOGLE_DRIVE_FOLDER_ID missing. Running in LOCAL DOCUMENT MODE (manual uploads + local metadata only).');
        }
 
        if (!resolved.SUPABASE_URL || !resolved.SUPABASE_SERVICE_ROLE_KEY || resolved.SUPABASE_URL === '') {
@@ -124,5 +154,7 @@ const validateEnv = (): Env => {
     process.exit(1);
   }
 };
+
+export { resolveGeminiBackend };
 
 export const env = validateEnv();

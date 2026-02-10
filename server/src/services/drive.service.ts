@@ -1,12 +1,18 @@
 import { google, drive_v3 } from 'googleapis';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
-import path from 'path';
 
 export class DriveService {
-  private drive: drive_v3.Drive;
+  private drive: drive_v3.Drive | null = null;
+  private enabled: boolean;
 
-  constructor(authKeyPath: string) {
+  constructor(authKeyPath: string, enabled: boolean = true) {
+    this.enabled = enabled;
+
+    if (!this.enabled) {
+      return;
+    }
+
     const auth = new google.auth.GoogleAuth({
       keyFile: authKeyPath,
       scopes: [
@@ -17,9 +23,18 @@ export class DriveService {
     this.drive = google.drive({ version: 'v3', auth });
   }
 
+  private requireDriveClient(): drive_v3.Drive {
+    if (!this.enabled || !this.drive) {
+      throw new Error('Google Drive is not configured (LOCAL DOCUMENT MODE).');
+    }
+
+    return this.drive;
+  }
+
   async uploadFile(folderId: string, fileName: string, filePath: string, mimeType: string): Promise<string> {
     try {
-      const response = await this.drive.files.create({
+      const drive = this.requireDriveClient();
+      const response = await drive.files.create({
         requestBody: {
           name: fileName,
           parents: [folderId]
@@ -40,7 +55,8 @@ export class DriveService {
 
   async deleteFile(fileId: string): Promise<void> {
     try {
-      await this.drive.files.delete({
+      const drive = this.requireDriveClient();
+      await drive.files.delete({
         fileId: fileId
       });
     } catch (e) {
@@ -51,7 +67,8 @@ export class DriveService {
 
   async renameFile(fileId: string, newName: string): Promise<boolean> {
     try {
-      await this.drive.files.update({
+      const drive = this.requireDriveClient();
+      await drive.files.update({
         fileId: fileId,
         requestBody: {
           name: newName
@@ -79,7 +96,8 @@ export class DriveService {
         params.pageToken = pageToken;
       }
 
-      const response = await this.drive.files.list(params);
+      const drive = this.requireDriveClient();
+      const response = await drive.files.list(params);
       
       if (response.data.files) {
         allFiles = allFiles.concat(response.data.files);
@@ -91,7 +109,8 @@ export class DriveService {
   }
 
   async exportDocument(fileId: string, mimeType: string = 'text/plain'): Promise<string> {
-    const response = await this.drive.files.export({
+    const drive = this.requireDriveClient();
+    const response = await drive.files.export({
       fileId: fileId,
       mimeType: mimeType
     }, { responseType: 'text' });
@@ -108,7 +127,8 @@ export class DriveService {
     }
 
     try {
-      const response = await this.drive.files.get({
+      const drive = this.requireDriveClient();
+      const response = await drive.files.get({
         fileId: fileId,
         alt: 'media'
       }, { responseType: 'arraybuffer' });
@@ -120,7 +140,8 @@ export class DriveService {
   }
 
   async watchFolder(folderId: string, webhookUrl: string) {
-    const channel = await this.drive.files.watch({
+    const drive = this.requireDriveClient();
+    const channel = await drive.files.watch({
       fileId: folderId,
       requestBody: {
         id: uuidv4(),
@@ -134,7 +155,8 @@ export class DriveService {
 
   async getFileMetadata(fileId: string): Promise<drive_v3.Schema$File | null> {
     try {
-      const response = await this.drive.files.get({
+      const drive = this.requireDriveClient();
+      const response = await drive.files.get({
         fileId: fileId,
         fields: 'id, name, mimeType, webViewLink, modifiedTime, owners, size'
       });
@@ -147,7 +169,8 @@ export class DriveService {
 
   async checkPermission(fileId: string, userEmail: string): Promise<boolean> {
     try {
-      const response = await this.drive.permissions.list({
+      const drive = this.requireDriveClient();
+      const response = await drive.permissions.list({
         fileId: fileId,
         fields: 'permissions(emailAddress, role)'
       });
@@ -162,7 +185,12 @@ export class DriveService {
   async checkHealth(): Promise<{ status: 'OK' | 'ERROR'; message?: string }> {
     try {
       // Test by listing root folder (just 1 file)
-      await this.drive.files.list({ pageSize: 1 });
+      if (!this.enabled) {
+        return { status: 'OK', message: 'Google Drive disabled (LOCAL DOCUMENT MODE)' };
+      }
+
+      const drive = this.requireDriveClient();
+      await drive.files.list({ pageSize: 1 });
       return { status: 'OK', message: 'Connected to Google Drive' };
     } catch (e: any) {
       return { status: 'ERROR', message: `Drive Error: ${e.message}` };
