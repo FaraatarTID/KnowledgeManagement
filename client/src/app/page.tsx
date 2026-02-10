@@ -41,7 +41,11 @@ export default function Home() {
         }
 
         // Verify session with server
-        await authApi.getMe();
+        const me = await authApi.getMe();
+        if (!me) {
+          router.push('/login');
+          return;
+        }
 
         // Fetch config for model name
         const configRes = await api.get('/config');
