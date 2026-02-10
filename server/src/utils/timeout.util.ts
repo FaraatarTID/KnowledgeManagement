@@ -21,24 +21,33 @@ export class TimeoutUtil {
     timeoutMs: number,
     name: string = 'Operation'
   ): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        const timer = setTimeout(() => {
-          const error = new TimeoutError(
-            `${name} exceeded timeout of ${timeoutMs}ms`
-          );
-          Logger.warn(`${name}: Timeout exceeded`, {
-            timeoutMs,
-            name
-          });
-          reject(error);
-        }, timeoutMs);
+    let timer: NodeJS.Timeout | undefined;
 
-        // Clear timeout if promise settles first
-        promise.finally(() => clearTimeout(timer));
-      })
-    ]);
+    const guardedPromise = promise.then(
+      (value) => {
+        if (timer) clearTimeout(timer);
+        return value;
+      },
+      (error) => {
+        if (timer) clearTimeout(timer);
+        throw error;
+      }
+    );
+
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timer = setTimeout(() => {
+        const error = new TimeoutError(
+          `${name} exceeded timeout of ${timeoutMs}ms`
+        );
+        Logger.warn(`${name}: Timeout exceeded`, {
+          timeoutMs,
+          name
+        });
+        reject(error);
+      }, timeoutMs);
+    });
+
+    return Promise.race([guardedPromise, timeoutPromise]);
   }
 
   /**

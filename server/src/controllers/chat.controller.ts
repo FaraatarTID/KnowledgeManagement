@@ -23,7 +23,7 @@ export class ChatController {
       userProfile: {
         name: user.name || 'User',
         department: user.department || 'General',
-        role: user.role || 'IC'
+        role: user.role || 'VIEWER'
       }
     });
 

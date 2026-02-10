@@ -101,9 +101,32 @@ export class RAGService {
       // 3. Filter by Similarity Threshold
       // If the best match score is too low (e.g. < 0.60), we assume it's "noise" and return early.
       // This is a HARD GATE against hallucination on irrelevant data.
-      const relevantResults = searchResults.filter(res => (res as any).score >= env.RAG_MIN_SIMILARITY);
+      let relevantResults = searchResults.filter(res => (res as any).score >= env.RAG_MIN_SIMILARITY);
+
+      // Adaptive fallback: avoid false negatives when ranking finds near-matches just below strict threshold.
+      if (relevantResults.length === 0 && searchResults.length > 0) {
+        const fallbackThreshold = Math.min(env.RAG_MIN_SIMILARITY, 0.35);
+        const adaptiveMatches = searchResults.filter(res => (res as any).score >= fallbackThreshold);
+
+        if (adaptiveMatches.length > 0) {
+          relevantResults = adaptiveMatches.slice(0, 3);
+          this.logger.warn('RAG: Using adaptive similarity fallback', {
+            strictThreshold: env.RAG_MIN_SIMILARITY,
+            fallbackThreshold,
+            topScore: (searchResults[0] as any)?.score || 0,
+            selectedCount: relevantResults.length
+          });
+        }
+      }
 
       if (relevantResults.length === 0) {
+        this.logger.info('RAG: No relevant matches after similarity filtering', {
+          strictThreshold: env.RAG_MIN_SIMILARITY,
+          bestScore: (searchResults[0] as any)?.score || 0,
+          totalCandidates: searchResults.length,
+          department: userProfile.department,
+          role: userProfile.role
+        });
         // Audit: Log query with no results
         await this.auditService.log({
           userId,
