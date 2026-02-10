@@ -21,6 +21,7 @@
 ### 🛠️ For Developers & IT
 
 - **[🔍 Technical Reference](docs/technical/reference.md)** - API specs, CLI commands, and Environmental variables.
+- **[🧾 Implementation Cross-Reference](docs/technical/implementation-cross-reference.md)** - Verified docs-to-code mapping for ports, env vars, API routes, RBAC, security, and data paths.
 - **[🚨 Troubleshooting Runbooks](docs/technical/runbooks/RUNBOOK_DEPLOYMENT.md)** - Solutions for common deployment and runtime issues.
 - **[🏛️ Architecture Overview](docs/architecture/overview.md)** - System boundaries and Architectural Decision Records (ADRs).
 
