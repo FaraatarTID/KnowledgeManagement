@@ -8,6 +8,7 @@ interface CircuitBreakerState {
   failureCount: number;
   lastFailureTime?: number;
   successCountInHalfOpen: number;
+  requestCountInHalfOpen: number;
 }
 
 export class GeminiService {
@@ -17,11 +18,14 @@ export class GeminiService {
   private embeddingModel?: VertexModel | AIStudioModel;
   private embeddingCache: EmbeddingCache;
   private isVertex: boolean = true;
+  private modelName: string;
+  private embedName: string;
   
   private circuitBreaker: CircuitBreakerState = {
     state: 'CLOSED',
     failureCount: 0,
-    successCountInHalfOpen: 0
+    successCountInHalfOpen: 0,
+    requestCountInHalfOpen: 0
   };
 
   private readonly FAILURE_THRESHOLD = 5;
@@ -30,15 +34,18 @@ export class GeminiService {
   private readonly HALF_OPEN_SUCCESS_THRESHOLD = 2;
 
   constructor(projectIdOrApiKey: string, location: string = 'us-central1', isApiKey: boolean = false) {
-    const modelName = process.env.GEMINI_MODEL || 'gemini-flash-latest';
-    const embedName = process.env.EMBEDDING_MODEL || 'text-embedding-004';
+    this.modelName = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+    this.embedName = process.env.EMBEDDING_MODEL || 'text-embedding-004';
 
     if (isApiKey) {
       this.isVertex = false;
       this.googleAI = new GoogleGenerativeAI(projectIdOrApiKey);
-      this.model = this.googleAI.getGenerativeModel({ model: modelName });
-      this.embeddingModel = this.googleAI.getGenerativeModel({ model: embedName });
-      Logger.info('GeminiService: Initialized with Gemini API Key (AI Studio)');
+      this.model = this.googleAI.getGenerativeModel({ model: this.modelName });
+      this.embeddingModel = this.googleAI.getGenerativeModel({ model: this.embedName });
+      Logger.info('GeminiService: Initialized with Gemini API Key (AI Studio)', {
+        model: this.modelName,
+        embeddingModel: this.embedName
+      });
     } else {
       this.isVertex = true;
       this.vertexAI = new VertexAI({
@@ -47,7 +54,7 @@ export class GeminiService {
       });
 
       this.model = this.vertexAI.getGenerativeModel({
-        model: modelName,
+        model: this.modelName,
         generationConfig: {
           maxOutputTokens: 8192,
           temperature: 0.2,
@@ -57,19 +64,28 @@ export class GeminiService {
       });
 
       this.embeddingModel = this.vertexAI.getGenerativeModel({
-        model: embedName
+        model: this.embedName
       });
-      Logger.info('GeminiService: Initialized with Vertex AI', { project: projectIdOrApiKey });
+      Logger.info('GeminiService: Initialized with Vertex AI', {
+        project: projectIdOrApiKey,
+        location,
+        model: this.modelName,
+        embeddingModel: this.embedName
+      });
     }
 
     this.embeddingCache = new EmbeddingCache();
   }
 
   async generateEmbedding(text: string): Promise<number[]> {
+    this.updateCircuitBreakerState();
+
     if (this.circuitBreaker.state === 'OPEN') {
       Logger.warn('GeminiService: Circuit breaker OPEN - embedding request rejected');
       throw new Error('Gemini API temporarily unavailable (circuit breaker open)');
     }
+
+    this.registerHalfOpenAttempt('embedding');
 
     if (!this.embeddingModel) {
       throw new Error('GeminiService: Embedding model not initialized');
@@ -120,6 +136,8 @@ export class GeminiService {
     userProfile: { name: string; department: string; role: string };
     history?: { role: 'user' | 'model'; content: string }[];
   }) {
+    this.updateCircuitBreakerState();
+
     if (this.circuitBreaker.state === 'OPEN') {
       Logger.warn('GeminiService: Circuit breaker OPEN - query request rejected');
       return {
@@ -132,6 +150,8 @@ export class GeminiService {
         usageMetadata: undefined
       };
     }
+
+    this.registerHalfOpenAttempt('query');
 
     if (!this.model) {
       throw new Error('GeminiService: Generative model not initialized');
@@ -233,6 +253,23 @@ Begin JSON Response:`;
     }
   }
 
+
+  private registerHalfOpenAttempt(operation: 'embedding' | 'query'): void {
+    if (this.circuitBreaker.state !== 'HALF_OPEN') {
+      return;
+    }
+
+    if (this.circuitBreaker.requestCountInHalfOpen >= this.HALF_OPEN_MAX_REQUESTS) {
+      Logger.warn('GeminiService: HALF_OPEN request limit reached - request rejected', {
+        operation,
+        maxRequests: this.HALF_OPEN_MAX_REQUESTS
+      });
+      throw new Error('Gemini API recovery in progress (circuit breaker half-open)');
+    }
+
+    this.circuitBreaker.requestCountInHalfOpen++;
+  }
+
   /**
    * Record a successful API call.
    * Transitions from HALF_OPEN to CLOSED if threshold met.
@@ -245,6 +282,7 @@ Begin JSON Response:`;
         this.circuitBreaker.state = 'CLOSED';
         this.circuitBreaker.failureCount = 0;
         this.circuitBreaker.successCountInHalfOpen = 0;
+        this.circuitBreaker.requestCountInHalfOpen = 0;
         Logger.info('GeminiService: Circuit breaker CLOSED - service recovered');
       }
     } else if (this.circuitBreaker.state === 'CLOSED') {
@@ -266,6 +304,7 @@ Begin JSON Response:`;
       this.circuitBreaker.state = 'OPEN';
       this.circuitBreaker.failureCount = this.FAILURE_THRESHOLD;
       this.circuitBreaker.successCountInHalfOpen = 0;
+      this.circuitBreaker.requestCountInHalfOpen = 0;
       Logger.warn('GeminiService: Recovery test failed - circuit breaker OPEN');
       return;
     }
@@ -295,6 +334,7 @@ Begin JSON Response:`;
         this.circuitBreaker.state = 'HALF_OPEN';
         this.circuitBreaker.failureCount = 0;
         this.circuitBreaker.successCountInHalfOpen = 0;
+        this.circuitBreaker.requestCountInHalfOpen = 0;
         Logger.info('GeminiService: Circuit breaker HALF_OPEN - attempting recovery');
       }
     }
