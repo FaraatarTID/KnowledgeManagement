@@ -22,7 +22,7 @@ INITIAL_ADMIN_NAME=System Admin
 ```
 
 > [!IMPORTANT]
-> **Password Policy**: The system enforces high security. Your password must be **10+ characters**, containing at least one **Uppercase** letter, one **Number**, and one **Special Character**.
+> **Password Policy**: The system enforces high security. Your password must be **10+ characters**, containing at least one **Uppercase** letter, one **Lowercase** letter, one **Number**, and one **Special Character**.
 
 ### B. Choose your AI Mode (Standard vs. Enterprise)
 
