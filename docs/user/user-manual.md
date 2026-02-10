@@ -41,7 +41,7 @@
 5. You're ready to use AIKB!
 
 > [!TIP]
-> **Administrators:** See the [Admin Setup Guide](../admin/full-setup.md) for a simple explanation on connecting Google Drive and your first login.
+> **Administrators:** See the [Admin Setup Guide](../admin/full-setup.md) for setup details, including the required `JWT_SECRET` hex format and the standard Google key path (`GCP_KEY_FILE=data/google-key.json`).
 
 ### Dashboard Overview
 

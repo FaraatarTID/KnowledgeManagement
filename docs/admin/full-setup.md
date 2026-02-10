@@ -52,7 +52,7 @@ _Best for large corporations with millions of documents._
 
 ### C. Set the Security Secret
 
-Look for `JWT_SECRET`. It must be a 64-character random code.
+Look for `JWT_SECRET`. It must be a **hex-encoded** secret (lowercase `a-f` + `0-9`) and should be generated as **64 hex characters** (32 random bytes).
 
 - **To generate one**: Open a terminal and run: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 - Copy and paste the result into `JWT_SECRET=...`
@@ -101,6 +101,7 @@ This is the most important step! Google Drive is private, so you must specifical
 4.  Open your `.env` file again and paste it here:
     ```env
     GOOGLE_DRIVE_FOLDER_ID=ABC_123_XYZ
+    GCP_KEY_FILE=data/google-key.json
     ```
 
 ---
