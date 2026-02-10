@@ -58,6 +58,10 @@ export class UserService {
       const adminPassword = env.INITIAL_ADMIN_PASSWORD;
       const adminName = env.INITIAL_ADMIN_NAME;
 
+      if (!adminPassword) {
+        throw new Error('INITIAL_ADMIN_PASSWORD is required for default admin seeding.');
+      }
+
       Logger.info(`UserService: No admins found. Seeding initial Admin (${adminEmail})...`);
       const password_hash = await this.authService.hashPassword(adminPassword);
       

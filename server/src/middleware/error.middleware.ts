@@ -43,6 +43,29 @@ export const errorHandler = (err: Error | AppError, req: Request, res: Response,
     });
   }
 
+  const isUploadValidationError =
+    err.message.startsWith('Invalid file extension:') ||
+    err.message.startsWith('Invalid file type:') ||
+    err.message.includes('Executable or archive files are not allowed') ||
+    (err as any).name === 'MulterError';
+
+  if (isUploadValidationError) {
+    Logger.warn('Upload validation rejected request', {
+      requestId,
+      message: err.message,
+      userId,
+      url: req.url,
+      method: req.method
+    });
+
+    return res.status(400).json({
+      status: 'error',
+      message: err.message,
+      errorCode: 'UPLOAD_VALIDATION_FAILED',
+      requestId
+    });
+  }
+
   // Log unknown errors with full context for debugging (internal only)
   Logger.error('Unhandled error occurred', {
     requestId,

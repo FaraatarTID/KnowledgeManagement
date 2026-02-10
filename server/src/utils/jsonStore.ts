@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Mutex } from './mutex.js';
+import { Logger } from './logger.js';
 
 /**
  * Universal Atomic JSON Storage Utility.
@@ -46,7 +47,7 @@ export class JSONStore<T> {
         const data = fs.readFileSync(this.storagePath, 'utf-8');
         this.memoryState = JSON.parse(data);
       } else if (fs.existsSync(this.backupPath)) {
-        console.warn(`JSONStore: Main file missing at ${this.storagePath}, recovering from backup.`);
+        Logger.info('JSONStore: Main file missing, recovering from backup', { storagePath: this.storagePath });
         fs.copyFileSync(this.backupPath, this.storagePath);
         const data = fs.readFileSync(this.storagePath, 'utf-8');
         this.memoryState = JSON.parse(data);
@@ -54,7 +55,7 @@ export class JSONStore<T> {
         fs.writeFileSync(this.storagePath, JSON.stringify(this.defaultState, null, 2));
       }
     } catch (e) {
-      console.error(`JSONStore: Critical failure initializing ${this.storagePath}`, e);
+      Logger.error('JSONStore: Critical failure during initialization', { storagePath: this.storagePath, error: e });
       this.memoryState = this.defaultState;
     }
   }
@@ -107,7 +108,7 @@ export class JSONStore<T> {
       // 6. Cleanup
       if (fs.existsSync(this.backupPath)) await fs.promises.unlink(this.backupPath).catch(() => {});
     } catch (error) {
-      console.error(`JSONStore: Failed to persist ${this.storagePath}`, error);
+      Logger.error('JSONStore: Failed to persist state', { storagePath: this.storagePath, error });
       if (fs.existsSync(this.tempPath)) await fs.promises.unlink(this.tempPath).catch(() => {});
       throw error;
     } finally {

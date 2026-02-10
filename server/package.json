@@ -8,7 +8,10 @@
     "start": "node dist/index.js",
     "dev": "npx tsx src/index.ts",
     "build": "tsc",
-    "test": "vitest"
+    "test": "node scripts/run-vitest.mjs",
+    "doctor:proxy": "node scripts/proxy-env-check.mjs",
+    "test:ci": "node scripts/proxy-env-check.mjs --strict && node scripts/run-vitest.mjs --maxWorkers=1",
+    "doctor:proxy:strict": "node scripts/proxy-env-check.mjs --strict"
   },
   "keywords": [],
   "author": "",
