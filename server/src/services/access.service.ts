@@ -87,6 +87,7 @@ export class AccessControlEngine {
 }
 
 import { env } from '../config/env.js';
+import { Logger } from '../utils/logger.js';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export class AuditService {
@@ -104,7 +105,7 @@ export class AuditService {
     if (!url || !key) {
       if (env.NODE_ENV === 'test' || env.NODE_ENV === 'development') {
         this.supabase = null;
-        console.warn('⚠️  Supabase auditing disabled. Falling back to LOCAL CONSOLE LOGGING.');
+        Logger.info('AuditService: Supabase auditing disabled; using local logging (expected in test/development).');
         return;
       }
     }
@@ -137,7 +138,7 @@ export class AuditService {
 
       // Check if buffer is at max capacity
       if (this.buffer.length >= this.MAX_BUFFER_SIZE) {
-        console.warn('[AUDIT] Buffer at max capacity, forcing flush');
+        Logger.warn('AuditService: Buffer at max capacity, forcing flush', { bufferLength: this.buffer.length });
         await this.flush();
       } else if (!this.flushTimer) {
         // Schedule periodic flush
@@ -145,16 +146,15 @@ export class AuditService {
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
-        console.error('[AUDIT] Invalid audit log entry - rejecting:', {
-          issues: error.issues,
-          entry
-        });
+        const meta = { issues: error.issues, entry };
+        if (env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
+          Logger.info('AuditService: Invalid audit log entry rejected (expected in adversarial tests)', meta);
+        } else {
+          Logger.warn('AuditService: Invalid audit log entry rejected', meta);
+        }
         return;
       }
-      console.error('[AUDIT] Failed to record audit log entry', {
-        error,
-        entry
-      });
+      Logger.error('AuditService: Failed to record audit log entry', { error, entry });
       return;
     }
   }
@@ -177,11 +177,11 @@ export class AuditService {
         .insert(toFlush);
 
       if (error) throw error;
-      console.log(`[AUDIT] Flushed ${toFlush.length} logs to Supabase`);
+      Logger.info('AuditService: Flushed logs to Supabase', { count: toFlush.length });
     } catch (error) {
       // Re-add to buffer if flush fails
       this.buffer.unshift(...toFlush);
-      console.error('[AUDIT] Flush failed, re-queued:', error);
+      Logger.error('AuditService: Flush failed, re-queued', { error, requeuedCount: toFlush.length });
       throw error;
     }
   }
@@ -203,9 +203,9 @@ export class AuditService {
         .insert(toFlush);
 
       if (error) throw error;
-      console.log(`AuditService: Flushed ${toFlush.length} logs to Supabase.`);
+      Logger.info('AuditService: Flushed logs to Supabase', { count: toFlush.length });
     } catch (e) {
-      console.error('AuditService: Failed to flush logs', e);
+      Logger.error('AuditService: Failed to flush logs', { error: e });
       // Put failed logs back in front of the buffer (simple retry)
       // Limit re-buffered logs to prevent unbounded growth
       this.buffer = [...toFlush, ...this.buffer].slice(0, this.MAX_BUFFER_SIZE * 2);
