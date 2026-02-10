@@ -7,19 +7,19 @@
 **Resolution:**
 1. Check feature flag status:
    ```bash
-   curl http://localhost:3000/api/admin/feature-flags/priority_1_3_constant_time_auth
+   curl http://localhost:3001/api/admin/feature-flags/priority_1_3_constant_time_auth
    ```
 
 2. If disabled (rolloutPercentage: 0), enable it:
    ```bash
-   curl -X POST http://localhost:3000/api/admin/feature-flags/priority_1_3_constant_time_auth \
+   curl -X POST http://localhost:3001/api/admin/feature-flags/priority_1_3_constant_time_auth \
      -H "Content-Type: application/json" \
      -d '{"enabled": true, "rolloutPercentage": 100}'
    ```
 
 3. Verify next auth attempt takes ~500ms:
    ```bash
-   time curl -X POST http://localhost:3000/auth/login \
+   time curl -X POST http://localhost:3001/auth/login \
      -H "Content-Type: application/json" \
      -d '{"email": "test@example.com", "password": "test12345"}'
    ```
@@ -41,7 +41,7 @@ sys     0m0.050s
 
 ### Step 1: Check connection pool status
 ```bash
-curl http://localhost:3000/api/health/pool-stats
+curl http://localhost:3001/api/health/pool-stats
 ```
 
 **Expected Response:**
@@ -66,19 +66,19 @@ systemctl restart aikb-server
 ### Step 3: Monitor for resolution
 ```bash
 # Watch pool depth
-watch -n 1 'curl -s http://localhost:3000/api/health/pool-stats | jq'
+watch -n 1 'curl -s http://localhost:3001/api/health/pool-stats | jq'
 ```
 
 ### Step 4: If still exhausted, investigate slow endpoint
 ```bash
 # Get trace ID from error response
-curl -X POST http://localhost:3000/auth/login \
+curl -X POST http://localhost:3001/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "test@example.com", "password": "test12345"}' \
   2>&1 | grep -i 'x-trace-id'
 
 # View trace details
-curl http://localhost:3000/api/admin/traces/abc123def456
+curl http://localhost:3001/api/admin/traces/abc123def456
 ```
 
 ---
@@ -91,7 +91,7 @@ curl http://localhost:3000/api/admin/traces/abc123def456
 
 ### Step 1: Verify feature flag enabled
 ```bash
-curl http://localhost:3000/api/admin/feature-flags/priority_1_3_constant_time_auth
+curl http://localhost:3001/api/admin/feature-flags/priority_1_3_constant_time_auth
 # Should show: "enabled": true, "rolloutPercentage": 100
 ```
 
@@ -99,7 +99,7 @@ curl http://localhost:3000/api/admin/feature-flags/priority_1_3_constant_time_au
 ```bash
 for i in {1..10}; do
   echo "Attempt $i:"
-  time curl -X POST http://localhost:3000/auth/login \
+  time curl -X POST http://localhost:3001/auth/login \
     -H "Content-Type: application/json" \
     -d '{"email": "test@example.com", "password": "test12345"}' \
     2>/dev/null | jq '.token' | head -c 20
@@ -116,14 +116,14 @@ tail -100 /var/log/aikb/server.log | grep -i "constant\|jitter\|timing"
 
 ### Step 4: If issue persists, disable feature flag for testing
 ```bash
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_1_3_constant_time_auth \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_1_3_constant_time_auth \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 ```
 
 Then re-enable after verifying normal operation:
 ```bash
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_1_3_constant_time_auth \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_1_3_constant_time_auth \
   -H "Content-Type: application/json" \
   -d '{"enabled": true}'
 ```
@@ -160,12 +160,12 @@ If auth timing issues persist after troubleshooting:
 
 ```bash
 # 1. Disable constant-time auth (revert to fast auth)
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_1_3_constant_time_auth \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_1_3_constant_time_auth \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 
 # 2. Monitor error rates
-curl http://localhost:3000/api/health
+curl http://localhost:3001/api/health
 
 # 3. If errors resolve, contact dev team
 # Otherwise, may indicate broader infrastructure issue

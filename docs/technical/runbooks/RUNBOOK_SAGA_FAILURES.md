@@ -56,7 +56,7 @@ WHERE document_id = 'doc-123'
 ### Step 5: Notify user
 ```bash
 # Send notification about upload completion
-curl -X POST http://localhost:3000/api/notifications \
+curl -X POST http://localhost:3001/api/notifications \
   -H "Content-Type: application/json" \
   -d '{
     "userId": "user-456",
@@ -142,7 +142,7 @@ WHERE id = 'doc-789';
 ### Step 2: If embedding_id is null, re-vectorize
 ```bash
 # Trigger re-vectorization
-curl -X POST http://localhost:3000/api/documents/789/re-vectorize \
+curl -X POST http://localhost:3001/api/documents/789/re-vectorize \
   -H "Authorization: Bearer ${JWT_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"force": true}'
@@ -151,7 +151,7 @@ curl -X POST http://localhost:3000/api/documents/789/re-vectorize \
 ### Step 3: Monitor re-vectorization
 ```bash
 # Check status
-curl http://localhost:3000/api/documents/789/status \
+curl http://localhost:3001/api/documents/789/status \
   -H "Authorization: Bearer ${JWT_TOKEN}"
 ```
 
@@ -168,7 +168,7 @@ curl http://localhost:3000/api/documents/789/status \
 ### Step 4: If stuck, check vector service
 ```bash
 # Verify Vertex AI is healthy
-curl http://localhost:3000/api/health/vector-db \
+curl http://localhost:3001/api/health/vector-db \
   -H "Authorization: Bearer ${JWT_TOKEN}"
 ```
 
@@ -192,13 +192,13 @@ from(bucket:"aikb")
 **WARNING:** Compensation failures > 5 in 1 hour
 ```bash
 # Check current status
-curl http://localhost:3000/api/admin/metrics/saga-compensation
+curl http://localhost:3001/api/admin/metrics/saga-compensation
 ```
 
 **CRITICAL:** Compensation failures > 10 in 1 hour
 ```bash
 # Disable saga pattern temporarily
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_2_1_saga_pattern \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_2_1_saga_pattern \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 ```
@@ -226,18 +226,18 @@ If saga pattern causing cascading failures:
 
 ```bash
 # 1. Disable saga pattern (use simple transaction)
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_2_1_saga_pattern \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_2_1_saga_pattern \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 
 # 2. Monitor error rates
-curl http://localhost:3000/api/health
+curl http://localhost:3001/api/health
 
 # 3. Clean up stuck transactions
-curl -X POST http://localhost:3000/api/admin/saga/cleanup-stuck
+curl -X POST http://localhost:3001/api/admin/saga/cleanup-stuck
 
 # 4. Resume once cleared
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_2_1_saga_pattern \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_2_1_saga_pattern \
   -H "Content-Type: application/json" \
   -d '{"enabled": true}'
 ```

@@ -16,7 +16,7 @@ Request tracing allows you to see the complete flow of a request through all ser
 ### Step 1: Get trace ID from response
 ```bash
 # Make a request and capture response headers
-curl -i http://localhost:3000/api/documents \
+curl -i http://localhost:3001/api/documents \
   -H "Authorization: Bearer ${JWT_TOKEN}"
 
 # Look for:
@@ -27,7 +27,7 @@ curl -i http://localhost:3000/api/documents \
 ```bash
 TRACE_ID="abc123def456xyz789"
 
-curl http://localhost:3000/api/admin/traces/${TRACE_ID} \
+curl http://localhost:3001/api/admin/traces/${TRACE_ID} \
   -H "Authorization: Bearer ${ADMIN_TOKEN}"
 ```
 
@@ -87,7 +87,7 @@ curl http://localhost:3000/api/admin/traces/${TRACE_ID} \
 TRACE_ID="abc123def456xyz789"
 SPAN_ID="span-002"
 
-curl http://localhost:3000/api/admin/traces/${TRACE_ID}/spans/${SPAN_ID} \
+curl http://localhost:3001/api/admin/traces/${TRACE_ID}/spans/${SPAN_ID} \
   -H "Authorization: Bearer ${ADMIN_TOKEN}"
 ```
 
@@ -127,7 +127,7 @@ REQUEST_ID="req-abc123-2026-02-01T12:34:56Z"
 ```bash
 REQUEST_ID="req-abc123-2026-02-01T12:34:56Z"
 
-curl http://localhost:3000/api/admin/traces/by-request-id/${REQUEST_ID} \
+curl http://localhost:3001/api/admin/traces/by-request-id/${REQUEST_ID} \
   -H "Authorization: Bearer ${ADMIN_TOKEN}"
 ```
 
@@ -136,7 +136,7 @@ curl http://localhost:3000/api/admin/traces/by-request-id/${REQUEST_ID} \
 TRACE_ID="xyz789abc123def456"
 
 # Get trace with full details
-curl http://localhost:3000/api/admin/traces/${TRACE_ID}?include=full \
+curl http://localhost:3001/api/admin/traces/${TRACE_ID}?include=full \
   -H "Authorization: Bearer ${ADMIN_TOKEN}"
 ```
 
@@ -188,7 +188,7 @@ curl http://localhost:3000/api/admin/traces/${TRACE_ID}?include=full \
 **Cause:** Vertex AI slow, quota at limit, or many results to filter
 
 **Solution:**
-1. Check Vertex AI quota: `curl http://localhost:3000/api/health/vector-db`
+1. Check Vertex AI quota: `curl http://localhost:3001/api/health/vector-db`
 2. Reduce topK if searching many results
 3. Add department filter to reduce search space
 
@@ -277,7 +277,7 @@ curl http://localhost:3000/api/admin/traces/${TRACE_ID}?include=full \
 ### Identify optimization opportunities
 ```bash
 # Get traces for slow endpoints
-curl 'http://localhost:3000/api/admin/traces?endpoint=/api/documents&minDurationMs=1000' \
+curl 'http://localhost:3001/api/admin/traces?endpoint=/api/documents&minDurationMs=1000' \
   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   | jq '.[] | {traceId, endpoint, durationMs, topSlowSpans: .spans | sort_by(.durationMs) | reverse | .[0:3]}'
 ```
@@ -285,7 +285,7 @@ curl 'http://localhost:3000/api/admin/traces?endpoint=/api/documents&minDuration
 ### Monitor by span type
 ```bash
 # Get slowest operations across all requests
-curl 'http://localhost:3000/api/admin/spans/slowest?limit=20' \
+curl 'http://localhost:3001/api/admin/spans/slowest?limit=20' \
   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   | jq '.[] | {spanName, avgDurationMs, p99DurationMs, occurrences}'
 ```
@@ -307,7 +307,7 @@ curl 'http://localhost:3000/api/admin/spans/slowest?limit=20' \
 ### Check SLO compliance
 ```bash
 # Get metrics for specific operation
-curl 'http://localhost:3000/api/admin/metrics/span/auth.validateToken?window=1h' \
+curl 'http://localhost:3001/api/admin/metrics/span/auth.validateToken?window=1h' \
   -H "Authorization: Bearer ${ADMIN_TOKEN}"
 ```
 
@@ -441,7 +441,7 @@ withSpan('auth.validateCredentials', async () => {
 ### Export traces for analysis
 ```bash
 # Export traces from last hour
-curl 'http://localhost:3000/api/admin/traces/export?format=json&duration=1h' \
+curl 'http://localhost:3001/api/admin/traces/export?format=json&duration=1h' \
   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   -o traces.json
 
@@ -498,7 +498,7 @@ Total: 1680ms ✗
 ### Set up latency alerts
 ```bash
 # Alert if request takes > 2 seconds
-curl -X POST http://localhost:3000/api/admin/alerts \
+curl -X POST http://localhost:3001/api/admin/alerts \
   -H "Content-Type: application/json" \
   -d '{
     "name": "slow_requests",
@@ -508,7 +508,7 @@ curl -X POST http://localhost:3000/api/admin/alerts \
   }'
 
 # Alert if specific endpoint slow
-curl -X POST http://localhost:3000/api/admin/alerts \
+curl -X POST http://localhost:3001/api/admin/alerts \
   -H "Content-Type: application/json" \
   -d '{
     "name": "slow_vector_search",

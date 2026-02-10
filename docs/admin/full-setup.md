@@ -11,15 +11,18 @@ This guide will help you connect your AIKB system to Gemini and Google Drive.
 
 Before starting, open the `.env` file in the `server` folder with a text editor (like Notepad).
 
-### A. Set your Admin Admin Login
+### A. Set your Admin Login
 
 Find these lines and set your desired login details:
 
 ```env
-INITIAL_ADMIN_EMAIL=admin@yourcompany.com
-INITIAL_ADMIN_PASSWORD=SetAStrongPassword123
+INITIAL_ADMIN_EMAIL=admin@aikb.com
+INITIAL_ADMIN_PASSWORD=Admin@123456
 INITIAL_ADMIN_NAME=System Admin
 ```
+
+> [!IMPORTANT]
+> **Password Policy**: The system enforces high security. Your password must be **10+ characters**, containing at least one **Uppercase** letter, one **Number**, and one **Special Character**.
 
 ### B. Choose your AI Mode (Standard vs. Enterprise)
 

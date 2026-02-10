@@ -1,14 +1,14 @@
 This guide explains how to take the AIKB app from your computer and put it on the internet so your whole company can use it securely.
 
 > [!TIP]
-> **New to Google Cloud or Admin setup?** Read the [Setup Guide](SETUP_GUIDE.md) first for a simplified step-by-step walkthrough.
+> **New to Google Cloud or Admin setup?** Read the **[Quick Start Guide](quick-start.md)** first for a simplified step-by-step walkthrough.
 
 ### 🔑 Admin Bootstrapping
 
 On the first run with a fresh database, the system creates the initial Admin user. You **must** provide these credentials in your `.env`.
 
-- **Email**: `INITIAL_ADMIN_EMAIL` (e.g., `alice@aikb.com`)
-- **Password**: `INITIAL_ADMIN_PASSWORD` (e.g., `admin123` - **REQUIRED FOR BOOTSTRAP**)
+- **Email**: `INITIAL_ADMIN_EMAIL` (e.g., `admin@aikb.com`)
+- **Password**: `INITIAL_ADMIN_PASSWORD` (e.g., `Admin@123456` - **REQUIRED FOR BOOTSTRAP**)
 
 You can customize this in your `.env`:
 
@@ -27,8 +27,8 @@ INITIAL_ADMIN_NAME=System Administrator
 
 The system uses a **Service Account** to index your documents.
 
-1. Place your Google Cloud Service Account JSON key in `/server/data/google-key.json`.
-2. Add the path to `.env`: `GOOGLE_AUTH_KEY_PATH=./data/google-key.json`.
+1. Place your Google Cloud Service Account JSON key in `/server/` or `/server/data/`.
+2. Add the path to `.env`: `GCP_KEY_FILE=google-key.json`.
 3. Share your Google Drive folders with the `client_email` found inside that JSON file.
 
 > [!NOTE]
@@ -216,7 +216,7 @@ If you are running in **Local Mode** (no Supabase), your data is stored in `serv
 If data corruption is detected:
 
 1. **Stop services**: `sudo docker-compose down`
-2. **Restore vector store**: `cp data/vectors.json.bak data/vectors.json`
+2. **Restore vector store**: `cp data/vectors.db.bak data/vectors.db`
 3. **Clear client caches**: Instruct users to clear browser cache
 4. **Restart**: `sudo docker-compose up -d`
 5. **Monitor**: Check logs for 30 minutes

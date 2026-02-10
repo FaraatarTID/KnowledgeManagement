@@ -493,16 +493,17 @@ AI:   "After 30 days, items are..."
 
 ### Role Comparison
 
-| Feature              | Viewer   | Editor   | Manager   | Admin |
-| -------------------- | -------- | -------- | --------- | ----- |
-| **View Documents**   | Own Dept | Own Dept | All       | All   |
-| **Upload Documents** | ❌       | ✅       | ✅        | ✅    |
-| **Edit Documents**   | ❌       | Own Only | All       | All   |
-| **Delete Documents** | ❌       | Own Only | All       | All   |
-| **Share Documents**  | ❌       | ✅       | ✅        | ✅    |
-| **Use AI Chat**      | ✅       | ✅       | ✅        | ✅    |
-| **Manage Users**     | ❌       | ❌       | Dept Only | ✅    |
-| **Configure System** | ❌       | ❌       | ❌        | ✅    |
+| Feature              | Viewer | Editor | Manager | Admin |
+| -------------------- | ------ | ------ | ------- | ----- |
+| **Use AI Chat**      | ✅     | ✅     | ✅      | ✅    |
+| **View Dashboard**   | ❌     | ❌     | ✅      | ✅    |
+| **Document Library** | ❌     | ❌     | ❌      | ✅    |
+| **Upload Documents** | ❌     | ❌     | ❌      | ✅    |
+| **Access Control**   | ❌     | ❌     | ❌      | ✅    |
+| **System Settings**  | ❌     | ❌     | ❌      | ✅    |
+
+> [!NOTE]
+> **Enterprise Governance**: To ensure a "Strict Deny" security model, only users with the **ADMIN** role can manage the document library or system users. Managers are provided with a high-level operational overview via the Dashboard.
 
 ### Requesting Role Changes
 

@@ -9,6 +9,7 @@
 **Resolution:**
 
 ### Step 1: Verify Google Cloud configuration
+
 ```bash
 # Check if project ID is set
 echo $GOOGLE_CLOUD_PROJECT_ID
@@ -19,6 +20,7 @@ export GOOGLE_CLOUD_PROJECT_ID=projects/my-project-id
 ```
 
 ### Step 2: Verify credentials file exists
+
 ```bash
 ls -la /path/to/credentials/key.json
 
@@ -31,6 +33,7 @@ echo "Credentials valid: $?"  # 0 = valid
 ```
 
 ### Step 3: Test Vertex AI API connectivity
+
 ```bash
 # Try a simple embedding request
 curl -X POST \
@@ -49,6 +52,7 @@ curl -X POST \
 **Expected Response:** Embedding vector (not error)
 
 ### Step 4: Check API quota
+
 ```bash
 # Visit Google Cloud Console
 # Navigate to APIs & Services > Quotas
@@ -60,15 +64,17 @@ gcloud compute projects describe MY_PROJECT_ID
 ```
 
 **If quota exceeded:**
+
 ```bash
 # Request quota increase in Google Cloud Console
 # Temporary mitigation: Use feature flag to disable vectorization
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_1_1_vector_validation \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_1_1_vector_validation \
   -H "Content-Type: application/json" \
   -d '{"rolloutPercentage": 0}'
 ```
 
 ### Step 5: Verify service is deployed
+
 ```bash
 # Check Vertex AI models are available
 gcloud ai models list \
@@ -78,6 +84,7 @@ gcloud ai models list \
 ```
 
 ### Step 6: Check application logs for details
+
 ```bash
 # View server logs
 tail -100 /var/log/aikb/server.log | grep -i "vertex\|embedding\|fatal"
@@ -86,6 +93,7 @@ tail -100 /var/log/aikb/server.log | grep -i "vertex\|embedding\|fatal"
 ```
 
 ### Step 7: Restart service after fixing configuration
+
 ```bash
 # Update .env file
 vi .env
@@ -95,7 +103,7 @@ vi .env
 systemctl restart aikb-server
 
 # Verify service is running
-curl http://localhost:3000/api/health
+curl http://localhost:3001/api/health
 ```
 
 ---
@@ -109,11 +117,13 @@ curl http://localhost:3000/api/health
 **Resolution:**
 
 ### Step 1: Verify department filter configuration
+
 ```bash
-curl http://localhost:3000/api/admin/rbac/config
+curl http://localhost:3001/api/admin/rbac/config
 ```
 
 **Expected Response:**
+
 ```json
 {
   "filteringEnabled": true,
@@ -129,13 +139,15 @@ curl http://localhost:3000/api/admin/rbac/config
 ```
 
 ### Step 2: Check user's permissions
+
 ```bash
 USER_ID="user-123"
 
-curl http://localhost:3000/api/admin/rbac/user?userId=${USER_ID}
+curl http://localhost:3001/api/admin/rbac/user?userId=${USER_ID}
 ```
 
 **Expected Response:**
+
 ```json
 {
   "userId": "user-123",
@@ -146,10 +158,11 @@ curl http://localhost:3000/api/admin/rbac/user?userId=${USER_ID}
 ```
 
 ### Step 3: If user has no departments, add permission
+
 ```bash
 USER_ID="user-123"
 
-curl -X POST http://localhost:3000/api/admin/rbac/permissions \
+curl -X POST http://localhost:3001/api/admin/rbac/permissions \
   -H "Content-Type: application/json" \
   -d '{
     "userId": "'"${USER_ID}"'",
@@ -159,6 +172,7 @@ curl -X POST http://localhost:3000/api/admin/rbac/permissions \
 ```
 
 ### Step 4: Verify documents have department tags
+
 ```bash
 # Query database for documents and their departments
 SELECT id, title, department, created_at
@@ -170,27 +184,29 @@ LIMIT 10;
 ```
 
 ### Step 5: Test search with relaxed filters
+
 ```bash
 # Temporarily disable RBAC filtering
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_2_2_rbac_api_filtering \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_2_2_rbac_api_filtering \
   -H "Content-Type: application/json" \
   -d '{"rolloutPercentage": 0}'
 
 # Try search again
-curl 'http://localhost:3000/api/documents/search?q=test' \
+curl 'http://localhost:3001/api/documents/search?q=test' \
   -H "Authorization: Bearer ${JWT_TOKEN}"
 
 # If results appear, RBAC filtering is the issue
 # Re-enable filtering
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_2_2_rbac_api_filtering \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_2_2_rbac_api_filtering \
   -H "Content-Type: application/json" \
   -d '{"rolloutPercentage": 100}'
 ```
 
 ### Step 6: Fix permissions and re-test
+
 ```bash
 # Grant user access to more departments
-curl -X POST http://localhost:3000/api/admin/rbac/bulk-grant-access \
+curl -X POST http://localhost:3001/api/admin/rbac/bulk-grant-access \
   -H "Content-Type: application/json" \
   -d '{
     "userIds": ["user-123"],
@@ -198,7 +214,7 @@ curl -X POST http://localhost:3000/api/admin/rbac/bulk-grant-access \
   }'
 
 # Try search again
-curl 'http://localhost:3000/api/documents/search?q=test' \
+curl 'http://localhost:3001/api/documents/search?q=test' \
   -H "Authorization: Bearer ${JWT_TOKEN}"
 ```
 
@@ -213,12 +229,14 @@ curl 'http://localhost:3000/api/documents/search?q=test' \
 **Resolution:**
 
 ### Step 1: Check Vertex AI service health
+
 ```bash
 # Monitor Vertex AI API performance
-curl http://localhost:3000/api/health/vector-db
+curl http://localhost:3001/api/health/vector-db
 ```
 
 **Expected Response:**
+
 ```json
 {
   "status": "healthy",
@@ -233,9 +251,10 @@ curl http://localhost:3000/api/health/vector-db
 ```
 
 ### Step 2: Check search parameters
+
 ```bash
 # Reduce topK (number of results) if too high
-curl -X POST http://localhost:3000/api/chat/query \
+curl -X POST http://localhost:3001/api/chat/query \
   -H "Authorization: Bearer ${JWT_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
@@ -249,6 +268,7 @@ curl -X POST http://localhost:3000/api/chat/query \
 ```
 
 ### Step 3: Monitor network latency
+
 ```bash
 # Check network to Vertex AI
 ping -c 4 aiplatform.googleapis.com
@@ -260,15 +280,17 @@ nslookup aiplatform.googleapis.com
 ```
 
 ### Step 4: Check Vertex AI quota usage
+
 ```bash
 gcloud compute projects describe ${GOOGLE_CLOUD_PROJECT_ID} \
   --format='value(quotaUsageMetrics[0].usage)'
 ```
 
 ### Step 5: Optimize search query
+
 ```bash
 # If searching large document set, add department filter
-curl -X POST http://localhost:3000/api/chat/query \
+curl -X POST http://localhost:3001/api/chat/query \
   -H "Authorization: Bearer ${JWT_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
@@ -287,6 +309,7 @@ curl -X POST http://localhost:3000/api/chat/query \
 ## Monitoring & Prevention
 
 ### Key Metrics
+
 ```influxql
 # Vector search success rate (target > 95%)
 from(bucket:"aikb")
@@ -310,14 +333,15 @@ from(bucket:"aikb")
 
 ### Alerting Rules
 
-| Condition | Severity | Action |
-|-----------|----------|--------|
-| Vector search success rate < 95% | WARNING | Check Vertex AI health |
-| Vector search latency p99 > 1000ms | WARNING | Check network/quota |
-| FATAL errors > 1/minute | CRITICAL | Disable vectorization, investigate |
-| Quota usage > 80% | WARNING | Request quota increase |
+| Condition                          | Severity | Action                             |
+| ---------------------------------- | -------- | ---------------------------------- |
+| Vector search success rate < 95%   | WARNING  | Check Vertex AI health             |
+| Vector search latency p99 > 1000ms | WARNING  | Check network/quota                |
+| FATAL errors > 1/minute            | CRITICAL | Disable vectorization, investigate |
+| Quota usage > 80%                  | WARNING  | Request quota increase             |
 
 ### Dashboard
+
 - **"AIKB Vector Search"** - Success rate, latency, error distribution
 - **"AIKB Vertex AI"** - API response time, quota usage, failures
 - **"AIKB RBAC Filtering"** - Filter rejections, department distribution
@@ -327,6 +351,7 @@ from(bucket:"aikb")
 ## Configuration & Optimization
 
 ### Vector Search Parameters
+
 ```json
 {
   "topK": 5,
@@ -338,8 +363,34 @@ from(bucket:"aikb")
 ```
 
 ### Feature Flags
+
 - `priority_1_1_vector_validation` - Enable/disable fail-loud validation
 - `priority_2_2_rbac_api_filtering` - Enable/disable RBAC filtering
+
+---
+
+## Symptom: "Local Vector store data file not found"
+
+**Root Cause:** `server/data/vectors.db` is missing or unreadable.
+
+**Resolution:**
+
+1. Check if the `data/` folder exists in your server directory.
+2. Verify file permissions: `chmod 644 server/data/vectors.db` (Linux) or check "Read Only" in Windows.
+3. If using Easy Mode, ensure `VECTOR_STORE_MODE=LOCAL` is in `.env`.
+
+---
+
+## Symptom: "Gemini API Key rejected"
+
+**Root Cause:** Invalid or expired `GOOGLE_API_KEY` for Easy Mode.
+
+**Resolution:**
+
+1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey).
+2. Generate a fresh key.
+3. Update `GOOGLE_API_KEY` in `server/.env`.
+4. Restart the server.
 
 ---
 
@@ -349,16 +400,16 @@ If vector search causing cascading failures:
 
 ```bash
 # 1. Disable vector search temporarily
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_1_1_vector_validation \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_1_1_vector_validation \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 
 # 2. Monitor error rates
-curl http://localhost:3000/api/health
+curl http://localhost:3001/api/health
 
 # 3. Check Vertex AI service status
 # 4. Once resolved, re-enable
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_1_1_vector_validation \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_1_1_vector_validation \
   -H "Content-Type: application/json" \
   -d '{"enabled": true}'
 ```
@@ -366,5 +417,6 @@ curl -X POST http://localhost:3000/api/admin/feature-flags/priority_1_1_vector_v
 ---
 
 ## See Also
+
 - RUNBOOK_DEPLOYMENT.md - Deployment troubleshooting
 - RUNBOOK_TRACING.md - Request tracing guide

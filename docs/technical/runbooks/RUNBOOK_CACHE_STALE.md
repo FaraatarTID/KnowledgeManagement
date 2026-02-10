@@ -10,7 +10,7 @@
 
 ### Step 1: Verify cache invalidation listeners are active
 ```bash
-curl http://localhost:3000/api/admin/cache-listeners
+curl http://localhost:3001/api/admin/cache-listeners
 ```
 
 **Expected Response:**
@@ -51,7 +51,7 @@ systemctl restart redis-server
 systemctl restart aikb-server
 
 # Verify connection restored
-curl http://localhost:3000/api/health/cache
+curl http://localhost:3001/api/health/cache
 ```
 
 ### Step 4: Manually clear stale document from cache
@@ -60,7 +60,7 @@ curl http://localhost:3000/api/health/cache
 DOC_ID="doc-123"
 
 # Clear specific cache entry
-curl -X POST http://localhost:3000/api/admin/cache/invalidate \
+curl -X POST http://localhost:3001/api/admin/cache/invalidate \
   -H "Content-Type: application/json" \
   -d '{"keys": ["document:'"${DOC_ID}"'"]}'
 
@@ -71,7 +71,7 @@ curl -X POST http://localhost:3000/api/admin/cache/invalidate \
 ### Step 5: Verify user sees updated content
 ```bash
 # Have user refresh and fetch document
-curl http://localhost:3000/api/documents/${DOC_ID} \
+curl http://localhost:3001/api/documents/${DOC_ID} \
   -H "Authorization: Bearer ${JWT_TOKEN}"
 ```
 
@@ -85,7 +85,7 @@ curl http://localhost:3000/api/documents/${DOC_ID} \
 
 ### Step 1: Check cache configuration
 ```bash
-curl http://localhost:3000/api/admin/cache-config
+curl http://localhost:3001/api/admin/cache-config
 ```
 
 **Expected Response:**
@@ -102,7 +102,7 @@ curl http://localhost:3000/api/admin/cache-config
 ### Step 2: If TTL too short (< 60 seconds), increase it
 ```bash
 # Increase TTL to 5 minutes (300 seconds)
-curl -X POST http://localhost:3000/api/admin/cache-config \
+curl -X POST http://localhost:3001/api/admin/cache-config \
   -H "Content-Type: application/json" \
   -d '{
     "ttl": 300,
@@ -112,7 +112,7 @@ curl -X POST http://localhost:3000/api/admin/cache-config \
 
 ### Step 3: If cache disabled, enable it
 ```bash
-curl -X POST http://localhost:3000/api/admin/cache-config \
+curl -X POST http://localhost:3001/api/admin/cache-config \
   -H "Content-Type: application/json" \
   -d '{"enabled": true}'
 ```
@@ -122,7 +122,7 @@ curl -X POST http://localhost:3000/api/admin/cache-config \
 # Check every 10 seconds for 2 minutes
 for i in {1..12}; do
   echo "Sample $i:"
-  curl -s http://localhost:3000/api/admin/cache-config | jq '.hitRate'
+  curl -s http://localhost:3001/api/admin/cache-config | jq '.hitRate'
   sleep 10
 done
 ```
@@ -182,12 +182,12 @@ LIMIT 20;
 ### Step 5: Disable invalidation for non-critical queries
 ```bash
 # Temporarily disable aggressive cache invalidation
-curl -X POST http://localhost:3000/api/admin/feature-flags/cache-aggressive-invalidation \
+curl -X POST http://localhost:3001/api/admin/feature-flags/cache-aggressive-invalidation \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 
 # Monitor impact
-sleep 30 && curl http://localhost:3000/api/health
+sleep 30 && curl http://localhost:3001/api/health
 ```
 
 ---
@@ -214,13 +214,13 @@ from(bucket:"aikb")
 
 **WARNING:** Cache hit rate < 50% for > 5 minutes
 ```bash
-curl http://localhost:3000/api/admin/metrics/cache
+curl http://localhost:3001/api/admin/metrics/cache
 ```
 
 **CRITICAL:** Cache hit rate < 20% for > 5 minutes
 ```bash
 # May indicate cache disabled or Redis down
-curl http://localhost:3000/api/health/cache
+curl http://localhost:3001/api/health/cache
 ```
 
 ### Dashboard
@@ -258,7 +258,7 @@ If cache issues causing cascading failures:
 redis-cli FLUSHDB
 
 # 2. Monitor query latency and error rates
-watch -n 1 'curl -s http://localhost:3000/api/health | jq'
+watch -n 1 'curl -s http://localhost:3001/api/health | jq'
 
 # 3. If system recovers, cache is issue
 # 4. If system still degraded, cache not the root cause

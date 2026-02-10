@@ -22,13 +22,12 @@ This is the "Brain" of the system.
 
 This tells the AI where your documents are.
 
-1.  **Get the Hands**: Place your `google-key.json` file in the `server/data/` folder.
-    - _Don't have one? See [full-setup.md](full-setup.md#step-a-get-your-google-key-) for a 1-minute guide._
-2.  **Invite the AI**: Open `google-key.json`, copy the email address inside, and **Share** your Google Drive folder with that email.
-3.  **Set the Target**: Copy the ID from your folder's URL and paste it into `.env`:
-    ```env
-    GOOGLE_DRIVE_FOLDER_ID=ABC_123_XYZ
-    ```
+1.  **Get your Key**: Obtain your `google-key.json` and place it in the `server/` folder.
+2.  **Invite the AI**: Share your Drive folder with the `client_email` found inside the JSON.
+3.  **Update Config**: Set `GCP_KEY_FILE` and `GOOGLE_DRIVE_FOLDER_ID` in your `.env`.
+
+> [!TIP]
+> **Need more help?** For detailed, click-by-click instructions on getting keys and sharing folders, see **[Part 2 of the Full Setup Guide](full-setup.md#☁️-part-2-connecting-google-drive-the-knowledge-base)**.
 
 ---
 

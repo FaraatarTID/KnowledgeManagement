@@ -10,7 +10,7 @@
 
 ### Step 1: Verify feature flag was updated
 ```bash
-curl http://localhost:3000/api/admin/feature-flags/priority_3_X
+curl http://localhost:3001/api/admin/feature-flags/priority_3_X
 ```
 
 **Expected Response (if updated):**
@@ -26,7 +26,7 @@ curl http://localhost:3000/api/admin/feature-flags/priority_3_X
 ### Step 2: Check cache status
 ```bash
 # View cache age
-curl http://localhost:3000/api/admin/feature-flags?include=cache-info
+curl http://localhost:3001/api/admin/feature-flags?include=cache-info
 
 # Response shows:
 {
@@ -41,12 +41,12 @@ curl http://localhost:3000/api/admin/feature-flags?include=cache-info
 ### Step 3: Force cache refresh
 ```bash
 # Option A: Clear specific flag cache
-curl -X POST http://localhost:3000/api/admin/cache/invalidate \
+curl -X POST http://localhost:3001/api/admin/cache/invalidate \
   -H "Content-Type: application/json" \
   -d '{"keys": ["feature_flags:priority_3_X"]}'
 
 # Option B: Clear all feature flag cache
-curl -X POST http://localhost:3000/api/admin/cache/invalidate \
+curl -X POST http://localhost:3001/api/admin/cache/invalidate \
   -H "Content-Type: application/json" \
   -d '{"keys": ["feature_flags:*"]}'
 
@@ -58,7 +58,7 @@ sleep 300
 ### Step 4: Verify flag took effect
 ```bash
 # Make a request that uses the flag
-curl http://localhost:3000/api/admin/feature-flags/priority_3_X/status?userId=test-user
+curl http://localhost:3001/api/admin/feature-flags/priority_3_X/status?userId=test-user
 
 # Should reflect new setting
 ```
@@ -69,10 +69,10 @@ curl http://localhost:3000/api/admin/feature-flags/priority_3_X/status?userId=te
 systemctl restart aikb-server
 
 # Verify service is running
-curl http://localhost:3000/api/health
+curl http://localhost:3001/api/health
 
 # Check flag again
-curl http://localhost:3000/api/admin/feature-flags/priority_3_X
+curl http://localhost:3001/api/admin/feature-flags/priority_3_X
 ```
 
 ---
@@ -87,7 +87,7 @@ curl http://localhost:3000/api/admin/feature-flags/priority_3_X
 
 ### Step 1: Verify constant-time auth feature flag
 ```bash
-curl http://localhost:3000/api/admin/feature-flags/priority_1_3_constant_time_auth
+curl http://localhost:3001/api/admin/feature-flags/priority_1_3_constant_time_auth
 ```
 
 **Expected Response:**
@@ -105,7 +105,7 @@ curl http://localhost:3000/api/admin/feature-flags/priority_1_3_constant_time_au
 # Run multiple auth attempts
 for i in {1..5}; do
   echo "Attempt $i:"
-  time curl -X POST http://localhost:3000/auth/login \
+  time curl -X POST http://localhost:3001/auth/login \
     -H "Content-Type: application/json" \
     -d '{"email": "test@example.com", "password": "test12345"}' \
     -s -o /dev/null
@@ -126,7 +126,7 @@ tail -100 /var/log/aikb/server.log | grep -i "constant\|jitter\|timing"
 ### Step 4: Check if priority_1_3 implementation is active
 ```bash
 # Verify the constant-time auth service is running
-curl http://localhost:3000/api/admin/system/status | grep -A5 "auth"
+curl http://localhost:3001/api/admin/system/status | grep -A5 "auth"
 ```
 
 ### Step 5: If jitter missing, review implementation
@@ -140,17 +140,17 @@ grep -n "jitter\|constant.time\|500.*ms" server/src/services/auth.service.ts
 ### Step 6: Disable constant-time auth temporarily for testing
 ```bash
 # Disable to verify normal auth speed
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_1_3_constant_time_auth \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_1_3_constant_time_auth \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 
 # Test auth speed (should be 50-100ms)
-time curl -X POST http://localhost:3000/auth/login \
+time curl -X POST http://localhost:3001/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "test@example.com", "password": "test12345"}'
 
 # Re-enable
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_1_3_constant_time_auth \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_1_3_constant_time_auth \
   -H "Content-Type: application/json" \
   -d '{"enabled": true}'
 ```
@@ -169,7 +169,7 @@ curl -X POST http://localhost:3000/api/admin/feature-flags/priority_1_3_constant
 
 ### Step 1: Check pool status
 ```bash
-curl http://localhost:3000/api/health/pool-stats
+curl http://localhost:3001/api/health/pool-stats
 ```
 
 **Expected Response:**
@@ -195,7 +195,7 @@ export SUPABASE_POOL_SIZE=15
 systemctl restart aikb-server
 
 # Verify new size
-curl http://localhost:3000/api/health/pool-stats
+curl http://localhost:3001/api/health/pool-stats
 ```
 
 ### Step 3: Monitor pool metrics in Grafana
@@ -212,7 +212,7 @@ curl http://localhost:3000/api/health/pool-stats
 ### Step 4: Identify specific endpoint causing issue
 ```bash
 # Get traces for requests using most connections
-curl 'http://localhost:3000/api/admin/traces?minConnections=5&limit=20' \
+curl 'http://localhost:3001/api/admin/traces?minConnections=5&limit=20' \
   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   | jq '.[] | {endpoint: .spanName, connectionsUsed, duration: .durationMs}'
 ```
@@ -230,7 +230,7 @@ grep -n "pool\|connection" server/src/controllers/document.controller.ts | head 
 # Monitor pool growth over time
 for i in {1..10}; do
   echo "Sample $i:"
-  curl -s http://localhost:3000/api/health/pool-stats | jq '.activeConnections'
+  curl -s http://localhost:3001/api/health/pool-stats | jq '.activeConnections'
   sleep 5
 done
 
@@ -249,7 +249,7 @@ done
 
 ### Step 1: Check error rates by endpoint
 ```bash
-curl http://localhost:3000/api/admin/metrics/errors?window=1h \
+curl http://localhost:3001/api/admin/metrics/errors?window=1h \
   -H "Authorization: Bearer ${ADMIN_TOKEN}"
 ```
 
@@ -276,7 +276,7 @@ curl http://localhost:3000/api/admin/metrics/errors?window=1h \
 ### Step 2: Identify which deployment introduced error
 ```bash
 # Check feature flags to see what's enabled
-curl http://localhost:3000/api/admin/feature-flags
+curl http://localhost:3001/api/admin/feature-flags
 ```
 
 **Look for recently enabled flags:**
@@ -287,12 +287,12 @@ curl http://localhost:3000/api/admin/feature-flags
 ### Step 3: Disable suspect feature flags one by one
 ```bash
 # Example: If saga errors increasing, disable saga pattern
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_2_1_saga_pattern \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_2_1_saga_pattern \
   -H "Content-Type: application/json" \
   -d '{"rolloutPercentage": 0}'
 
 # Monitor error rates
-sleep 60 && curl http://localhost:3000/api/admin/metrics/errors?window=5m
+sleep 60 && curl http://localhost:3001/api/admin/metrics/errors?window=5m
 ```
 
 ### Step 4: If error rate recovers, that's the cause
@@ -301,7 +301,7 @@ sleep 60 && curl http://localhost:3000/api/admin/metrics/errors?window=5m
 # Contact dev team with error logs
 
 # Re-enable once fixed
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_2_1_saga_pattern \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_2_1_saga_pattern \
   -H "Content-Type: application/json" \
   -d '{"rolloutPercentage": 100}'
 ```
@@ -324,7 +324,7 @@ npm run build
 systemctl restart aikb-server
 
 # Verify error rates return to normal
-curl http://localhost:3000/api/health
+curl http://localhost:3001/api/health
 ```
 
 ---
@@ -340,7 +340,7 @@ curl http://localhost:3000/api/health
 ### Step 1: Verify tracing is enabled
 ```bash
 # Check if service initialized tracing
-curl http://localhost:3000/api/health | jq '.tracing'
+curl http://localhost:3001/api/health | jq '.tracing'
 
 # Expected:
 # {
@@ -353,7 +353,7 @@ curl http://localhost:3000/api/health | jq '.tracing'
 ### Step 2: Check for trace ID in response
 ```bash
 # Make request and look for trace ID
-curl -i http://localhost:3000/api/documents \
+curl -i http://localhost:3001/api/documents \
   -H "Authorization: Bearer ${JWT_TOKEN}" \
   | grep -i "x-trace-id"
 
@@ -385,7 +385,7 @@ systemctl restart aikb-server
 sleep 5
 
 # Verify tracing
-curl -i http://localhost:3000/api/health | grep -i "x-trace-id"
+curl -i http://localhost:3001/api/health | grep -i "x-trace-id"
 ```
 
 ---
@@ -420,17 +420,17 @@ npm run migrate
 # 3. Start service (with health check)
 systemctl restart aikb-server
 sleep 10
-curl http://localhost:3000/api/health
+curl http://localhost:3001/api/health
 
 # 4. Monitor for 5 minutes
-watch -n 1 'curl -s http://localhost:3000/api/health | jq .status'
+watch -n 1 'curl -s http://localhost:3001/api/health | jq .status'
 
 # 5. If all healthy, enable feature flags gradually
-curl -X POST http://localhost:3000/api/admin/feature-flags/priority_X_Y \
+curl -X POST http://localhost:3001/api/admin/feature-flags/priority_X_Y \
   -d '{"rolloutPercentage": 10}'
 
 # 6. Monitor error rates
-watch -n 5 'curl -s http://localhost:3000/api/admin/metrics/errors | jq'
+watch -n 5 'curl -s http://localhost:3001/api/admin/metrics/errors | jq'
 
 # 7. Gradually increase rollout: 10% -> 50% -> 100%
 ```
@@ -439,7 +439,7 @@ watch -n 5 'curl -s http://localhost:3000/api/admin/metrics/errors | jq'
 ```bash
 # 1. Disable all new feature flags
 for flag in priority_1_3 priority_2_1 priority_2_2 priority_2_3 priority_2_4; do
-  curl -X POST http://localhost:3000/api/admin/feature-flags/${flag} \
+  curl -X POST http://localhost:3001/api/admin/feature-flags/${flag} \
     -d '{"rolloutPercentage": 0}'
 done
 
@@ -451,7 +451,7 @@ npm run build
 systemctl restart aikb-server
 
 # 4. Verify health
-curl http://localhost:3000/api/health
+curl http://localhost:3001/api/health
 
 # 5. Notify team
 # "Deployment rolled back due to [specific issue]. Investigation underway."

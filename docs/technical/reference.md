@@ -316,22 +316,21 @@ node --inspect-brk node_modules/.bin/vitest  # Debug
 
 ## 📖 Resources
 
-| Document                                                   | Purpose             |
-| ---------------------------------------------------------- | ------------------- |
-| [README.md](README.md)                                     | Setup & overview    |
-| [USER_GUIDE.md](USER_GUIDE.md)                             | Complete user guide |
-| [COMPLETE_PROJECT_SUMMARY.md](COMPLETE_PROJECT_SUMMARY.md) | All 15 items        |
-| [DEPLOYMENT_READY.md](DEPLOYMENT_READY.md)                 | Deployment steps    |
+| Document                                             | Purpose             |
+| ---------------------------------------------------- | ------------------- |
+| [README.md](../../README.md)                         | Setup & overview    |
+| [User Manual](../user/user-manual.md)                | Complete user guide |
+| [Architecture Overview](../architecture/overview.md) | ADRs and design     |
 
-### Runbooks (server/docs/)
+### Runbooks
 
-- [RUNBOOK_AUTH_TIMING.md](server/docs/RUNBOOK_AUTH_TIMING.md) - Auth issues
-- [RUNBOOK_CACHE_STALE.md](server/docs/RUNBOOK_CACHE_STALE.md) - Cache problems
-- [RUNBOOK_DEPLOYMENT.md](server/docs/RUNBOOK_DEPLOYMENT.md) - Deployment issues
-- [RUNBOOK_RATE_LIMIT.md](server/docs/RUNBOOK_RATE_LIMIT.md) - Rate limiting
-- [RUNBOOK_SAGA_FAILURES.md](server/docs/RUNBOOK_SAGA_FAILURES.md) - Transactions
-- [RUNBOOK_TRACING.md](server/docs/RUNBOOK_TRACING.md) - Debugging
-- [RUNBOOK_VECTOR_ERRORS.md](server/docs/RUNBOOK_VECTOR_ERRORS.md) - Vector search
+- [RUNBOOK_AUTH_TIMING.md](runbooks/RUNBOOK_AUTH_TIMING.md) - Auth issues
+- [RUNBOOK_CACHE_STALE.md](runbooks/RUNBOOK_CACHE_STALE.md) - Cache problems
+- [RUNBOOK_DEPLOYMENT.md](runbooks/RUNBOOK_DEPLOYMENT.md) - Deployment issues
+- [RUNBOOK_RATE_LIMIT.md](runbooks/RUNBOOK_RATE_LIMIT.md) - Rate limiting
+- [RUNBOOK_SAGA_FAILURES.md](runbooks/RUNBOOK_SAGA_FAILURES.md) - Transactions
+- [RUNBOOK_TRACING.md](runbooks/RUNBOOK_TRACING.md) - Debugging
+- [RUNBOOK_VECTOR_ERRORS.md](runbooks/RUNBOOK_VECTOR_ERRORS.md) - Vector search
 
 ---
 

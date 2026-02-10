@@ -12,7 +12,7 @@
 ```bash
 EMAIL="user@example.com"
 
-curl http://localhost:3000/api/admin/ratelimit/user?email=${EMAIL}
+curl http://localhost:3001/api/admin/ratelimit/user?email=${EMAIL}
 ```
 
 **Expected Response:**
@@ -38,7 +38,7 @@ curl http://localhost:3000/api/admin/ratelimit/user?email=${EMAIL}
 
 ### Step 3: Unlock immediately (if confident password is correct)
 ```bash
-curl -X POST http://localhost:3000/api/admin/ratelimit/unlock?email=${EMAIL}
+curl -X POST http://localhost:3001/api/admin/ratelimit/unlock?email=${EMAIL}
 ```
 
 **Expected Response:**
@@ -53,7 +53,7 @@ curl -X POST http://localhost:3000/api/admin/ratelimit/unlock?email=${EMAIL}
 ### Step 4: Notify user and ask to retry
 ```bash
 # Send notification
-curl -X POST http://localhost:3000/api/notifications \
+curl -X POST http://localhost:3001/api/notifications \
   -H "Content-Type: application/json" \
   -d '{
     "email": "'"${EMAIL}"'",
@@ -66,7 +66,7 @@ curl -X POST http://localhost:3000/api/notifications \
 ### Step 5: If user still locked out after correct password
 ```bash
 # Check if there's a distributed attack pattern
-curl http://localhost:3000/api/admin/ratelimit/threats
+curl http://localhost:3001/api/admin/ratelimit/threats
 ```
 
 ---
@@ -81,7 +81,7 @@ curl http://localhost:3000/api/admin/ratelimit/threats
 
 ### Step 1: Check attack analysis
 ```bash
-curl http://localhost:3000/api/admin/ratelimit/threats
+curl http://localhost:3001/api/admin/ratelimit/threats
 ```
 
 **Expected Response:**
@@ -108,7 +108,7 @@ curl http://localhost:3000/api/admin/ratelimit/threats
 ### Step 3: If legitimate, increase lock timeout temporarily
 ```bash
 # Increase from 15 minutes to 30 minutes
-curl -X POST http://localhost:3000/api/admin/ratelimit/config \
+curl -X POST http://localhost:3001/api/admin/ratelimit/config \
   -H "Content-Type: application/json" \
   -d '{
     "lockDurationMinutes": 30,
@@ -118,7 +118,7 @@ curl -X POST http://localhost:3000/api/admin/ratelimit/config \
 
 ### Step 4: Notify affected users
 ```bash
-curl -X POST http://localhost:3000/api/notifications/broadcast \
+curl -X POST http://localhost:3001/api/notifications/broadcast \
   -H "Content-Type: application/json" \
   -d '{
     "departments": ["Engineering", "Product"],
@@ -130,18 +130,18 @@ curl -X POST http://localhost:3000/api/notifications/broadcast \
 ### Step 5: If attack is real, enable additional protection
 ```bash
 # Temporarily disable email-based limiting if false positive rate high
-curl -X POST http://localhost:3000/api/admin/feature-flags/rate-limiter-email \
+curl -X POST http://localhost:3001/api/admin/feature-flags/rate-limiter-email \
   -H "Content-Type: application/json" \
   -d '{"rolloutPercentage": 0}'
 
 # Monitor IP-based rate limiting instead
-curl http://localhost:3000/api/health/ratelimit
+curl http://localhost:3001/api/health/ratelimit
 ```
 
 ### Step 6: Once threat passes, return to normal
 ```bash
 # Restore normal lock duration
-curl -X POST http://localhost:3000/api/admin/ratelimit/config \
+curl -X POST http://localhost:3001/api/admin/ratelimit/config \
   -H "Content-Type: application/json" \
   -d '{
     "lockDurationMinutes": 15,
@@ -149,7 +149,7 @@ curl -X POST http://localhost:3000/api/admin/ratelimit/config \
   }'
 
 # Re-enable email-based limiting
-curl -X POST http://localhost:3000/api/admin/feature-flags/rate-limiter-email \
+curl -X POST http://localhost:3001/api/admin/feature-flags/rate-limiter-email \
   -H "Content-Type: application/json" \
   -d '{"rolloutPercentage": 100}'
 ```
@@ -166,7 +166,7 @@ curl -X POST http://localhost:3000/api/admin/feature-flags/rate-limiter-email \
 ```bash
 EMAIL="user@example.com"
 
-curl http://localhost:3000/api/admin/ratelimit/attempts?email=${EMAIL}&limit=20
+curl http://localhost:3001/api/admin/ratelimit/attempts?email=${EMAIL}&limit=20
 ```
 
 **Expected Response:**
@@ -202,7 +202,7 @@ echo "Single IP detected - Likely user error or false positive"
 
 ### Step 3: If password compromised, force password reset
 ```bash
-curl -X POST http://localhost:3000/api/admin/users/${USER_ID}/force-password-reset \
+curl -X POST http://localhost:3001/api/admin/users/${USER_ID}/force-password-reset \
   -H "Content-Type: application/json" \
   -d '{
     "reason": "Security: Multiple IPs attempted login",
@@ -212,7 +212,7 @@ curl -X POST http://localhost:3000/api/admin/users/${USER_ID}/force-password-res
 
 ### Step 4: Notify user of compromise
 ```bash
-curl -X POST http://localhost:3000/api/notifications \
+curl -X POST http://localhost:3001/api/notifications \
   -H "Content-Type: application/json" \
   -d '{
     "email": "'"${EMAIL}"'",
@@ -313,12 +313,12 @@ from(bucket:"aikb")
 ### Testing Password Changes
 ```bash
 # During password change testing, disable rate limiting
-curl -X POST http://localhost:3000/api/admin/feature-flags/rate-limiter-email \
+curl -X POST http://localhost:3001/api/admin/feature-flags/rate-limiter-email \
   -H "Content-Type: application/json" \
   -d '{"rolloutPercentage": 0, "targetEnvironments": ["staging"]}'
 
 # Or temporarily increase lock duration
-curl -X POST http://localhost:3000/api/admin/ratelimit/config \
+curl -X POST http://localhost:3001/api/admin/ratelimit/config \
   -H "Content-Type: application/json" \
   -d '{"lockDurationMinutes": 1}'
 ```
@@ -331,23 +331,23 @@ If rate limiting causing cascading failures:
 
 ```bash
 # 1. Disable all rate limiting
-curl -X POST http://localhost:3000/api/admin/feature-flags/rate-limiter-email \
+curl -X POST http://localhost:3001/api/admin/feature-flags/rate-limiter-email \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 
 # 2. Unlock all users
-curl -X POST http://localhost:3000/api/admin/ratelimit/unlock-all
+curl -X POST http://localhost:3001/api/admin/ratelimit/unlock-all
 
 # 3. Monitor error rates and login success
-curl http://localhost:3000/api/health
+curl http://localhost:3001/api/health
 
 # 4. Once stable, re-enable with relaxed settings
-curl -X POST http://localhost:3000/api/admin/ratelimit/config \
+curl -X POST http://localhost:3001/api/admin/ratelimit/config \
   -H "Content-Type: application/json" \
   -d '{"maxFailedAttempts": 10, "lockDurationMinutes": 5}'
 
 # 5. Re-enable feature flag
-curl -X POST http://localhost:3000/api/admin/feature-flags/rate-limiter-email \
+curl -X POST http://localhost:3001/api/admin/feature-flags/rate-limiter-email \
   -H "Content-Type: application/json" \
   -d '{"enabled": true, "rolloutPercentage": 100}'
 ```
