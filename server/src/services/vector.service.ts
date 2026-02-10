@@ -214,9 +214,13 @@ export class VectorService {
     filters?: { department?: string; role?: string };
   }): Promise<any[]> {
     const { embedding, topK, filters = {} } = params;
+    const maxCandidates = Math.max(topK, env.VECTOR_LOCAL_MAX_CANDIDATES);
     
     // 1. Get all vector entries from metadata store
-    const allVectors = await this.getAllVectors();
+    const allVectors = await this.getAllVectors({
+      maxCount: maxCandidates,
+      reason: 'similarity_search'
+    });
     
     // 2. Perform RBAC filtering
     // This replicates the logic applied by Vertex AI filtering at retrieval time
@@ -233,17 +237,37 @@ export class VectorService {
       return deptMatch && roleMatch;
     });
 
-    // 3. Compute similarity and sort
-    const scored = filtered.map(v => ({
-      id: v.id,
-      score: this.cosineSimilarity(embedding, v.values),
-      metadata: v.metadata
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
+    // 3. Compute similarity with bounded top-K selection (avoids full-sort at scale)
+    const topMatches: Array<{ id: string; score: number; metadata: VectorItem['metadata'] }> = [];
+    for (const vector of filtered) {
+      const candidate = {
+        id: vector.id,
+        score: this.cosineSimilarity(embedding, vector.values),
+        metadata: vector.metadata
+      };
+
+      if (topMatches.length < topK) {
+        topMatches.push(candidate);
+        continue;
+      }
+
+      let lowestScoreIndex = 0;
+      for (let i = 1; i < topMatches.length; i++) {
+        if (topMatches[i].score < topMatches[lowestScoreIndex].score) {
+          lowestScoreIndex = i;
+        }
+      }
+
+      if (candidate.score > topMatches[lowestScoreIndex].score) {
+        topMatches[lowestScoreIndex] = candidate;
+      }
+    }
+
+    const scored = topMatches.sort((a, b) => b.score - a.score);
 
     Logger.info('VectorService: Local RBAC-filtered query executed', {
-      totalVectors: allVectors.length,
+      totalVectorsScanned: allVectors.length,
+      maxCandidates,
       filteredCount: filtered.length,
       topKCount: scored.length,
       bestScore: scored[0]?.score || 0
@@ -515,11 +539,14 @@ export class VectorService {
     }
   }
 
-  async getAllVectors(): Promise<VectorItem[]> {
+  async getAllVectors(options?: { maxCount?: number; reason?: string }): Promise<VectorItem[]> {
     try {
-      // This is an expensive operation at scale
-      // In production Vertex AI, this would use streaming or pagination
-      Logger.warn('VectorService: getAllVectors called - expensive operation at scale');
+      const maxCount = options?.maxCount;
+      if (!maxCount) {
+        Logger.warn('VectorService: getAllVectors called without a cap - expensive operation at scale', {
+          reason: options?.reason || 'unspecified'
+        });
+      }
 
       // Retrieve from Vertex AI (if available)
       const indexServiceClient = await (this.vertexAI as any)?.getIndexServiceClient?.();
@@ -534,6 +561,14 @@ export class VectorService {
       const vectors: VectorItem[] = [];
 
       for (const [docId, data] of Object.entries(metadata)) {
+        if (maxCount && vectors.length >= maxCount) {
+          Logger.warn('VectorService: getAllVectors reached capped candidate limit', {
+            maxCount,
+            reason: options?.reason || 'unspecified'
+          });
+          break;
+        }
+
         if (!(data as any).__vectorEntry) {
           continue;
         }

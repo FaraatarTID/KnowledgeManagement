@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+const strictMode = process.argv.includes('--strict') || process.env.PROXY_ENV_CHECK_STRICT === 'true';
+
 const legacyProxyEnvKeys = [
   'npm_config_http_proxy',
   'npm_config_https_proxy',
@@ -30,5 +32,10 @@ console.warn('3) Re-run tests using: node scripts/run-vitest.mjs --maxWorkers=1'
 
 console.warn('\nQuick shell cleanup (bash/zsh):');
 console.warn('unset npm_config_http_proxy npm_config_https_proxy NPM_CONFIG_HTTP_PROXY NPM_CONFIG_HTTPS_PROXY');
+
+if (strictMode) {
+  console.error('\n❌ Strict mode enabled: failing due to legacy npm proxy env vars.');
+  process.exit(1);
+}
 
 process.exit(0);
