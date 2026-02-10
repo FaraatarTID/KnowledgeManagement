@@ -168,13 +168,13 @@ export class DocumentController {
     
     const isManualDocument = canonicalId.startsWith('manual-');
     let driveRenameStatus = 'skipped';
-    if (title && !DocumentController.isDriveConfigured()) {
-      driveRenameStatus = 'not_configured';
-    } else if (title && !isManualDocument && DocumentController.isDriveConfigured()) {
-        const success = await driveService.renameFile(canonicalId, title);
-        driveRenameStatus = success ? 'success' : 'failed';
-    } else if (title && isManualDocument) {
+    if (title && isManualDocument) {
       driveRenameStatus = 'not_applicable';
+    } else if (title && !DocumentController.isDriveConfigured()) {
+      driveRenameStatus = 'not_configured';
+    } else if (title && DocumentController.isDriveConfigured()) {
+      const success = await driveService.renameFile(canonicalId, title);
+      driveRenameStatus = success ? 'success' : 'failed';
     }
 
     await historyService.recordEvent({

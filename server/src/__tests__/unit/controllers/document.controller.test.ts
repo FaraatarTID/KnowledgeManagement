@@ -224,7 +224,7 @@ describe('DocumentController', () => {
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));
         });
 
-        it('should mark drive rename as not_configured when drive is disabled', async () => {
+        it('should mark drive rename as not_applicable for manual docs when drive is disabled', async () => {
             mockRequest.params = { id: 'manual-1' };
             mockRequest.body = { title: 'New Local Title' };
             mockRequest.user = { email: 'alice@aikb.com', role: 'EDITOR' };
@@ -238,10 +238,29 @@ describe('DocumentController', () => {
 
             expect(driveService.renameFile).not.toHaveBeenCalled();
             expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
-                details: expect.stringContaining('Drive Rename: not_configured')
+                details: expect.stringContaining('Drive Rename: not_applicable')
             }));
         });
 
+
+
+        it('should mark drive rename as not_configured for drive docs when drive is disabled', async () => {
+            mockRequest.params = { id: 'drive-1' };
+            mockRequest.body = { title: 'New Drive Title' };
+            mockRequest.user = { email: 'alice@aikb.com', role: 'EDITOR' };
+            process.env.GOOGLE_DRIVE_FOLDER_ID = '';
+
+            vi.mocked(vectorService.getAllMetadata).mockResolvedValue({
+                'drive-1': { owner: 'alice@aikb.com', category: 'IT' }
+            });
+
+            await DocumentController.update(mockRequest, mockResponse, nextMock);
+
+            expect(driveService.renameFile).not.toHaveBeenCalled();
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                details: expect.stringContaining('Drive Rename: not_configured')
+            }));
+        });
 
         it('should mark drive rename as not_applicable for manual docs when drive is configured', async () => {
             mockRequest.params = { id: 'manual-1' };
