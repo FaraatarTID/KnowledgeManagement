@@ -25,6 +25,22 @@ interface NavItem {
   requiredRoles?: string[];
 }
 
+const parseStoredUser = (raw: string): SidebarUser | null => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && 'role' in parsed) {
+      const candidate = parsed as { role?: unknown };
+      if (candidate.role === undefined || typeof candidate.role === 'string') {
+        return { role: candidate.role };
+      }
+    }
+    if (parsed && typeof parsed === 'object') return {};
+    return null;
+  } catch {
+    return null;
+  }
+};
+
 export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
@@ -39,10 +55,9 @@ export default function Sidebar() {
     const storedUser = localStorage.getItem('user');
     let parsedUser: SidebarUser | null = null;
     if (storedUser) {
-      try {
-        parsedUser = JSON.parse(storedUser);
-      } catch (e) {
-        console.error('Failed to parse user data:', e);
+      parsedUser = parseStoredUser(storedUser);
+      if (!parsedUser) {
+        console.error('Failed to parse user data from localStorage');
         localStorage.removeItem('user');
       }
     }
@@ -56,11 +71,8 @@ export default function Sidebar() {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'user') {
         if (e.newValue) {
-          try {
-            setUser(JSON.parse(e.newValue) as SidebarUser);
-          } catch {
-            setUser(null);
-          }
+          const parsed = parseStoredUser(e.newValue);
+          setUser(parsed);
         } else {
           setUser(null);
         }
