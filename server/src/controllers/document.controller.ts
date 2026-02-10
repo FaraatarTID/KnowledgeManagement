@@ -14,8 +14,9 @@ import { executeSaga } from '../utils/saga-transaction.js';
 
 export class DocumentController {
   private static toCanonicalDocumentId(id: string): string {
-    const chunkMatch = id.match(/^(.*)_chunk\d+$/);
-    return chunkMatch?.[1] || id;
+    const normalizedId = id.trim();
+    const chunkMatch = normalizedId.match(/^(.*?)(?:_chunk\d+|_\d+)$/);
+    return chunkMatch?.[1] || normalizedId;
   }
 
   private static isDriveConfigured(): boolean {
@@ -167,13 +168,13 @@ export class DocumentController {
     
     const isManualDocument = canonicalId.startsWith('manual-');
     let driveRenameStatus = 'skipped';
-    if (title && !DocumentController.isDriveConfigured()) {
-      driveRenameStatus = 'not_configured';
-    } else if (title && !isManualDocument && DocumentController.isDriveConfigured()) {
-        const success = await driveService.renameFile(canonicalId, title);
-        driveRenameStatus = success ? 'success' : 'failed';
-    } else if (title && isManualDocument) {
+    if (title && isManualDocument) {
       driveRenameStatus = 'not_applicable';
+    } else if (title && !DocumentController.isDriveConfigured()) {
+      driveRenameStatus = 'not_configured';
+    } else if (title && DocumentController.isDriveConfigured()) {
+      const success = await driveService.renameFile(canonicalId, title);
+      driveRenameStatus = success ? 'success' : 'failed';
     }
 
     await historyService.recordEvent({
