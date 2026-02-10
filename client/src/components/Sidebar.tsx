@@ -14,6 +14,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { authApi } from '@/lib/api';
 
 interface SidebarUser {
+  name?: string;
   role?: string;
 }
 
@@ -28,13 +29,12 @@ interface NavItem {
 const parseStoredUser = (raw: string): SidebarUser | null => {
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && 'role' in parsed) {
-      const candidate = parsed as { role?: unknown };
-      if (candidate.role === undefined || typeof candidate.role === 'string') {
-        return { role: candidate.role };
-      }
+    if (parsed && typeof parsed === 'object') {
+      const candidate = parsed as { name?: unknown; role?: unknown };
+      const name = typeof candidate.name === 'string' ? candidate.name : undefined;
+      const role = typeof candidate.role === 'string' ? candidate.role : undefined;
+      return { name, role };
     }
-    if (parsed && typeof parsed === 'object') return {};
     return null;
   } catch {
     return null;
