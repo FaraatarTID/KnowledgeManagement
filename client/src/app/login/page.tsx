@@ -40,7 +40,7 @@ export default function LoginPage() {
         const resp = e['response'];
 
         if (code === 'ERR_NETWORK') {
-          msg = 'Cannot reach the backend API. Ensure server is running on port 3001 or set NEXT_PUBLIC_API_URL correctly.';
+          msg = 'Cannot reach the backend API. Check that the backend is running, NEXT_PUBLIC_API_URL is correct, and your CSP/connect-src allows the API origin.';
         } else if (typeof resp === 'object' && resp !== null) {
           const data = (resp as Record<string, unknown>)['data'];
           if (typeof data === 'object' && data !== null && typeof (data as Record<string, unknown>)['error'] === 'string') {
