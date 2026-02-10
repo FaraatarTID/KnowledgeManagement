@@ -208,6 +208,34 @@ export class VectorService {
     return mag === 0 ? 0 : dotProduct / mag;
   }
 
+
+  private normalizeRole(role?: string): string {
+    const normalized = String(role || 'VIEWER').trim().toUpperCase();
+    const aliases: Record<string, string> = {
+      USER: 'VIEWER',
+      IC: 'VIEWER'
+    };
+    return aliases[normalized] || normalized;
+  }
+
+  private getAllowedRoleTokens(role?: string): string[] {
+    const normalized = this.normalizeRole(role);
+
+    if (normalized === 'ADMIN') {
+      return ['ADMIN', 'MANAGER', 'EDITOR', 'VIEWER', 'USER', 'IC'];
+    }
+
+    if (normalized === 'MANAGER') {
+      return ['MANAGER', 'EDITOR', 'VIEWER', 'USER', 'IC'];
+    }
+
+    if (normalized === 'EDITOR') {
+      return ['EDITOR', 'VIEWER', 'USER', 'IC'];
+    }
+
+    return ['VIEWER', 'USER', 'IC'];
+  }
+
   private async queryLocal(params: {
     embedding: number[];
     topK: number;
@@ -226,14 +254,18 @@ export class VectorService {
     // This replicates the logic applied by Vertex AI filtering at retrieval time
     const filtered = allVectors.filter(v => {
       const docDept = (v.metadata as any).department;
-      const docRoles = String((v.metadata as any).roles || 'user').split(',').map((r: string) => r.trim());
-      
+      const docRolesRaw = String((v.metadata as any).roles || 'VIEWER')
+        .split(',')
+        .map((r: string) => this.normalizeRole(r));
+      const docRoles = docRolesRaw.length > 0 ? docRolesRaw : ['VIEWER'];
+
       // Admin bypass
-      if (filters.role === 'ADMIN') return true;
-      
+      if (this.normalizeRole(filters.role) === 'ADMIN') return true;
+
       const deptMatch = !docDept || docDept === 'General' || docDept === filters.department;
-      const roleMatch = docRoles.includes(filters.role || 'user') || docRoles.includes('VIEWER');
-      
+      const allowedRoleTokens = this.getAllowedRoleTokens(filters.role);
+      const roleMatch = docRoles.some((docRole: string) => allowedRoleTokens.includes(docRole));
+
       return deptMatch && roleMatch;
     });
 
@@ -326,7 +358,7 @@ export class VectorService {
           // Role-based filtering (stored as metadata)
           {
             namespace: 'roles',
-            allow_tokens: item.metadata.roles?.split(',').map((r: string) => r.trim()) || ['user']
+            allow_tokens: item.metadata.roles?.split(',').map((r: string) => this.normalizeRole(r)) || ['VIEWER']
           }
         ]
       }));
@@ -395,7 +427,7 @@ export class VectorService {
         // Role-based filtering: user must have required role to see docs
         {
           namespace: 'roles',
-          allow_tokens: [filters.role || 'user']
+          allow_tokens: this.getAllowedRoleTokens(filters.role)
         }
       ];
 

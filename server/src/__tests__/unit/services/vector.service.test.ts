@@ -52,3 +52,35 @@ describe('VectorService.listDocumentsWithRBAC', () => {
     expect(docs[0]?.id).toBe('manual-1');
   });
 });
+
+
+describe('VectorService role normalization for RBAC retrieval', () => {
+  const buildService = () => {
+    const store: MetadataStore = {
+      getOverride: vi.fn(),
+      getAllOverrides: vi.fn().mockReturnValue({}),
+      setOverride: vi.fn(),
+      removeOverride: vi.fn(),
+      removeOverrides: vi.fn(),
+      checkHealth: vi.fn().mockReturnValue(true)
+    };
+
+    return new VectorService('', 'us-central1', store, true) as any;
+  };
+
+  it('maps legacy role labels to canonical roles', () => {
+    const service = buildService();
+
+    expect(service.normalizeRole('user')).toBe('VIEWER');
+    expect(service.normalizeRole('IC')).toBe('VIEWER');
+    expect(service.normalizeRole('editor')).toBe('EDITOR');
+  });
+
+  it('expands allowed role tokens hierarchically', () => {
+    const service = buildService();
+
+    expect(service.getAllowedRoleTokens('VIEWER')).toEqual(['VIEWER', 'USER', 'IC']);
+    expect(service.getAllowedRoleTokens('EDITOR')).toEqual(['EDITOR', 'VIEWER', 'USER', 'IC']);
+    expect(service.getAllowedRoleTokens('ADMIN')).toContain('MANAGER');
+  });
+});
