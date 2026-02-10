@@ -13,6 +13,14 @@ import { catchAsync } from '../utils/catchAsync.js';
 import { executeSaga } from '../utils/saga-transaction.js';
 
 export class DocumentController {
+  private static toCanonicalDocumentId(id: string): string {
+    const chunkMatch = id.match(/^(.*)_chunk\d+$/);
+    return chunkMatch?.[1] || id;
+  }
+
+  private static isDriveConfigured(): boolean {
+    return !!process.env.GOOGLE_DRIVE_FOLDER_ID;
+  }
   
   static upload: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
     if (!req.file) throw new AppError('No file uploaded', 400);
@@ -31,7 +39,7 @@ export class DocumentController {
         let driveFileId = docId;
         const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-        if (driveFolderId && driveFolderId !== 'mock-folder') {
+        if (driveFolderId) {
           driveFileId = await driveService.uploadFile(
             driveFolderId,
             fileName,
@@ -132,6 +140,7 @@ export class DocumentController {
 
   static update: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
+    const canonicalId = id ? DocumentController.toCanonicalDocumentId(id) : id;
     const { title, category, sensitivity, department } = req.body;
     const user = req.user!;
 
@@ -139,10 +148,10 @@ export class DocumentController {
       throw new AppError('At least one metadata field must be provided', 400);
     }
 
-    if (!id) throw new AppError('Document ID is required', 400);
+    if (!canonicalId) throw new AppError('Document ID is required', 400);
     
     const allMetadata = await vectorService.getAllMetadata();
-    const docMeta = allMetadata[id];
+    const docMeta = allMetadata[canonicalId];
     
     if (!docMeta) throw new AppError('Document not found', 404);
 
@@ -150,84 +159,135 @@ export class DocumentController {
     const isPrivileged = user.role === 'ADMIN' || user.role === 'MANAGER';
     
     if (!isOwner && !isPrivileged) {
-      Logger.warn('Unauthorized update attempt', { docId: id, user: user.email });
+      Logger.warn('Unauthorized update attempt', { docId: canonicalId, user: user.email });
       throw new AppError('Permission denied', 403);
     }
 
-    await vectorService.updateDocumentMetadata(id, { title, category, sensitivity, department });
+    await vectorService.updateDocumentMetadata(canonicalId, { title, category, sensitivity, department });
     
+    const isManualDocument = canonicalId.startsWith('manual-');
     let driveRenameStatus = 'skipped';
-    if (title) {
-        const success = await driveService.renameFile(id, title);
+    if (title && !isManualDocument && DocumentController.isDriveConfigured()) {
+        const success = await driveService.renameFile(canonicalId, title);
         driveRenameStatus = success ? 'success' : 'failed';
+    } else if (title && isManualDocument) {
+      driveRenameStatus = 'not_applicable';
+    } else if (title && !DocumentController.isDriveConfigured()) {
+      driveRenameStatus = 'not_configured';
     }
 
     await historyService.recordEvent({
       event_type: 'UPDATED',
-      doc_id: id,
+      doc_id: canonicalId,
       doc_name: title || 'Metadata Update',
       details: `Metadata updated by ${user.email}. Drive Rename: ${driveRenameStatus}`
     });
 
-    Logger.info('Document metadata updated', { docId: id, changes: { title, category, sensitivity, department } });
+    Logger.info('Document metadata updated', { docId: canonicalId, changes: { title, category, sensitivity, department } });
 
     res.json({ 
       status: 'success', 
-      message: `Document ${id} updated.`,
+      message: `Document ${canonicalId} updated.`,
       driveRename: driveRenameStatus 
     });
   });
 
   static delete: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    if (!id) throw new AppError('ID required', 400);
-    
-    await vectorService.deleteDocument(id);
-    
+    const canonicalId = id ? DocumentController.toCanonicalDocumentId(id) : id;
+    if (!canonicalId) throw new AppError('ID required', 400);
+    const userEmail = req.user?.email || 'unknown';
+    const isManualDocument = canonicalId.startsWith('manual-');
+
+    // For synced Google Drive docs, delete source file first.
+    // If this fails, fail fast instead of pretending deletion succeeded.
+    if (!isManualDocument && DocumentController.isDriveConfigured()) {
+      try {
+        await driveService.deleteFile(canonicalId);
+      } catch (error: any) {
+        await historyService.recordEvent({
+          event_type: 'DELETE_FAILED',
+          doc_id: canonicalId,
+          doc_name: canonicalId,
+          details: `Delete requested by ${userEmail}. Drive delete failed: ${error?.message || 'unknown error'}`
+        });
+
+        Logger.warn('Failed to delete source file from Google Drive; aborting delete to avoid re-import', {
+          docId: canonicalId,
+          error: error?.message
+        });
+        throw new AppError(`Unable to delete source file from Google Drive: ${error?.message || 'unknown error'}`, 502);
+      }
+    }
+
+    await vectorService.deleteDocument(canonicalId);
+
     // FIXED: Invalidate cache for this document and related searches
     // Emit event so VectorService clears its cache
     const { cacheInvalidation } = await import('../utils/cache-invalidation.js');
-    await cacheInvalidation.deleteDocument(id);
-    
-    Logger.info('Document deleted from index and cache invalidated', { docId: id });
-    res.json({ status: 'success', message: `Document ${id} removed from index.` });
+    await cacheInvalidation.deleteDocument(canonicalId);
+
+    await historyService.recordEvent({
+      event_type: 'DELETED',
+      doc_id: canonicalId,
+      doc_name: canonicalId,
+      details: `Deleted by ${userEmail}. Source: ${isManualDocument || !DocumentController.isDriveConfigured() ? 'local/manual' : 'google-drive'}`
+    });
+
+    Logger.info('Document deleted from storage/index and cache invalidated', { docId: canonicalId });
+    res.json({ status: 'success', message: `Document ${canonicalId} removed.` });
   });
 
   static syncOne: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    if (!id) throw new AppError('ID required', 400);
+    const canonicalId = id ? DocumentController.toCanonicalDocumentId(id) : id;
+    if (!canonicalId) throw new AppError('ID required', 400);
 
-    const file = await driveService.getFileMetadata(id);
+    if (!DocumentController.isDriveConfigured()) {
+      throw new AppError('Google Drive is not configured for sync operations.', 503);
+    }
+
+    const file = await driveService.getFileMetadata(canonicalId);
     if (!file) throw new AppError('File not found on Drive', 404);
     
     await syncService.indexFile({
-        id: file.id || id,
+        id: file.id || canonicalId,
         name: file.name || 'Untitled',
         mimeType: file.mimeType || 'application/octet-stream',
         modifiedTime: file.modifiedTime || new Date().toISOString()
     });
 
-    Logger.info('Single file sync completed', { docId: id });
-    res.json({ status: 'success', message: `Document ${id} synced.` });
+    Logger.info('Single file sync completed', { docId: canonicalId });
+    res.json({ status: 'success', message: `Document ${canonicalId} synced.` });
   });
 
   static syncAll: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
-    if (!process.env.GOOGLE_DRIVE_FOLDER_ID || process.env.GOOGLE_DRIVE_FOLDER_ID === 'mock-folder') {
-      throw new AppError('Google Drive folder ID is not configured. Sync cannot proceed.', 400);
+    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    if (!folderId) {
+      throw new AppError('Google Drive is not configured for sync operations.', 503);
     }
 
     Logger.info('Starting full sync');
-    const result = await syncService.syncAll(process.env.GOOGLE_DRIVE_FOLDER_ID);
-    
-    await historyService.recordEvent({
-      event_type: 'UPDATED',
-      doc_id: 'global-sync',
-      doc_name: 'Knowledge Base Sync',
-      details: `Full cloud sync completed. Processed: ${result.processed}`
-    });
 
-    Logger.info('Full sync completed', { result });
-    res.json(result);
+    try {
+      const result = await syncService.syncAll(folderId);
+
+      await historyService.recordEvent({
+        event_type: 'UPDATED',
+        doc_id: 'global-sync',
+        doc_name: 'Knowledge Base Sync',
+        details: `Full cloud sync completed. Processed: ${result.processed}`
+      });
+
+      Logger.info('Full sync completed', { result });
+      return res.json({ ...result, message: 'Sync complete' });
+    } catch (error: any) {
+      Logger.warn('Full sync failed; returning user-friendly operational error', {
+        error: error?.message,
+        code: error?.code
+      });
+      throw new AppError(`Sync failed: ${error?.message || 'Google Drive connection problem'}`, 503);
+    }
   });
 
   static syncBatch: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
@@ -262,4 +322,3 @@ export class DocumentController {
     });
   });
 }
-
