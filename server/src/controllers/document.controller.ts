@@ -14,8 +14,9 @@ import { executeSaga } from '../utils/saga-transaction.js';
 
 export class DocumentController {
   private static toCanonicalDocumentId(id: string): string {
-    const chunkMatch = id.match(/^(.*)_chunk\d+$/);
-    return chunkMatch?.[1] || id;
+    const normalizedId = id.trim();
+    const chunkMatch = normalizedId.match(/^(.*?)(?:_chunk\d+|_\d+)$/);
+    return chunkMatch?.[1] || normalizedId;
   }
 
   private static isDriveConfigured(): boolean {

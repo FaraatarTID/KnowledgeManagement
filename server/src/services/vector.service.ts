@@ -736,8 +736,9 @@ export class VectorService {
         const metadataList = await this.metadataStore.listDocuments(filterParams);
         
         return metadataList.map(data => {
+          const canonicalId = data.docId || data.id;
           const doc: any = {
-            id: data.id || data.docId, // fallback
+            id: canonicalId,
             title: data.title ?? 'Untitled'
           };
           if (data.department) doc.department = data.department;
