@@ -18,6 +18,7 @@ router.get('/config', authMiddleware, SystemController.getConfig as RequestHandl
 
 // Admin / Manager
 router.get('/system/health', authMiddleware, requireRole('ADMIN'), SystemController.health as RequestHandler);
+router.post('/system/cloud-backup', authMiddleware, requireRole('ADMIN'), SystemController.cloudBackup as RequestHandler);
 router.get('/system/sync-status', authMiddleware, requireRole('ADMIN'), SystemController.syncStatus as RequestHandler);
 router.get('/stats', authMiddleware, requireRole('ADMIN', 'MANAGER'), SystemController.stats as RequestHandler);
 

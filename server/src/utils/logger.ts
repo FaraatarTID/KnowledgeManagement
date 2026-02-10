@@ -1,3 +1,4 @@
+import winston from 'winston';
 import { AsyncContext } from './context.js';
 
 export enum LogLevel {
@@ -10,45 +11,58 @@ export enum LogLevel {
 /**
  * Structured Logger for Industrial Observability.
  * Automatically attaches Trace IDs requests using AsyncContext.
- * Outputs JSON for machine parsing in production, readable text in dev.
+ * Uses Winston for high-performance, asynchronous logging.
  */
 export class Logger {
-  private static format(level: LogLevel, message: string, meta?: any) {
-    const requestId = AsyncContext.getRequestId();
-    const timestamp = new Date().toISOString();
-    
-    // Industrial Standard: JSON Logs
-    if (process.env.NODE_ENV === 'production') {
-      return JSON.stringify({
-        timestamp,
-        level,
-        requestId,
-        message,
-        ...meta
-      });
-    }
+  private static logger = winston.createLogger({
+    level: process.env.LOG_LEVEL || 'info',
+    format: winston.format.combine(
+      winston.format.timestamp(),
+      winston.format.json()
+    ),
+    defaultMeta: { service: 'knowledge-management-backend' },
+    transports: [
+      new winston.transports.Console({
+        format: process.env.NODE_ENV === 'production'
+          ? winston.format.combine(
+              winston.format.timestamp(),
+              winston.format.json()
+            )
+          : winston.format.combine(
+              winston.format.colorize(),
+              winston.format.timestamp(),
+              winston.format.printf(({ timestamp, level, message, requestId, ...meta }) => {
+                const traceStr = requestId ? `[${requestId}]` : '';
+                // Filter out internal Winston properties if any leak
+                const cleanMeta = { ...meta };
+                delete cleanMeta.service;
+                
+                const metaStr = Object.keys(cleanMeta).length ? `\n${JSON.stringify(cleanMeta, null, 2)}` : '';
+                return `[${timestamp}] ${level} ${traceStr}: ${message}${metaStr}`;
+              })
+            )
+      })
+    ]
+  });
 
-    // Developer Experience: Readable Logs
-    const traceStr = requestId ? `[${requestId}]` : '';
-    const metaStr = meta ? `\n${JSON.stringify(meta, null, 2)}` : '';
-    return `[${timestamp}] ${level.toUpperCase()} ${traceStr}: ${message}${metaStr}`;
+  private static getContext() {
+    // Safely retrieve request ID from AsyncLocalStorage
+    return { requestId: AsyncContext.getRequestId() };
   }
 
   static info(message: string, meta?: any) {
-    console.log(this.format(LogLevel.INFO, message, meta));
+    this.logger.info(message, { ...meta, ...this.getContext() });
   }
 
   static warn(message: string, meta?: any) {
-    console.warn(this.format(LogLevel.WARN, message, meta));
+    this.logger.warn(message, { ...meta, ...this.getContext() });
   }
 
   static error(message: string, meta?: any) {
-    console.error(this.format(LogLevel.ERROR, message, meta));
+    this.logger.error(message, { ...meta, ...this.getContext() });
   }
 
   static debug(message: string, meta?: any) {
-    if (process.env.DEBUG || process.env.NODE_ENV !== 'production') {
-      console.debug(this.format(LogLevel.DEBUG, message, meta));
-    }
+    this.logger.debug(message, { ...meta, ...this.getContext() });
   }
 }

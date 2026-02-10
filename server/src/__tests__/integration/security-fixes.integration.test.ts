@@ -119,7 +119,8 @@ describe('Security Fixes: Phase 1 (CRITICAL)', () => {
     it('should use vector DB filtering instead of post-processing', async () => {
       const previousEnv = process.env.NODE_ENV;
       process.env.NODE_ENV = 'development';
-      const vectorService = new VectorService('test-project', 'us-central1');
+      const mockMetadataStore = {} as any;
+      const vectorService = new VectorService('test-project', 'us-central1', mockMetadataStore, false);
       const findNeighbors = vi.fn().mockResolvedValue({ neighbors: [{ id: 'doc-1' }] });
 
       (vectorService as any).vertexAI = {

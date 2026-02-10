@@ -42,12 +42,9 @@ export const auditLogEntrySchema = z.object({
     .max(500, 'Reason too long (max 500 chars)')
     .optional(),
   
-  metadata: z.record(z.any())
+  metadata: z.record(z.string(), z.any())
     .optional()
-    .refine(
-      (m) => m ? Object.keys(m).length <= 10 : true,
-      'Metadata can have max 10 keys'
-    )
+    .refine((m) => !m || Object.keys(m).length <= 10, 'Metadata can have max 10 keys')
 });
 
 export type AuditLogEntry = z.infer<typeof auditLogEntrySchema>;
@@ -105,14 +102,14 @@ export class AuditService {
     const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!url || !key) {
-      if (env.NODE_ENV === 'test') {
+      if (env.NODE_ENV === 'test' || env.NODE_ENV === 'development') {
         this.supabase = null;
+        console.warn('⚠️  Supabase auditing disabled. Falling back to LOCAL CONSOLE LOGGING.');
         return;
       }
-      throw new Error('FATAL: Supabase credentials (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are missing. Auditing is mandatory.');
     }
 
-    this.supabase = createClient(url, key);
+    this.supabase = createClient(url!, key!);
   }
 
   async log(entry: any): Promise<void> {
@@ -127,7 +124,7 @@ export class AuditService {
         query: validated.query,
         granted: validated.granted,
         reason: validated.reason,
-        metadata: validated.metadata || {},
+        metadata: (validated as any).metadata || {},
         created_at: new Date().toISOString()
       };
 
@@ -217,7 +214,7 @@ export class AuditService {
 
   async getResolutionStats(): Promise<{ percentage: string }> {
     if (!this.supabase) {
-      return { percentage: 'Mock Mode' };
+      return { percentage: 'Local Mode' };
     }
 
     try {

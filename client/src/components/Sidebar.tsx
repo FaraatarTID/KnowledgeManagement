@@ -85,42 +85,42 @@ export default function Sidebar() {
       icon: LayoutDashboard, 
       path: '/admin?tab=dashboard', 
       isActive: pathname === '/admin' && activeTab === 'dashboard',
-      adminOnly: true 
+      requiredRoles: ['ADMIN', 'MANAGER'] 
     },
     { 
       name: 'Library', 
       icon: BookOpen, 
       path: '/admin?tab=documents', 
       isActive: pathname === '/admin' && activeTab === 'documents',
-      adminOnly: true 
+      requiredRoles: ['ADMIN'] 
     },
     { 
       name: 'Access Control', 
       icon: ShieldCheck, 
       path: '/admin?tab=users', 
       isActive: pathname === '/admin' && activeTab === 'users',
-      adminOnly: true 
+      requiredRoles: ['ADMIN'] 
     },
     { 
       name: 'Activity Log', 
       icon: Clock, 
       path: '/admin?tab=history', 
       isActive: pathname === '/admin' && (activeTab === 'history'),
-      adminOnly: true 
+      requiredRoles: ['ADMIN'] 
     },
     { 
       name: 'Settings', 
       icon: Settings, 
       path: '/admin?tab=settings', 
       isActive: pathname === '/admin' && activeTab === 'settings',
-      adminOnly: true 
+      requiredRoles: ['ADMIN'] 
     }
   ];
 
   // Filter nav items based on user role
   const visibleItems = navItems.filter(item => {
-    if (!item.adminOnly) return true;
-    return user?.role === 'ADMIN' || user?.role === 'MANAGER';
+    if (!(item as any).requiredRoles) return true;
+    return (item as any).requiredRoles.includes(user?.role);
   });
 
   // Prevent hydration mismatch by showing skeleton before mount

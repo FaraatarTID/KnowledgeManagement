@@ -38,6 +38,17 @@ export class DriveService {
     }
   }
 
+  async deleteFile(fileId: string): Promise<void> {
+    try {
+      await this.drive.files.delete({
+        fileId: fileId
+      });
+    } catch (e) {
+      console.error(`DriveService: Failed to delete file ${fileId}`, e);
+      throw e;
+    }
+  }
+
   async renameFile(fileId: string, newName: string): Promise<boolean> {
     try {
       await this.drive.files.update({

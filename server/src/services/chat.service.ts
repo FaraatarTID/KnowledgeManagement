@@ -15,16 +15,14 @@ export class ChatService {
   private vectorService: VectorService;
   private historyService: HistoryService;
 
-  constructor() {
-    const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID; 
-    if (!projectId) {
-      throw new Error('GOOGLE_CLOUD_PROJECT_ID is not defined in environment variables.');
-    }
-    this.geminiService = new GeminiService(projectId);
-    
-    // Initialize vector service with mock mode support
-    this.vectorService = new VectorService(projectId, 'us-central1');
-    this.historyService = new HistoryService();
+  constructor(
+    geminiService: GeminiService,
+    vectorService: VectorService,
+    historyService: HistoryService
+  ) {
+    this.geminiService = geminiService;
+    this.vectorService = vectorService;
+    this.historyService = historyService;
   }
 
   /**

@@ -1,7 +1,7 @@
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { Request } from 'express';
 
-const getIpKey = (req: Request) => ipKeyGenerator(req);
+const getIpKey = (req: Request) => ipKeyGenerator(req as any);
 
 export const buildGlobalLimiterKey = (req: Request) => {
   const userId = (req as any).user?.id;
@@ -9,7 +9,7 @@ export const buildGlobalLimiterKey = (req: Request) => {
 };
 
 export const buildAuthLimiterKey = (req: Request) => {
-  const email = (req.body?.email || '').toLowerCase().trim();
+  const email = ((req.body as any)?.email || '').toLowerCase().trim();
   if (!email) {
     return `ip:${getIpKey(req)}`;
   }

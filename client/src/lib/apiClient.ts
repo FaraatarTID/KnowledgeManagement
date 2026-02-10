@@ -77,6 +77,10 @@ class ApiClient {
   async addDocument(doc: { title: string; content: string; category: string }) {
     return this.post('/documents/sync', { documents: [doc] });
   }
+
+  async cloudBackup(): Promise<{ success: boolean; fileId?: string; error?: string }> {
+    return this.post('/system/cloud-backup', {});
+  }
 }
 
 export const api = new ApiClient();

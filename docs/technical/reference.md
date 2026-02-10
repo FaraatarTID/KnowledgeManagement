@@ -37,15 +37,15 @@ cd client && npm run dev
 
 ### Development
 
-| Command | Purpose |
-|---------|---------|
-| `npm run dev` | Start development server |
-| `npm run build` | Production build |
-| `npm start` | Run production build |
-| `npm test` | Run all tests |
-| `npm test -- --watch` | Tests in watch mode |
-| `npm run lint` | Check code quality |
-| `npm run lint:fix` | Auto-fix linting issues |
+| Command               | Purpose                  |
+| --------------------- | ------------------------ |
+| `npm run dev`         | Start development server |
+| `npm run build`       | Production build         |
+| `npm start`           | Run production build     |
+| `npm test`            | Run all tests            |
+| `npm test -- --watch` | Tests in watch mode      |
+| `npm run lint`        | Check code quality       |
+| `npm run lint:fix`    | Auto-fix linting issues  |
 
 ### Docker
 
@@ -99,11 +99,13 @@ npm run format                           # Format code
 ## 📡 API Endpoints
 
 ### Base URL
+
 ```
 http://localhost:3001/api/v1
 ```
 
 ### Documentation
+
 ```
 http://localhost:3001/api/docs    (Swagger UI)
 http://localhost:3001/api/openapi.json
@@ -112,6 +114,7 @@ http://localhost:3001/api/openapi.json
 ### Key Endpoints
 
 **Auth:**
+
 ```bash
 POST   /auth/login              # Login
 POST   /auth/logout             # Logout
@@ -119,6 +122,7 @@ GET    /auth/verify             # Verify token
 ```
 
 **Documents:**
+
 ```bash
 GET    /documents               # List
 POST   /documents               # Upload
@@ -126,12 +130,14 @@ DELETE /documents/{id}          # Delete
 ```
 
 **Chat:**
+
 ```bash
 POST   /chat                    # Send message
 GET    /chat/{chatId}           # Get history
 ```
 
 **System:**
+
 ```bash
 GET    /health                  # Health check
 GET    /system/metrics          # Metrics
@@ -160,24 +166,25 @@ curl -X POST http://localhost:3001/api/v1/documents \
 
 ## ⚙️ Configuration
 
-### Server (.env)
+**AI Mode (Choose One):**
 
-**Required:**
 ```env
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-key
-SUPABASE_ANON_KEY=your-key
-VERTEX_AI_PROJECT_ID=your-project
-VERTEX_AI_LOCATION=us-central1
+# Option 1: Easy Mode (Recommended)
+GOOGLE_API_KEY=your-gemini-key
+VECTOR_STORE_MODE=LOCAL
+
+# Option 2: Enterprise Mode
+GOOGLE_CLOUD_PROJECT_ID=your-project-id
+VECTOR_STORE_MODE=VERTEX
 ```
 
-**Optional:**
+**Common Settings:**
+
 ```env
 PORT=3001
 NODE_ENV=development
-INFLUXDB_URL=http://localhost:8086
-TRACING_ENABLED=true
 RAG_MIN_SIMILARITY=0.60
+GOOGLE_DRIVE_FOLDER_ID=your-folder-id
 ```
 
 ### Client (.env.local)
@@ -284,13 +291,13 @@ node --inspect-brk node_modules/.bin/vitest  # Debug
 
 ### Priority 3 Components (All ✅)
 
-| Feature | Status | File |
-|---------|--------|------|
-| Feature Flags | ✅ Complete | `feature-flags.ts` |
-| Request Tracing | ✅ Complete | `otel-setup.ts` |
-| Metrics Persistence | ✅ Complete | `metrics.ts` |
-| OpenAPI Spec | ✅ Complete | `openapi-generator.ts` |
-| Operational Runbooks | ✅ Complete | 7 markdown files |
+| Feature              | Status      | File                   |
+| -------------------- | ----------- | ---------------------- |
+| Feature Flags        | ✅ Complete | `feature-flags.ts`     |
+| Request Tracing      | ✅ Complete | `otel-setup.ts`        |
+| Metrics Persistence  | ✅ Complete | `metrics.ts`           |
+| OpenAPI Spec         | ✅ Complete | `openapi-generator.ts` |
+| Operational Runbooks | ✅ Complete | 7 markdown files       |
 
 ### Priority 1-2 Fixes (All ✅)
 
@@ -309,12 +316,12 @@ node --inspect-brk node_modules/.bin/vitest  # Debug
 
 ## 📖 Resources
 
-| Document | Purpose |
-|----------|---------|
-| [README.md](README.md) | Setup & overview |
-| [USER_GUIDE.md](USER_GUIDE.md) | Complete user guide |
-| [COMPLETE_PROJECT_SUMMARY.md](COMPLETE_PROJECT_SUMMARY.md) | All 15 items |
-| [DEPLOYMENT_READY.md](DEPLOYMENT_READY.md) | Deployment steps |
+| Document                                                   | Purpose             |
+| ---------------------------------------------------------- | ------------------- |
+| [README.md](README.md)                                     | Setup & overview    |
+| [USER_GUIDE.md](USER_GUIDE.md)                             | Complete user guide |
+| [COMPLETE_PROJECT_SUMMARY.md](COMPLETE_PROJECT_SUMMARY.md) | All 15 items        |
+| [DEPLOYMENT_READY.md](DEPLOYMENT_READY.md)                 | Deployment steps    |
 
 ### Runbooks (server/docs/)
 
@@ -333,7 +340,6 @@ node --inspect-brk node_modules/.bin/vitest  # Debug
 **Compilation:** 0 TypeScript errors  
 **Tests:** 70+ passing  
 **Production Ready:** ✅ YES  
-**Last Updated:** February 1, 2026  
+**Last Updated:** February 1, 2026
 
----  
-
+---

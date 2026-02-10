@@ -28,16 +28,20 @@ describe('Integration Tests: Priority 1-2 Fixes Validation', () => {
   describe('Fix 1.1: Vector Service Validation & Fail-Loud', () => {
     it('validates critical startup configuration', () => {
       // Pattern: VectorService constructor validates GOOGLE_CLOUD_PROJECT_ID
-      expect(() => new VectorService('', 'us-central1')).toThrow(/GOOGLE_CLOUD_PROJECT_ID/);
+      const mockMetadataStore = {} as any;
+      expect(() => new VectorService('', 'us-central1', mockMetadataStore, false)).toThrow(/GOOGLE_CLOUD_PROJECT_ID/);
     });
 
     it('throws error instead of using fallback on vector operations', async () => {
       // Pattern: upsertToVertexAI and queryVertexAI fail-loud (no mock fallback)
       const originalEnv = process.env.NODE_ENV;
+      const originalMode = process.env.VECTOR_STORE_MODE;
       process.env.NODE_ENV = 'production';
+      process.env.VECTOR_STORE_MODE = 'VERTEX';
 
       try {
-        const vectorService = new VectorService('test-project', 'us-central1');
+        const mockMetadataStore = {} as any;
+        const vectorService = new VectorService('test-project', 'us-central1', mockMetadataStore, false);
         const mockClient = { getIndexServiceClient: async () => null };
         (vectorService as any).vertexAI = mockClient;
 
@@ -48,6 +52,7 @@ describe('Integration Tests: Priority 1-2 Fixes Validation', () => {
         }])).rejects.toThrow(/Vertex AI Index Service unavailable/);
       } finally {
         process.env.NODE_ENV = originalEnv;
+        process.env.VECTOR_STORE_MODE = originalMode;
       }
     });
   });
@@ -108,7 +113,7 @@ describe('Integration Tests: Priority 1-2 Fixes Validation', () => {
         ip: '127.0.0.1',
         headers: {},
         socket: { remoteAddress: '127.0.0.1' }
-      } as Request;
+      } as unknown as Request;
       expect(buildResourceLimiterKey(req)).toBe('resource:123');
     });
 
@@ -157,10 +162,13 @@ describe('Integration Tests: Priority 1-2 Fixes Validation', () => {
   describe('Fix 2.2: RBAC Filtering at Vector Store API Level', () => {
     it('applies filters BEFORE similarity search', async () => {
       const originalEnv = process.env.NODE_ENV;
+      const originalMode = process.env.VECTOR_STORE_MODE;
       process.env.NODE_ENV = 'production';
+      process.env.VECTOR_STORE_MODE = 'VERTEX';
 
       try {
-        const vectorService = new VectorService('test-project', 'us-central1');
+        const mockMetadataStore = {} as any;
+        const vectorService = new VectorService('test-project', 'us-central1', mockMetadataStore, false);
         const findNeighbors = vi.fn().mockResolvedValue({ neighbors: [] });
         (vectorService as any).vertexAI = {
           getIndexServiceClient: async () => ({ findNeighbors })
@@ -180,6 +188,7 @@ describe('Integration Tests: Priority 1-2 Fixes Validation', () => {
         ]);
       } finally {
         process.env.NODE_ENV = originalEnv;
+        process.env.VECTOR_STORE_MODE = originalMode;
       }
     });
   });

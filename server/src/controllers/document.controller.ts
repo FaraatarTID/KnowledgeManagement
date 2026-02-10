@@ -187,7 +187,7 @@ export class DocumentController {
     // FIXED: Invalidate cache for this document and related searches
     // Emit event so VectorService clears its cache
     const { cacheInvalidation } = await import('../utils/cache-invalidation.js');
-    cacheInvalidation.emit('document_deleted', { docId: id });
+    await cacheInvalidation.deleteDocument(id);
     
     Logger.info('Document deleted from index and cache invalidated', { docId: id });
     res.json({ status: 'success', message: `Document ${id} removed from index.` });

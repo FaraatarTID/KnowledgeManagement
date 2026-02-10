@@ -26,29 +26,34 @@
 ### First Time Setup (5 Minutes)
 
 **What You'll Need:**
+
 - Email address (provided by your administrator)
 - Password (provided or set during account creation)
 - Modern web browser (Chrome, Firefox, Safari, Edge)
 - Stable internet connection
 
 **Access the System:**
+
 1. Open: **http://localhost:3000** (or your organization's domain)
 2. Login with your email and password
 3. Accept the security verification if prompted
 4. Review and accept the terms of service
 5. You're ready to use AIKB!
 
+> [!TIP]
+> **Administrators:** See the [Admin Setup Guide](../admin/full-setup.md) for a simple explanation on connecting Google Drive and your first login.
+
 ### Dashboard Overview
 
 When you login, you'll see:
 
-| Section | Description |
-|---------|-------------|
-| **Search Bar** | Quick search for documents and topics |
-| **Inbox** | Notifications and shared documents |
-| **Recent Documents** | Documents you've recently accessed |
-| **AI Chat** | Chat interface to ask questions |
-| **Navigation** | Menu to access all features |
+| Section              | Description                           |
+| -------------------- | ------------------------------------- |
+| **Search Bar**       | Quick search for documents and topics |
+| **Inbox**            | Notifications and shared documents    |
+| **Recent Documents** | Documents you've recently accessed    |
+| **AI Chat**          | Chat interface to ask questions       |
+| **Navigation**       | Menu to access all features           |
 
 ---
 
@@ -57,6 +62,7 @@ When you login, you'll see:
 ### Creating Your Account
 
 Your administrator will either:
+
 - **Option 1:** Create your account and send you a temporary password
   - You'll be asked to change it on first login
 - **Option 2:** Send you an invitation link
@@ -71,6 +77,7 @@ Your administrator will either:
 5. Wait for authentication (usually < 5 seconds)
 
 **Success indicators:**
+
 - ✅ Dashboard loads
 - ✅ Your name appears in top-right corner
 - ✅ You can see documents
@@ -78,13 +85,15 @@ Your administrator will either:
 ### Password & Security
 
 **Strong Password Requirements:**
+
 - Minimum 12 characters
 - At least one uppercase letter (A-Z)
 - At least one lowercase letter (a-z)
 - At least one number (0-9)
-- At least one special character (!@#$%^&*)
+- At least one special character (!@#$%^&\*)
 
 **Password Reset:**
+
 1. Click "Forgot Password?" on login page
 2. Enter your email address
 3. Check your email for reset link
@@ -102,6 +111,7 @@ If 2FA is enabled by your organization:
 4. Click "Verify"
 
 **Lost your 2FA device?**
+
 - Contact your IT administrator immediately
 - Provide identity verification
 - Administrator can reset 2FA
@@ -111,6 +121,7 @@ If 2FA is enabled by your organization:
 After **5 failed login attempts**, your account will lock for **15 minutes**.
 
 **If locked out:**
+
 1. Wait 15 minutes
 2. Try logging in again
 3. Still locked? Contact IT administrator
@@ -124,6 +135,7 @@ After **5 failed login attempts**, your account will lock for **15 minutes**.
 #### Upload a Document
 
 **Step 1: Start Upload**
+
 ```
 Click "افزودن سند" (Add Document) button
 - Usually in top navigation
@@ -131,6 +143,7 @@ Click "افزودن سند" (Add Document) button
 ```
 
 **Step 2: Fill Document Information**
+
 - **Title:** Give your document a clear name
   - Example: "Q4 2025 Financial Report"
   - Use keywords others might search for
@@ -149,6 +162,7 @@ Click "افزودن سند" (Add Document) button
   - Multiple files: Upload one at a time
 
 **Step 3: Review & Save**
+
 ```
 Click "ذخیره سند" (Save Document)
 Wait for confirmation message
@@ -156,6 +170,7 @@ Document now searchable and available to authorized users
 ```
 
 **Upload Tips:**
+
 - ✅ Use descriptive titles
 - ✅ Add category for better organization
 - ✅ Upload one file at a time for large files
@@ -165,6 +180,7 @@ Document now searchable and available to authorized users
 #### View Your Documents
 
 **Access Documents:**
+
 1. Click **"اسناد"** (Documents) in navigation
 2. You'll see all documents you can access
 3. Sort by:
@@ -173,6 +189,7 @@ Document now searchable and available to authorized users
    - Category (grouped)
 
 **Document Actions:**
+
 - **Click document** → View full content
 - **Search icon** → Find specific document
 - **Share icon** → Share with colleagues
@@ -181,6 +198,7 @@ Document now searchable and available to authorized users
 #### Search Documents
 
 **Quick Search:**
+
 ```
 1. Click search bar at top
 2. Type keyword or phrase
@@ -189,6 +207,7 @@ Document now searchable and available to authorized users
 ```
 
 **Advanced Search:**
+
 ```
 1. Go to Documents → Advanced Search
 2. Filter by:
@@ -201,6 +220,7 @@ Document now searchable and available to authorized users
 ```
 
 **Search Tips:**
+
 - Use exact phrases: `"quarterly report"` (with quotes)
 - Use wildcards: `budget*` finds budget, budgeting, etc.
 - Use operators:
@@ -217,6 +237,7 @@ Document now searchable and available to authorized users
 The AI Chat lets you ask questions about your documents and get instant, verified answers.
 
 **How It Works:**
+
 1. Click **AI Chat** tab (usually on left sidebar)
 2. Type your question in the message box
 3. Press **Enter** or click **Send** (ارسال)
@@ -227,6 +248,7 @@ The AI Chat lets you ask questions about your documents and get instant, verifie
    - **Source references** (which document)
 
 **Example Questions:**
+
 - "What is the Q4 budget allocation?"
 - "Who is the project manager for XYZ project?"
 - "When is the company meeting scheduled?"
@@ -237,19 +259,21 @@ The AI Chat lets you ask questions about your documents and get instant, verifie
 
 **Confidence Levels:**
 
-| Level | Meaning | Action |
-|-------|---------|--------|
-| **High ✅** | AI found clear answer in documents | Trust the response |
-| **Medium ⚠️** | AI has answer but with some uncertainty | Verify with original document |
-| **Low ❌** | AI has limited confidence | Check original documents yourself |
+| Level         | Meaning                                 | Action                            |
+| ------------- | --------------------------------------- | --------------------------------- |
+| **High ✅**   | AI found clear answer in documents      | Trust the response                |
+| **Medium ⚠️** | AI has answer but with some uncertainty | Verify with original document     |
+| **Low ❌**    | AI has limited confidence               | Check original documents yourself |
 
 **Source Quotes:**
+
 - AI provides exact quotes from your documents
 - Quotes are highlighted in blue
 - Click quote to jump to source document
 - Verify quote matches your documents
 
 **Hallucination Detection:**
+
 - If AI makes up information, it will be flagged
 - System checks all quotes for accuracy
 - You're notified if verification fails
@@ -258,12 +282,14 @@ The AI Chat lets you ask questions about your documents and get instant, verifie
 #### Chat History
 
 **Accessing Previous Chats:**
+
 1. Click **"Chat Threads"** (if available)
 2. See all your previous conversations
 3. Click to continue a conversation
 4. Or start a new chat
 
 **Organizing Chats:**
+
 - Pin important chats
 - Archive old chats
 - Search chat history
@@ -276,6 +302,7 @@ The AI Chat lets you ask questions about your documents and get instant, verifie
 #### Full-Text Search
 
 **Basic Search:**
+
 ```
 1. Use search bar at top of page
 2. Type keywords
@@ -286,6 +313,7 @@ The AI Chat lets you ask questions about your documents and get instant, verifie
 ```
 
 **Search Results:**
+
 - **Title** - Document name
 - **Category** - Type of document
 - **Excerpt** - Preview of matching content
@@ -296,10 +324,12 @@ The AI Chat lets you ask questions about your documents and get instant, verifie
 This advanced search understands meaning, not just keywords:
 
 **How It's Different:**
+
 - **Traditional:** Search "car" finds "car", "auto", "vehicle" only if written
 - **Vector Search:** Understands "red automobile" matches question about cars
 
 **Using Vector Search:**
+
 ```
 1. Ask a question in natural language
 2. AI finds documents with similar meaning
@@ -310,12 +340,14 @@ This advanced search understands meaning, not just keywords:
 #### Saved Searches
 
 **Create a Saved Search:**
+
 1. Perform a search
 2. Click "Save Search" button
 3. Give it a name (e.g., "Q4 Reports")
 4. Click "Save"
 
 **Using Saved Searches:**
+
 - Quick access from dashboard
 - Auto-run when clicked
 - Edit or delete anytime
@@ -329,12 +361,14 @@ This advanced search understands meaning, not just keywords:
 #### Share with Colleagues
 
 **Step 1: Select Document**
+
 ```
 Click on document
 Look for "Share" button
 ```
 
 **Step 2: Choose Recipients**
+
 ```
 Enter colleague's email address(es)
 Or select from suggested list
@@ -342,13 +376,14 @@ Or select from suggested list
 
 **Step 3: Set Permissions**
 
-| Permission | Can Read | Can Edit | Can Delete | Can Share |
-|-----------|----------|----------|-----------|-----------|
-| **Viewer** | ✅ | ❌ | ❌ | ❌ |
-| **Editor** | ✅ | ✅ | ❌ | ❌ |
-| **Manager** | ✅ | ✅ | ✅ | ✅ |
+| Permission  | Can Read | Can Edit | Can Delete | Can Share |
+| ----------- | -------- | -------- | ---------- | --------- |
+| **Viewer**  | ✅       | ❌       | ❌         | ❌        |
+| **Editor**  | ✅       | ✅       | ❌         | ❌        |
+| **Manager** | ✅       | ✅       | ✅         | ✅        |
 
 **Step 4: Send**
+
 ```
 Add optional message
 Click "Share"
@@ -358,15 +393,18 @@ Colleague receives notification
 #### Document Permissions
 
 **Owner (You):**
+
 - Always can: Read, Edit, Delete, Share, Change Permissions
 - Can revoke access anytime
 
 **Department (HR/Finance/etc):**
+
 - Set by administrator
 - Usually: Can Read
 - Some may: Can Edit
 
 **Organization (Everyone):**
+
 - If marked "Public"
 - Usually: Can Read only
 - Cannot Edit or Delete
@@ -374,6 +412,7 @@ Colleague receives notification
 ### Version History
 
 **Viewing Document History:**
+
 1. Open document
 2. Click **"Version History"** (clock icon)
 3. See all versions:
@@ -382,6 +421,7 @@ Colleague receives notification
    - Change summary
 
 **Restoring Previous Version:**
+
 1. Click version you want to restore
 2. Click **"Restore This Version"**
 3. Confirm action
@@ -394,6 +434,7 @@ Colleague receives notification
 ### Starting a Conversation
 
 **Begin Chat:**
+
 1. Click **"AI Chat"** in sidebar
 2. See conversation history (if any)
 3. Type your question at bottom
@@ -402,6 +443,7 @@ Colleague receives notification
 ### Chat Types
 
 **Information Questions:**
+
 ```
 "What is the company vacation policy?"
 "When is the next board meeting?"
@@ -409,6 +451,7 @@ Colleague receives notification
 ```
 
 **Analysis Questions:**
+
 ```
 "Summarize the quarterly results"
 "Compare Q3 and Q4 performance"
@@ -416,6 +459,7 @@ Colleague receives notification
 ```
 
 **Definition Questions:**
+
 ```
 "What is our product XYZ?"
 "Explain the new approval process"
@@ -425,11 +469,13 @@ Colleague receives notification
 ### Following Up
 
 **Ask Follow-Up Questions:**
+
 - Reference previous answer: "Tell me more about that"
 - Ask differently: "Can you explain with an example?"
 - Explore deeper: "What else should I know about this?"
 
 **Example Conversation:**
+
 ```
 User: "What is our return policy?"
 AI:   "Based on the policy document..."
@@ -447,20 +493,21 @@ AI:   "After 30 days, items are..."
 
 ### Role Comparison
 
-| Feature | Viewer | Editor | Manager | Admin |
-|---------|--------|--------|---------|-------|
-| **View Documents** | Own Dept | Own Dept | All | All |
-| **Upload Documents** | ❌ | ✅ | ✅ | ✅ |
-| **Edit Documents** | ❌ | Own Only | All | All |
-| **Delete Documents** | ❌ | Own Only | All | All |
-| **Share Documents** | ❌ | ✅ | ✅ | ✅ |
-| **Use AI Chat** | ✅ | ✅ | ✅ | ✅ |
-| **Manage Users** | ❌ | ❌ | Dept Only | ✅ |
-| **Configure System** | ❌ | ❌ | ❌ | ✅ |
+| Feature              | Viewer   | Editor   | Manager   | Admin |
+| -------------------- | -------- | -------- | --------- | ----- |
+| **View Documents**   | Own Dept | Own Dept | All       | All   |
+| **Upload Documents** | ❌       | ✅       | ✅        | ✅    |
+| **Edit Documents**   | ❌       | Own Only | All       | All   |
+| **Delete Documents** | ❌       | Own Only | All       | All   |
+| **Share Documents**  | ❌       | ✅       | ✅        | ✅    |
+| **Use AI Chat**      | ✅       | ✅       | ✅        | ✅    |
+| **Manage Users**     | ❌       | ❌       | Dept Only | ✅    |
+| **Configure System** | ❌       | ❌       | ❌        | ✅    |
 
 ### Requesting Role Changes
 
 **Need More Permissions?**
+
 1. Contact your **Department Manager**
 2. Provide business justification
 3. Manager reviews and approves/denies
@@ -468,6 +515,7 @@ AI:   "After 30 days, items are..."
 5. Changes take effect immediately
 
 **Common Role Change Requests:**
+
 - Viewer → Editor: Need to upload documents
 - Editor → Manager: Managing team or department
 - Manager → Admin: System administration needed
@@ -479,6 +527,7 @@ AI:   "After 30 days, items are..."
 ### Password Security
 
 **Keep Your Password Safe:**
+
 - ✅ Use strong password (12+ characters)
 - ✅ Change password every 90 days
 - ✅ Never share with anyone
@@ -488,6 +537,7 @@ AI:   "After 30 days, items are..."
 - ❌ Don't reuse old passwords
 
 **Changing Your Password:**
+
 1. Click your profile (top-right)
 2. Click **"Change Password"**
 3. Enter current password
@@ -497,6 +547,7 @@ AI:   "After 30 days, items are..."
 ### Document Sensitivity
 
 **Classify Documents Properly:**
+
 ```
 Public:      No confidentiality needed
 Internal:    For employees only
@@ -505,6 +556,7 @@ Confidential: Management/Legal only
 ```
 
 **Check Before Uploading:**
+
 - ✅ No customer data
 - ✅ No financial details (if marked public)
 - ✅ No passwords or API keys
@@ -513,6 +565,7 @@ Confidential: Management/Legal only
 ### Secure Browsing
 
 **Best Practices:**
+
 - ✅ Always use HTTPS (lock icon in address bar)
 - ✅ Log out when done (top-right menu)
 - ✅ Close tab/window when done
@@ -529,6 +582,7 @@ Confidential: Management/Legal only
 ### Login Issues
 
 **Problem: "Invalid Email or Password"**
+
 ```
 Solution:
 1. Verify CAPS LOCK is off
@@ -540,6 +594,7 @@ Solution:
 ```
 
 **Problem: "Account Locked"**
+
 ```
 Solution:
 1. Wait 15 minutes
@@ -549,6 +604,7 @@ IT can: Check logs, verify identity, unlock account
 ```
 
 **Problem: "Too Many Login Attempts"**
+
 ```
 Solution:
 1. Wait 1 hour
@@ -560,6 +616,7 @@ Solution:
 ### Document Issues
 
 **Problem: "Cannot Upload Document"**
+
 ```
 Solution:
 1. Check file size (max 100 MB)
@@ -570,6 +627,7 @@ Solution:
 ```
 
 **Problem: "Document Appears Blank"**
+
 ```
 Solution:
 1. Wait for document to fully load (progress bar)
@@ -580,6 +638,7 @@ Solution:
 ```
 
 **Problem: "Cannot Find Document"**
+
 ```
 Solution:
 1. Check you have access to document
@@ -591,17 +650,19 @@ Solution:
 
 ### Chat Issues
 
-**Problem: "AI Returns Mock Response"**
+**Problem: "AI Not Connected (Mock Mode)"**
+
 ```
-This means: Real AI isn't configured yet
+This means: AI configuration is missing in your .env file.
 Solution:
-1. Contact your IT administrator
-2. Request AI integration setup
-3. Administrator needs Google Cloud credentials
-4. Once set up, real AI responses will work
+1. Use the "Easy Mode" (Option 1 in Setup Guide).
+2. Get a free Gemini API Key from Google AI Studio.
+3. Add it to GOOGLE_API_KEY in your server/.env file.
+4. Restart the app. Real AI answers will now work instantly.
 ```
 
 **Problem: "Chat Takes Too Long"**
+
 ```
 Solution:
 1. Check internet connection
@@ -612,6 +673,7 @@ Solution:
 ```
 
 **Problem: "AI Gave Wrong Answer"**
+
 ```
 Solution:
 1. Check "Confidence Level"
@@ -621,13 +683,12 @@ Solution:
 5. Use AI response as starting point, verify details
 ```
 
----
-
 ## Advanced Features
 
 ### Exporting Data
 
 **Export Document:**
+
 1. Open document
 2. Click menu (⋮) button
 3. Click **"Export As"**
@@ -635,14 +696,30 @@ Solution:
 5. Download starts
 
 **Export Chat:**
+
 1. In chat, click menu button
 2. Click **"Export Conversation"**
 3. Choose format: PDF, TXT, JSON
 4. Download starts
 
+### Cloud Backup (Admins Only)
+
+If your system is configured for **Local Mode**, you will see a **"☁️ Cloud Backup"** button in the header.
+
+**To Backup Your Data:**
+
+1. Click the **"پشتیبان‌گیری ابری"** (Cloud Backup) button.
+2. The system will create a snapshot of your `vectors.db` (containing users, history, and metadata).
+3. The snapshot is uploaded to the designated Google Drive folder.
+4. Use this before migrating servers or as a daily safety measure.
+
+> [!NOTE]
+> If you are using Supabase, your data is already stored in the cloud, and this button may not be necessary or visible.
+
 ### Bulk Actions
 
 **Select Multiple Documents:**
+
 1. Click checkbox next to first document
 2. Hold Ctrl and click other documents
 3. Choose action from menu:
@@ -654,6 +731,7 @@ Solution:
 ### Collaboration
 
 **Co-editing (if enabled):**
+
 1. Open document
 2. Invite others to edit (Share button)
 3. All edits show in real-time
@@ -661,6 +739,7 @@ Solution:
 5. Comments appear as bubbles
 
 **Comments:**
+
 1. Highlight text
 2. Click **"Add Comment"**
 3. Type comment
@@ -673,30 +752,33 @@ Solution:
 
 ### Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| **Ctrl+F** | Find in document |
-| **Ctrl+S** | Save document |
-| **Ctrl+A** | Select all text |
-| **Ctrl+C** | Copy |
-| **Ctrl+V** | Paste |
-| **Enter** | Send chat message |
+| Shortcut        | Action              |
+| --------------- | ------------------- |
+| **Ctrl+F**      | Find in document    |
+| **Ctrl+S**      | Save document       |
+| **Ctrl+A**      | Select all text     |
+| **Ctrl+C**      | Copy                |
+| **Ctrl+V**      | Paste               |
+| **Enter**       | Send chat message   |
 | **Shift+Enter** | New line in message |
 
 ### Productivity Tips
 
 **Search Efficiently:**
+
 - Use exact phrases with quotes: `"project timeline"`
 - Use wildcards: `report*` finds report, reports, reporting
 - Combine terms: `project AND timeline AND 2025`
 
 **Organize Documents:**
+
 - Use consistent naming: `[Date] Subject` e.g., `[2025-02] Budget Report`
 - Add descriptions when uploading
 - Use appropriate categories
 - Share strategically
 
 **Chat Effectively:**
+
 - Ask specific questions
 - Include context if needed
 - Follow up naturally
@@ -708,20 +790,20 @@ Solution:
 
 ### Support Options
 
-| Issue | Contact | Response Time |
-|-------|---------|---------------|
-| **Login Problem** | IT Help Desk | < 1 hour |
-| **Cannot Access Doc** | Document Owner | < 24 hours |
-| **AI Not Working** | IT Help Desk | < 2 hours |
-| **General Question** | Team Lead | < 1 hour |
-| **Bug Report** | IT Help Desk | < 24 hours |
+| Issue                 | Contact        | Response Time |
+| --------------------- | -------------- | ------------- |
+| **Login Problem**     | IT Help Desk   | < 1 hour      |
+| **Cannot Access Doc** | Document Owner | < 24 hours    |
+| **AI Not Working**    | IT Help Desk   | < 2 hours     |
+| **General Question**  | Team Lead      | < 1 hour      |
+| **Bug Report**        | IT Help Desk   | < 24 hours    |
 
 ### Self-Help Resources
 
 - [README.md](README.md) - System overview
 - [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Command reference
 - [DEPLOYMENT_READY.md](DEPLOYMENT_READY.md) - For administrators
-- [server/docs/RUNBOOK_*.md](server/docs/) - Operational guides
+- [server/docs/RUNBOOK\_\*.md](server/docs/) - Operational guides
 
 ---
 
@@ -729,14 +811,14 @@ Solution:
 
 **To Use AIKB, You Need:**
 
-| Requirement | Minimum | Recommended |
-|-------------|---------|-------------|
-| **OS** | Windows 7+ | Windows 10+ |
-| **Browser** | Chrome 60+ | Chrome/Firefox/Safari latest |
-| **Internet** | 2 Mbps | 5+ Mbps |
-| **Screen** | 1024x768 | 1920x1080 |
-| **RAM** | 2 GB | 4+ GB |
-| **Storage** | 100 MB free | 500 MB free |
+| Requirement  | Minimum     | Recommended                  |
+| ------------ | ----------- | ---------------------------- |
+| **OS**       | Windows 7+  | Windows 10+                  |
+| **Browser**  | Chrome 60+  | Chrome/Firefox/Safari latest |
+| **Internet** | 2 Mbps      | 5+ Mbps                      |
+| **Screen**   | 1024x768    | 1920x1080                    |
+| **RAM**      | 2 GB        | 4+ GB                        |
+| **Storage**  | 100 MB free | 500 MB free                  |
 
 ---
 

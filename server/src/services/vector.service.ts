@@ -1,10 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import { LocalMetadataService } from './localMetadata.service.js';
+import type { MetadataStore } from './metadata.store.js';
 import { VertexAI } from '@google-cloud/vertexai';
 import { Logger } from '../utils/logger.js';
 import { VectorSearchCache, MetadataCache } from '../utils/cache.util.js';
 import { cacheInvalidation } from '../utils/cache-invalidation.js';
+import { env } from '../config/env.js';
 
 interface VectorItem {
   id: string;
@@ -23,44 +24,47 @@ interface VectorItem {
 }
 
 export class VectorService {
-  private localMetadataService: LocalMetadataService;
-  private vertexAI: VertexAI;
-  private indexName: string;
-  private indexEndpoint: string;
+  private metadataStore: MetadataStore;
+  private vertexAI?: VertexAI;
+  private indexName?: string;
+  private indexEndpoint?: string;
   private initialized: boolean = false;
   private searchCache: VectorSearchCache;
   private metadataCache: MetadataCache;
+  private isLocal: boolean;
 
-  constructor(private projectId: string, private location: string, storagePath?: string) {
-    // CRITICAL: Validate Vertex AI connectivity at startup
-    if (!projectId) {
-      throw new Error(
-        'FATAL: GOOGLE_CLOUD_PROJECT_ID is required for Vector Search. ' +
-        'Vertex AI cannot initialize without valid GCP credentials.'
-      );
+  constructor(
+    private projectId: string, 
+    private location: string, 
+    metadataStore: MetadataStore,
+    isLocalOverride?: boolean
+  ) {
+    this.isLocal = isLocalOverride !== undefined ? isLocalOverride : env.VECTOR_STORE_MODE === 'LOCAL';
+
+    if (!this.isLocal) {
+      if (!projectId) {
+        throw new Error(
+          'FATAL: GOOGLE_CLOUD_PROJECT_ID is required for Vertex AI Vector Search.'
+        );
+      }
+
+      this.vertexAI = new VertexAI({
+        project: projectId,
+        location: location
+      });
+
+      this.indexName = `projects/${projectId}/locations/${location}/indexes/km-vectors`;
+      this.indexEndpoint = `projects/${projectId}/locations/${location}/indexEndpoints/km-endpoint`;
     }
 
-    if (process.env.NODE_ENV !== 'test' && !process.env.GOOGLE_CLOUD_CREDENTIALS_PATH) {
-      Logger.warn('⚠️ GOOGLE_CLOUD_CREDENTIALS_PATH not set - Vertex AI may fail at runtime');
-    }
-
-    // Initialize Vertex AI client
-    this.vertexAI = new VertexAI({
-      project: projectId,
-      location: location
-    });
-
-    // Vertex AI Vector Search index configuration
-    this.indexName = `projects/${projectId}/locations/${location}/indexes/km-vectors`;
-    this.indexEndpoint = `projects/${projectId}/locations/${location}/indexEndpoints/km-endpoint`;
-
-    this.localMetadataService = new LocalMetadataService(storagePath);
+    this.metadataStore = metadataStore;
     this.searchCache = new VectorSearchCache();
     this.metadataCache = new MetadataCache();
 
-    Logger.info('VectorService: Initialized with Vertex AI Vector Search', {
+    Logger.info(`VectorService: Initialized in ${this.isLocal ? 'LOCAL' : 'VERTEX'} mode`, {
       projectId,
       location,
+      mode: env.VECTOR_STORE_MODE,
       timestamp: new Date().toISOString()
     });
 
@@ -112,7 +116,7 @@ export class VectorService {
         }
       }
 
-      const metadata = this.localMetadataService.getAllOverrides();
+      const metadata = this.metadataStore.getAllOverrides();
       const localCount = Object.values(metadata).filter(entry => (entry as any).__vectorEntry).length;
       return localCount;
     } catch (error) {
@@ -159,7 +163,6 @@ export class VectorService {
     }
 
     try {
-      // Check cache first
       const cacheKey = VectorSearchCache.generateKey(
         params.embedding,
         params.filters.department,
@@ -172,8 +175,10 @@ export class VectorService {
         return cached;
       }
 
-      // Query Vertex AI if cache miss
-      const results = await this.queryVertexAI(params);
+      // BRANCH: Local SQLite vs Vertex AI
+      const results = this.isLocal 
+        ? await this.queryLocal(params)
+        : await this.queryVertexAI(params);
 
       // Cache the results
       if (results.length > 0) {
@@ -187,33 +192,95 @@ export class VectorService {
     }
   }
 
+  private cosineSimilarity(vecA: number[], vecB: number[]): number {
+    if (!vecA || !vecB || vecA.length !== vecB.length || vecA.length === 0) return 0;
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    for (let i = 0; i < vecA.length; i++) {
+      const a = vecA[i] ?? 0;
+      const b = vecB[i] ?? 0;
+      dotProduct += a * b;
+      normA += a * a;
+      normB += b * b;
+    }
+    const mag = Math.sqrt(normA) * Math.sqrt(normB);
+    return mag === 0 ? 0 : dotProduct / mag;
+  }
+
+  private async queryLocal(params: {
+    embedding: number[];
+    topK: number;
+    filters?: { department?: string; role?: string };
+  }): Promise<any[]> {
+    const { embedding, topK, filters = {} } = params;
+    
+    // 1. Get all vector entries from metadata store
+    const allVectors = await this.getAllVectors();
+    
+    // 2. Perform RBAC filtering
+    // This replicates the logic applied by Vertex AI filtering at retrieval time
+    const filtered = allVectors.filter(v => {
+      const docDept = (v.metadata as any).department;
+      const docRoles = String((v.metadata as any).roles || 'user').split(',').map((r: string) => r.trim());
+      
+      // Admin bypass
+      if (filters.role === 'ADMIN') return true;
+      
+      const deptMatch = !docDept || docDept === 'General' || docDept === filters.department;
+      const roleMatch = docRoles.includes(filters.role || 'user') || docRoles.includes('VIEWER');
+      
+      return deptMatch && roleMatch;
+    });
+
+    // 3. Compute similarity and sort
+    const scored = filtered.map(v => ({
+      id: v.id,
+      score: this.cosineSimilarity(embedding, v.values),
+      metadata: v.metadata
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+
+    Logger.info('VectorService: Local RBAC-filtered query executed', {
+      totalVectors: allVectors.length,
+      filteredCount: filtered.length,
+      topKCount: scored.length,
+      bestScore: scored[0]?.score || 0
+    });
+
+    return scored;
+  }
+
   private async upsertToVertexAI(items: VectorItem[]): Promise<void> {
     if (items.length === 0) return;
 
     try {
       const storeVectorEntries = async () => {
-        await Promise.all(items.flatMap(item => {
-          const docId = item.metadata.docId || item.id;
-          return [
-            this.localMetadataService.setOverride(docId, {
-              ...item.metadata,
-              docId,
-              id: item.id
-            }),
-            this.localMetadataService.setOverride(item.id, {
-              ...item.metadata,
-              docId,
-              id: item.id,
-              values: item.values,
-              __vectorEntry: true
-            })
-          ];
-        }));
+        for (const item of items) {
+          const itemMetadata = item.metadata;
+          if (!itemMetadata) continue;
+          
+          const docId = itemMetadata.docId || item.id;
+          await this.metadataStore.setOverride(docId, {
+            ...itemMetadata,
+            docId,
+            id: item.id
+          });
+          await this.metadataStore.setOverride(item.id, {
+            ...itemMetadata,
+            docId,
+            id: item.id,
+            values: item.values,
+            __vectorEntry: true
+          });
+        }
       };
 
-      if (process.env.NODE_ENV === 'test') {
+      // In LOCAL mode or TEST mode, we only store vectors locally in SQLite
+      if (this.isLocal || process.env.NODE_ENV === 'test') {
         await storeVectorEntries();
-        Logger.debug('VectorService: Skipping Vertex AI upsert in test mode', { count: items.length });
+        Logger.debug(`VectorService: Stored ${items.length} vectors in local SQLite storage`);
         return;
       }
 
@@ -242,7 +309,7 @@ export class VectorService {
 
       // Call Vertex AI Index service to upsert
       // This uses gRPC under the hood through the SDK
-      const indexServiceClient = await (this.vertexAI as any).getIndexServiceClient?.();
+      const indexServiceClient = await (this.vertexAI as any)?.getIndexServiceClient?.();
       
       if (!indexServiceClient) {
         throw new Error(
@@ -317,7 +384,7 @@ export class VectorService {
       });
 
       // Call Vertex AI Index service
-      const indexServiceClient = await (this.vertexAI as any).getIndexServiceClient?.();
+      const indexServiceClient = await (this.vertexAI as any)?.getIndexServiceClient?.();
       
       if (!indexServiceClient) {
         throw new Error(
@@ -377,7 +444,7 @@ export class VectorService {
       }
 
       // Delete from Vertex AI (if available)
-      const indexServiceClient = await (this.vertexAI as any).getIndexServiceClient?.();
+      const indexServiceClient = await (this.vertexAI as any)?.getIndexServiceClient?.();
       if (indexServiceClient) {
         // Call Vertex AI API to remove datapoints
         // const response = await indexServiceClient.removeDatapoints({
@@ -392,13 +459,13 @@ export class VectorService {
       }
 
       // Remove from local metadata storage
-      await this.localMetadataService.removeOverride(docId);
-      const overrides = this.localMetadataService.getAllOverrides();
+      await this.metadataStore.removeOverride(docId);
+      const overrides = this.metadataStore.getAllOverrides();
       const vectorKeysToRemove = Object.entries(overrides)
         .filter(([, value]) => (value as any).__vectorEntry && (value as any).docId === docId)
         .map(([key]) => key);
       if (vectorKeysToRemove.length > 0) {
-        await this.localMetadataService.removeOverrides(vectorKeysToRemove);
+        await this.metadataStore.removeOverrides(vectorKeysToRemove);
       }
 
       // Invalidate metadata cache
@@ -425,7 +492,7 @@ export class VectorService {
     try {
       // Retrieve all metadata from local storage
       // In production, this would be fetched from Vertex AI with pagination
-      const metadata = this.localMetadataService.getAllOverrides();
+      const metadata = this.metadataStore.getAllOverrides();
 
       const result: Record<string, any> = {};
       for (const [docId, data] of Object.entries(metadata)) {
@@ -456,7 +523,7 @@ export class VectorService {
       Logger.warn('VectorService: getAllVectors called - expensive operation at scale');
 
       // Retrieve from Vertex AI (if available)
-      const indexServiceClient = await (this.vertexAI as any).getIndexServiceClient?.();
+      const indexServiceClient = await (this.vertexAI as any)?.getIndexServiceClient?.();
       
       if (indexServiceClient) {
         // Would call: const response = await indexServiceClient.listDatapoints(...)
@@ -464,7 +531,7 @@ export class VectorService {
       }
 
       // Fallback: Return locally stored vector entries (metadata + values when available)
-      const metadata = this.localMetadataService.getAllOverrides();
+      const metadata = this.metadataStore.getAllOverrides();
       const vectors: VectorItem[] = [];
 
       for (const [docId, data] of Object.entries(metadata)) {
@@ -488,7 +555,7 @@ export class VectorService {
   async updateDocumentMetadata(docId: string, metadata: { title?: string; category?: string; sensitivity?: string; department?: string }) {
     try {
       // Update metadata in local storage
-      await this.localMetadataService.setOverride(docId, { ...metadata, docId });
+      await this.metadataStore.setOverride(docId, { ...metadata, docId });
       
       // Update metadata in Vertex AI
       // This would require querying for the docId vectors and updating them
@@ -498,10 +565,10 @@ export class VectorService {
         .map(v => v.id);
 
       if (vectorIdsToUpdate.length > 0) {
-        const overrides = this.localMetadataService.getAllOverrides();
+        const overrides = this.metadataStore.getAllOverrides();
         await Promise.all(vectorIdsToUpdate.map(vectorId => {
           const existing = overrides[vectorId] || {};
-          return this.localMetadataService.setOverride(vectorId, {
+          return this.metadataStore.setOverride(vectorId, {
             ...existing,
             ...metadata,
             docId,
@@ -510,7 +577,7 @@ export class VectorService {
           });
         }));
 
-        const indexServiceClient = await (this.vertexAI as any).getIndexServiceClient?.();
+        const indexServiceClient = await (this.vertexAI as any)?.getIndexServiceClient?.();
         if (indexServiceClient) {
           // Would call API to update datapoint metadata
           // const response = await indexServiceClient.updateDatapoints({
@@ -572,7 +639,14 @@ export class VectorService {
     try {
       // P1.1: Check Vertex AI index health
       // For now, assume healthy if service initialized
-      return { status: 'OK', message: 'Vertex AI Vector Search ready' };
+      const vertexHealth = { status: 'OK', message: 'Vertex AI Vector Search ready' };
+      
+      // P1.2: Check Metadata Store Health
+      if (this.metadataStore.checkHealth && !this.metadataStore.checkHealth()) {
+        return { status: 'ERROR', message: 'Metadata Store (SQLite) Unhealthy' };
+      }
+
+      return { status: 'OK', message: 'Services Operational' };
     } catch (e: any) {
       return { status: 'ERROR', message: e.message };
     }
@@ -583,21 +657,69 @@ export class VectorService {
     department: string;
     role: string;
   }): Promise<Array<{ id: string; title?: string; department?: string; category?: string; sensitivity?: string; owner?: string; link?: string }>> {
+    try {
+      // PERF FIX: Use DB-level filtering instead of loading all metadata
+      // If role is ADMIN, fetch all (paginated in future, strictly capped for now)
+      // If normal user, filter by department in DB
+      
+      const filterParams: any = {};
+      
+      if (params.role !== 'ADMIN') {
+        filterParams.department = params.department;
+      }
+
+      // Use the new listDocuments method if available (it is optional in interface)
+      if (this.metadataStore.listDocuments) {
+        const metadataList = await this.metadataStore.listDocuments(filterParams);
+        
+        return metadataList.map(data => {
+          const doc: any = {
+            id: data.id || data.docId, // fallback
+            title: data.title ?? 'Untitled'
+          };
+          if (data.department) doc.department = data.department;
+          if (data.category) doc.category = data.category;
+          if (data.sensitivity) doc.sensitivity = data.sensitivity;
+          if (data.owner) doc.owner = data.owner;
+          if (data.link) doc.link = data.link;
+          return doc;
+        });
+      } else {
+        // Fallback for MetadataStores that don't support listing (e.g. legacy)
+        // This path remains O(N) but ensures backward compatibility
+        Logger.warn('VectorService: MetadataStore does not support listDocuments, falling back to in-memory filtering');
+        return this.listDocumentsWithRBACLegacy(params);
+      }
+    } catch (e) {
+      Logger.error('VectorService: listDocumentsWithRBAC failed', { error: e });
+      return [];
+    }
+  }
+
+  // Legacy implementation for fallback
+  private async listDocumentsWithRBACLegacy(params: {
+    userId: string;
+    department: string;
+    role: string;
+  }): Promise<Array<{ id: string; title?: string; department?: string; category?: string; sensitivity?: string; owner?: string; link?: string }>> {
     const metadata = await this.getAllMetadata();
-    const documents = Object.entries(metadata).map(([id, data]) => ({
-      id,
-      title: data.title,
-      department: data.department,
-      category: data.category,
-      sensitivity: data.sensitivity,
-      owner: data.owner,
-      link: data.link
-    }));
+    const documents = Object.entries(metadata).map(([id, data]) => {
+      const doc: any = {
+        id,
+        title: data.title ?? 'Untitled'
+      };
+      if (data.department) doc.department = data.department;
+      if (data.category) doc.category = data.category;
+      if (data.sensitivity) doc.sensitivity = data.sensitivity;
+      if (data.owner) doc.owner = data.owner;
+      if (data.link) doc.link = data.link;
+      return doc;
+    });
 
     if (params.role === 'ADMIN') {
       return documents;
     }
 
-    return documents.filter(doc => doc.department === params.department);
+    return documents.filter((doc: any) => doc.department === params.department);
   }
 }

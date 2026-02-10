@@ -33,26 +33,25 @@ export const useStorage = () => {
       [docsResult, chatResult, backupResult] = results;
 
       let documents: unknown[] = [];
-      let chatHistory: unknown[] = [];
-
       if (typeof docsResult === 'string') {
         try {
-          const parsed = JSON.parse(docsResult);
-          if (Array.isArray(parsed)) documents = parsed;
+          documents = JSON.parse(docsResult);
         } catch (e) {
           console.error('STORAGE_CORRUPTION', { type: 'documents', error: e });
-          throw new Error('DOCUMENTS_CORRUPTED');
         }
+      } else {
+        documents = (docsResult as unknown[]) || [];
       }
 
+      let chatHistory: unknown[] = [];
       if (typeof chatResult === 'string') {
         try {
-          const parsed = JSON.parse(chatResult);
-          if (Array.isArray(parsed)) chatHistory = parsed;
+          chatHistory = JSON.parse(chatResult);
         } catch (e) {
           console.error('STORAGE_CORRUPTION', { type: 'chatHistory', error: e });
-          throw new Error('CHAT_CORRUPTED');
         }
+      } else {
+        chatHistory = (chatResult as unknown[]) || [];
       }
 
       return { documents, chatHistory, timestamp: Date.now() };
@@ -61,9 +60,9 @@ export const useStorage = () => {
       const message = error instanceof Error ? error.message : String(error);
       console.warn('STORAGE_LOAD_FAILED', { error: message });
 
-      if (typeof backupResult === 'string') {
+      if (backupResult) {
         try {
-          const backup = JSON.parse(backupResult);
+          const backup = backupResult as any;
           const recovered = {
             documents: Array.isArray(backup.docs) ? backup.docs : [],
             chatHistory: Array.isArray(backup.chat) ? backup.chat : [],
@@ -71,8 +70,8 @@ export const useStorage = () => {
           };
           
           await Promise.all([
-            set('aikb-documents', JSON.stringify(recovered.documents)),
-            set('aikb-chat-history', JSON.stringify(recovered.chatHistory))
+            set('aikb-documents', recovered.documents),
+            set('aikb-chat-history', recovered.chatHistory)
           ]);
           
           return recovered;
@@ -94,9 +93,9 @@ export const useStorage = () => {
     saveTimeoutRef.current = setTimeout(async () => {
       try {
         await Promise.all([
-           set('aikb-documents', JSON.stringify(docs)),
-           set('aikb-chat-history', JSON.stringify(chat)),
-           set('aikb-backup', JSON.stringify({ docs, chat, timestamp: Date.now() }))
+           set('aikb-documents', docs),
+           set('aikb-chat-history', chat),
+           set('aikb-backup', { docs, chat, timestamp: Date.now() })
         ]);
         console.log('STORAGE_PERSISTED');
       } catch (err) {

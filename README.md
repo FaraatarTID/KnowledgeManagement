@@ -4,13 +4,41 @@
 
 > AI-powered knowledge management with secure access, reliable document processing, and complete operational observability.
 
-AIKB is an enterprise knowledge management system combining semantic search, secure authentication, reliable uploads, and comprehensive monitoring.
+# 🤖 AI Knowledge Management
+
+A high-precision, RAG-based AI Knowledge Management system with Zero-Trust security and local vector search.
+
+---
+
+## 📚 Documentation Hub
+
+### 🏗️ For Administrators
+
+- **[⚡ Quick Start (5 Mins)](docs/admin/quick-start.md)** - Get running instantly with a Gemini API Key.
+- **[⚙️ Full Setup Guide](docs/admin/full-setup.md)** - Detailed Drive & AI configuration.
+- **[🌐 Deployment Guide](docs/admin/deployment-advanced.md)** - Production infrastructure (Docker, Nginx, SSL).
+
+### 📘 For Users
+
+- **[📖 User manual](docs/user/user-manual.md)** - How to use Chat, Documents, and Search.
+
+### 🛠️ For Developers & IT
+
+- **[🔍 Technical Reference](docs/technical/reference.md)** - API specs, CLI commands, and Env variables.
+- **[🚨 Troubleshooting Runbooks](docs/technical/runbooks/)** - Deep-dives into common issues.
+
+---
+
+## 🚀 Key Features
+
+authentication, reliable uploads, and comprehensive monitoring.
 
 ---
 
 ## Quick Links
 
 - 📖 [User Guide](USER_GUIDE.md) - For end users
+- 🚀 [Setup Guide](SETUP_GUIDE.md) - **Start Here!** (Google Drive & Admin Setup)
 - 🔧 [Developer Guide](QUICK_REFERENCE.md) - Quick commands
 - 🗂️ [Complete Summary](COMPLETE_PROJECT_SUMMARY.md) - All 15 Priority items
 - 🏛️ [Architecture Docs](docs/architecture/overview.md) - System boundaries & ADRs
@@ -32,8 +60,8 @@ AIKB is an enterprise knowledge management system combining semantic search, sec
 ### Prerequisites
 
 - Node.js 18+ and npm
-- Supabase account and credentials
-- Google Cloud/Vertex AI credentials (optional)
+- Google Cloud/Vertex AI credentials (optional but recommended for RAG)
+- **Supabase account** (optional - only needed for distributed multi-user deployments)
 
 ### Installation
 
@@ -45,8 +73,9 @@ cd C:\Faraatar-TID_Apps\KnowledgeManagement
 cd server
 npm install
 cp .env.example .env  # Configure environment variables
+# Note: If SUPABASE_URL is not set, the app defaults to Local Storage Mode (SQLite).
 
-# Install client  
+# Install client
 cd ../client
 npm install
 cp .env.example .env  # Configure environment variables
@@ -55,6 +84,7 @@ cp .env.example .env  # Configure environment variables
 ### Development
 
 **Terminal 1 - Start API Server:**
+
 ```bash
 cd server
 npm run dev
@@ -62,6 +92,7 @@ npm run dev
 ```
 
 **Terminal 2 - Start Frontend:**
+
 ```bash
 cd client
 npm run dev
@@ -69,6 +100,7 @@ npm run dev
 ```
 
 **Access Application:**
+
 - Frontend: http://localhost:3000
 - API Docs: http://localhost:3001/api/docs
 - API Health: http://localhost:3001/health
@@ -156,9 +188,10 @@ cd client && npm test   # Check the website (12 tests)
 - **AI Engine**: Google Gemini 2.5 (1M Context)
 - **Frontend**: Next.js 15 + React 19
 - **Backend**: Node.js + Express (Industrial Hardened)
+- **Database**: **Local-First Hybrid** (SQLite for local, Supabase for cloud sync)
+- **Cloud Backup**: Automated `vectors.db` sync to Google Drive
 - **Validation**: Zod (System-wide schemas)
 - **Security**: Argon2id + Helmet + CSRF Protection
-- **Database**: Atomic JSON Storage (Shared Locking) or Supabase
 - **Observability**: AsyncContext + Structured JSON Logging
 
 ---

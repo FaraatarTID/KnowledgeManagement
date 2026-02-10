@@ -8,16 +8,29 @@ const envSchema = z.object({
     .min(64, "JWT_SECRET must be at least 64 characters long (use: node -e 'console.log(require(\"crypto\").randomBytes(32).toString(\"hex\"))')")
     .regex(/^[a-f0-9]{64,}$/, "JWT_SECRET must be hex-encoded random bytes"),
   
-  // Google Cloud
-  GOOGLE_CLOUD_PROJECT_ID: z.string(),
+  // Google Cloud / AI Studio
+  GOOGLE_CLOUD_PROJECT_ID: z.string().optional(),
+  GOOGLE_API_KEY: z.string().optional(),
+  VECTOR_STORE_MODE: z.enum(['VERTEX', 'LOCAL']).default('LOCAL'),
   GCP_REGION: z.string().default('us-central1'),
-  GCP_KEY_FILE: z.string().default('key.json'),
+  GCP_KEY_FILE: z.string().default('google-key.json'),
   GOOGLE_DRIVE_FOLDER_ID: z.string(),
   
   // Database / Supabase
   SUPABASE_URL: z.string().url().or(z.literal('')).optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   
+  // Initial Admin Setup (Bootstrapping)
+  INITIAL_ADMIN_EMAIL: z.string().email().default('admin@aikb.com'),
+  INITIAL_ADMIN_PASSWORD: z.string()
+    .min(10, "INITIAL_ADMIN_PASSWORD must be at least 10 characters long")
+    .regex(/[A-Z]/, "INITIAL_ADMIN_PASSWORD must contain at least one uppercase letter")
+    .regex(/[a-z]/, "INITIAL_ADMIN_PASSWORD must contain at least one lowercase letter")
+    .regex(/[0-9]/, "INITIAL_ADMIN_PASSWORD must contain at least one number")
+    .regex(/[^A-Za-z0-9]/, "INITIAL_ADMIN_PASSWORD must contain at least one special character")
+    .default('Admin@123456'),
+  INITIAL_ADMIN_NAME: z.string().default('System Administrator'),
+
   // AI Config
   GEMINI_MODEL: z.string().default('gemini-2.5-flash-lite-001'),
   EMBEDDING_MODEL: z.string().default('text-embedding-004'),
@@ -45,11 +58,20 @@ const validateEnv = (): Env => {
     
     // Additional conditional logic
     if (parsed.NODE_ENV === 'production' || parsed.NODE_ENV === 'development') {
-       if (!parsed.SUPABASE_URL || !parsed.SUPABASE_SERVICE_ROLE_KEY || parsed.SUPABASE_URL === '') {
-          throw new Error('FATAL: Supabase credentials are required for identity management.');
+       if (parsed.VECTOR_STORE_MODE === 'VERTEX' && !parsed.GOOGLE_CLOUD_PROJECT_ID) {
+          throw new Error('GOOGLE_CLOUD_PROJECT_ID is mandatory when VECTOR_STORE_MODE is VERTEX.');
        }
-       if (parsed.GOOGLE_CLOUD_PROJECT_ID.includes('mock')) {
-          throw new Error('GOOGLE_CLOUD_PROJECT_ID cannot be a mock project in non-test environments.');
+       
+       if (parsed.VECTOR_STORE_MODE === 'LOCAL' && !parsed.GOOGLE_API_KEY) {
+          throw new Error('GOOGLE_API_KEY is mandatory when VECTOR_STORE_MODE is LOCAL (Easy Mode).');
+       }
+
+       if (!parsed.SUPABASE_URL || !parsed.SUPABASE_SERVICE_ROLE_KEY || parsed.SUPABASE_URL === '') {
+          console.warn('⚠️  Supabase credentials missing. Switching to LOCAL STORAGE MODE (SQLite).');
+       }
+       
+       if (parsed.GOOGLE_CLOUD_PROJECT_ID && parsed.GOOGLE_CLOUD_PROJECT_ID.includes('mock') && parsed.NODE_ENV === 'production') {
+          throw new Error('GOOGLE_CLOUD_PROJECT_ID cannot be a mock project in production.');
        }
     }
     

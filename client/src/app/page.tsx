@@ -29,6 +29,8 @@ export default function Home() {
     scrollToBottom();
   }, [messages]);
 
+  const [modelName, setModelName] = useState('Gemini 2.5 Flash');
+
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -38,8 +40,14 @@ export default function Home() {
           return;
         }
 
-        // Verify session with server (no local state required)
+        // Verify session with server
         await authApi.getMe();
+
+        // Fetch config for model name
+        const configRes = await api.get('/config');
+        if (configRes.data.model) {
+          setModelName(configRes.data.model);
+        }
       } catch (e) {
         console.error('Auth check failed', e);
         router.push('/login');
@@ -102,7 +110,7 @@ export default function Home() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl">
               <Bot size={14} className="text-blue-600" />
-              <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">Gemini 2.5 Flash</span>
+              <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">{modelName}</span>
             </div>
           </div>
         </header>

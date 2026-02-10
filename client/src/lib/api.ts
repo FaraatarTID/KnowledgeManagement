@@ -43,7 +43,7 @@ api.interceptors.response.use(
 export interface User {
   id: string;
   email?: string;
-  role?: 'ADMIN' | 'MANAGER' | 'VIEWER' | string;
+  role?: 'ADMIN' | 'MANAGER' | 'EDITOR' | 'VIEWER' | string;
   [key: string]: unknown;
 }
 

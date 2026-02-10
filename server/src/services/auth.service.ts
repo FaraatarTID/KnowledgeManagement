@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import * as argon2 from 'argon2';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -15,19 +16,28 @@ export interface AuthResult {
 
 export class AuthService {
   private supabase: any; // Pooled Supabase client
+  private sqlite?: any; // SqliteMetadataService
+  private isLocalMode: boolean = false;
   // Pre-calculated hash for timing attack mitigation
   private static readonly DUMMY_HASH = '$argon2id$v=19$m=65536,t=3,p=1$745p5p5p5p5p5p5p5p5p5w$p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5p5';
 
-  constructor() {
+  constructor(sqlite?: any) {
+    this.sqlite = sqlite;
     const url = env.SUPABASE_URL;
     const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!url || !key) {
+    if (!url || !key || url === '') {
+      if (this.sqlite) {
+        this.isLocalMode = true;
+        Logger.info('AuthService: Supabase credentials missing. Initialized in LOCAL MODE (SQLite).');
+        return;
+      }
+      
       if (env.NODE_ENV === 'test') {
         this.supabase = {} as any;
         return;
       }
-      throw new Error('FATAL: Supabase credentials (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are missing. Authentication cannot function.');
+      throw new Error('FATAL: Supabase credentials and Local Storage both unavailable.');
     }
 
     const baseClient = createClient(url, key);
@@ -41,6 +51,88 @@ export class AuthService {
 
   /**
    * Validates user credentials with constant-time comparison and account lockout.
+   */
+  async validateCredentials(email: string, password: string): Promise<User | null> {
+    const MIN_EXEC_TIME = 500; // 500ms minimum floor
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    const startTarget = Date.now();
+    
+    try {
+      const randomJitter = crypto.randomInt(10, 50); 
+      await new Promise(resolve => setTimeout(resolve, randomJitter));
+      
+      let userData: any = null;
+
+      if (this.isLocalMode) {
+        userData = this.sqlite.getDatabase()
+          .prepare('SELECT id, email, name, role, department, status, password_hash, failed_login_attempts, locked_until FROM users WHERE email = ?')
+          .get(normalizedEmail);
+      } else {
+        const { data } = await this.supabase
+          .from('users')
+          .select('id, email, name, role, department, status, password_hash, failed_login_attempts, locked_until')
+          .eq('email', normalizedEmail)
+          .single();
+        userData = data;
+      }
+
+      // Check for lockout
+      if (userData && userData.locked_until && new Date(userData.locked_until) > new Date()) {
+        await this.verifyPassword(password, AuthService.DUMMY_HASH);
+        await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
+        return null;
+      }
+
+      const hashToVerify = !userData ? AuthService.DUMMY_HASH : userData.password_hash;
+      const isValid = await this.verifyPassword(password, hashToVerify);
+
+      if (isValid && userData && String(userData.status).toLowerCase() === 'inactive') {
+        await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
+        return null;
+      }
+
+      // Handle failure
+      if (!isValid && userData) {
+        const newAttempts = (userData.failed_login_attempts || 0) + 1;
+        const updates: any = { failed_login_attempts: newAttempts };
+
+        if (newAttempts >= 5) {
+          updates.locked_until = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        }
+
+        if (this.isLocalMode) {
+          this.sqlite.getDatabase()
+            .prepare('UPDATE users SET failed_login_attempts = ?, locked_until = ? WHERE id = ?')
+            .run(updates.failed_login_attempts, updates.locked_until, userData.id);
+        } else {
+          await this.supabase.from('users').update(updates).eq('id', userData.id);
+        }
+      }
+
+      // Handle success
+      if (isValid && userData) {
+        if (this.isLocalMode) {
+           this.sqlite.getDatabase()
+             .prepare('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?')
+             .run(userData.id);
+        } else {
+          await this.supabase.from('users').update({ failed_login_attempts: 0, locked_until: null }).eq('id', userData.id);
+        }
+      }
+
+      await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
+      return isValid && userData ? { ...userData, password_hash: undefined } as User : null;
+
+    } catch (err) {
+      Logger.error('Auth: validateCredentials error', { error: err });
+      await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
+      return null;
+    }
+  }
+
+  /**
+   * Validates user credentials with constant-time comparison and account lockout.
    * Mitigates timing attacks and brute force by:
    * 1. Adding jitter BEFORE any computation (not after)
    * 2. Maintaining minimum execution time (500ms)
@@ -49,118 +141,8 @@ export class AuthService {
    * 
    * CRITICAL FIX: Jitter added at START to prevent statistical timing analysis
    */
-  async validateCredentials(email: string, password: string): Promise<User | null> {
-    const MIN_EXEC_TIME = 500; // 500ms minimum floor
-    const normalizedEmail = email.toLowerCase().trim();
-    
-    // Check if constant-time verification is enabled (feature flag)
-    const useConstantTime = featureFlags.isEnabled('priority_1_3_constant_time_auth', undefined, env.NODE_ENV);
-    
-    if (!useConstantTime) {
-      // Fast auth path (for testing/rollback)
-      return await this.validateCredentialsFast(normalizedEmail, password);
-    }
-    
-    // STEP 1: Add random jitter BEFORE computation (this is the critical fix)
-    const randomJitter = crypto.randomInt(10, 50); // 0-50ms random delay
-    const startTarget = Date.now();
-    
-    try {
-      // Add initial jitter to obscure timing
-      await new Promise(resolve => setTimeout(resolve, randomJitter));
-      
-      const normalizedEmail = email.toLowerCase().trim();
-
-      // Query user (database query timing still varies, but jitter already applied)
-      const { data, error } = await this.supabase
-        .from('users')
-        .select('id, email, name, role, department, status, password_hash, failed_login_attempts, locked_until')
-        .eq('email', normalizedEmail)
-        .single();
-
-      // Check if account is locked
-      if (data && data.locked_until && new Date(data.locked_until) > new Date()) {
-        Logger.warn(`Auth: Login attempt on locked account - ${normalizedEmail}`);
-        // Still verify dummy hash to maintain constant time
-        await this.verifyPassword(password, AuthService.DUMMY_HASH);
-        await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
-        return null;
-      }
-
-      // Constant-time password verification
-      // If user exists: verify actual hash
-      // If user doesn't exist: verify dummy hash (same time)
-      const hashToVerify = error || !data 
-        ? AuthService.DUMMY_HASH 
-        : data.password_hash;
-
-      const isValid = await this.verifyPassword(password, hashToVerify);
-
-      // Check if user is active AFTER hash verification
-      if (isValid && !error && data && data.status === 'Inactive') {
-        Logger.warn(`Auth: Login attempt on inactive account - ${normalizedEmail}`);
-        await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
-        return null;
-      }
-
-      // Handle failed login - increment attempt counter
-      if (!isValid && data) {
-        const newAttempts = (data.failed_login_attempts || 0) + 1;
-        const updates: any = { failed_login_attempts: newAttempts };
-
-        // Lock account after 5 failed attempts
-        if (newAttempts >= 5) {
-          const lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-          updates.locked_until = lockUntil.toISOString();
-          Logger.warn(`Auth: Account locked due to failed attempts - ${normalizedEmail}`);
-        }
-
-        await this.supabase
-          .from('users')
-          .update(updates)
-          .eq('id', data.id);
-      }
-
-      // Handle successful login - reset attempt counter and unlock
-      if (isValid && data) {
-        await this.supabase
-          .from('users')
-          .update({ failed_login_attempts: 0, locked_until: null })
-          .eq('id', data.id);
-        Logger.info(`Auth: Successful login - ${normalizedEmail}`);
-      } else if (!isValid && data) {
-        Logger.warn(`Auth: Failed login - ${normalizedEmail}`);
-      }
-
-      // Migrate legacy BCrypt hashes to Argon2 (only if auth succeeded)
-      if (isValid && data && data.password_hash.startsWith('$2')) {
-        Logger.info(`Auth: Migrating legacy hash for ${normalizedEmail} to Argon2...`);
-        const newHash = await this.hashPassword(password);
-        await this.supabase
-          .from('users')
-          .update({ password_hash: newHash })
-          .eq('id', data.id);
-      }
-
-      // Enforce minimum execution time floor
-      await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
-
-      // Return null for failed auth (regardless of whether user exists)
-      return isValid && data ? { ...data, password_hash: undefined } as User : null;
-
-    } catch (err) {
-      Logger.error('Auth: validateCredentials error', { error: err });
-      
-      // Even on database error, maintain constant time
-      await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
-
-      return null;
-    }
-  }
-
   /**
    * Ensures minimum execution time to prevent timing attacks.
-   * Jitter should be added BEFORE this is called.
    */
   private async enforceMinimumTime(startTime: number, minimumMs: number): Promise<void> {
     const elapsed = Date.now() - startTime;
@@ -172,17 +154,22 @@ export class AuthService {
 
   /**
    * Manually unlock a user account (admin operation).
-   * Should be protected by authorization checks.
    */
   async unlockAccount(userId: string): Promise<void> {
     try {
-      await this.supabase
-        .from('users')
-        .update({ failed_login_attempts: 0, locked_until: null })
-        .eq('id', userId);
-      console.log(`AuthService: Account unlocked - ${userId}`);
+      if (this.isLocalMode) {
+        this.sqlite.getDatabase()
+          .prepare('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?')
+          .run(userId);
+      } else {
+        await this.supabase
+          .from('users')
+          .update({ failed_login_attempts: 0, locked_until: null })
+          .eq('id', userId);
+      }
+      Logger.info(`AuthService: Account unlocked - ${userId}`);
     } catch (error) {
-      console.error('AuthService: Failed to unlock account', { error, userId });
+      Logger.error('AuthService: Failed to unlock account', { error, userId });
       throw error;
     }
   }
@@ -192,52 +179,75 @@ export class AuthService {
    */
   async getAccountLockoutStatus(email: string): Promise<{ isLocked: boolean; attemptsRemaining: number; lockedUntil?: Date }> {
     try {
-      const { data, error } = await this.supabase
-        .from('users')
-        .select('failed_login_attempts, locked_until')
-        .eq('email', email.toLowerCase().trim())
-        .single();
+      const normalizedEmail = email.toLowerCase().trim();
+      let userData: any = null;
 
-      if (error || !data) {
+      if (this.isLocalMode) {
+        userData = this.sqlite.getDatabase()
+          .prepare('SELECT failed_login_attempts, locked_until FROM users WHERE email = ?')
+          .get(normalizedEmail);
+      } else {
+        const { data } = await this.supabase
+          .from('users')
+          .select('failed_login_attempts, locked_until')
+          .eq('email', normalizedEmail)
+          .single();
+        userData = data;
+      }
+
+      if (!userData) {
         return { isLocked: false, attemptsRemaining: 5 };
       }
 
       const now = new Date();
-      const lockedUntil = data.locked_until ? new Date(data.locked_until) : null;
+      const lockedUntil = userData.locked_until ? new Date(userData.locked_until) : undefined;
       const isLocked = lockedUntil && lockedUntil > now;
 
       // If lockout period has expired, reset
       if (lockedUntil && lockedUntil <= now) {
-        await this.supabase
-          .from('users')
-          .update({ failed_login_attempts: 0, locked_until: null })
-          .eq('email', email.toLowerCase().trim());
+        if (this.isLocalMode) {
+          this.sqlite.getDatabase()
+            .prepare('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE email = ?')
+            .run(normalizedEmail);
+        } else {
+          await this.supabase
+            .from('users')
+            .update({ failed_login_attempts: 0, locked_until: null })
+            .eq('email', normalizedEmail);
+        }
         return { isLocked: false, attemptsRemaining: 5 };
       }
 
       return {
         isLocked: !!isLocked,
-        attemptsRemaining: Math.max(0, 5 - (data.failed_login_attempts || 0)),
+        attemptsRemaining: Math.max(0, 5 - (userData.failed_login_attempts || 0)),
         lockedUntil
-      };
+      } as any;
     } catch (error) {
-      console.error('AuthService: Failed to get lockout status', error);
+      Logger.error('AuthService: Failed to get lockout status', error);
       return { isLocked: false, attemptsRemaining: 5 };
     }
   }
 
   async getUserById(id: string): Promise<User | null> {
     try {
-      const { data, error } = await this.supabase
-        .from('users')
-        .select('id, email, name, role, department, status')
-        .eq('id', id)
-        .single();
+      if (this.isLocalMode) {
+        const data = this.sqlite.getDatabase()
+          .prepare('SELECT id, email, name, role, department, status FROM users WHERE id = ?')
+          .get(id);
+        return data as User || null;
+      } else {
+        const { data, error } = await this.supabase
+          .from('users')
+          .select('id, email, name, role, department, status')
+          .eq('id', id)
+          .single();
 
-      if (error || !data) return null;
-      return data as User;
+        if (error || !data) return null;
+        return data as User;
+      }
     } catch (e) {
-      console.error('AuthService: getUserById failed', e);
+      Logger.error('AuthService: getUserById failed', e);
       return null;
     }
   }

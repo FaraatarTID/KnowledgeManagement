@@ -335,6 +335,18 @@ function AdminContent() {
   // Admin page does not expose a logout button here; use the global sidebar logout instead
   
 
+  const isAdmin = currentUser?.role === 'ADMIN';
+
+  useEffect(() => {
+    if (!isAuthChecking && currentUser) {
+      const protectedTabs = ['documents', 'users', 'history', 'settings'];
+      if (protectedTabs.includes(activeTab) && !isAdmin) {
+        setActiveTab('dashboard');
+        router.push('/admin?tab=dashboard');
+      }
+    }
+  }, [activeTab, isAdmin, isAuthChecking, currentUser, router]);
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col w-full">
       {/* Top Header */}
@@ -349,21 +361,25 @@ function AdminContent() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <button 
-            onClick={handleSyncNow}
-            disabled={isSyncing}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E2E8F0] text-[#0F172A] rounded-lg hover:bg-gray-50 transition-all font-medium disabled:opacity-50"
-          >
-            {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <Cloud size={18} />}
-            <span>Sync Knowledge</span>
-          </button>
-          <button 
-            onClick={() => setIsAddResourceModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#0F172A] text-white rounded-lg hover:bg-blue-600 transition-all font-medium"
-          >
-            <Plus size={18} />
-            <span>Add Resource</span>
-          </button>
+          {isAdmin && (
+            <>
+              <button 
+                onClick={handleSyncNow}
+                disabled={isSyncing}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E2E8F0] text-[#0F172A] rounded-lg hover:bg-gray-50 transition-all font-medium disabled:opacity-50"
+              >
+                {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <Cloud size={18} />}
+                <span>Sync Knowledge</span>
+              </button>
+              <button 
+                onClick={() => setIsAddResourceModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#0F172A] text-white rounded-lg hover:bg-blue-600 transition-all font-medium"
+              >
+                <Plus size={18} />
+                <span>Add Resource</span>
+              </button>
+            </>
+          )}
         </div>
       </header>
 
@@ -518,25 +534,29 @@ function AdminContent() {
                                         >
                                           <Edit2 size={16} />
                                         </button>
-                                        <button 
-                                          onClick={() => handleRowSync(id)}
-                                          className="p-2 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-lg transition-colors"
-                                          title="Sync this document"
-                                        >
-                                          <HardDrive size={16} />
-                                        </button>
-                                        <button 
-                                          onClick={() => {
-                                             if(window.confirm('Are you sure you want to delete this document? This cannot be undone.')) {
-                                               alert('Document deleted (simulated)');
-                                               setDocuments(prev => prev.filter(d => String((d as Record<string, unknown>)['id']) !== id));
-                                             }
-                                          }}
-                                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                          title="Delete Document"
-                                        >
-                                          <Trash2 size={16} />
-                                        </button>
+                                        {isAdmin && (
+                                          <>
+                                            <button 
+                                              onClick={() => handleRowSync(id)}
+                                              className="p-2 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-lg transition-colors"
+                                              title="Sync this document"
+                                            >
+                                              <HardDrive size={16} />
+                                            </button>
+                                            <button 
+                                              onClick={() => {
+                                                 if(window.confirm('Are you sure you want to delete this document? This cannot be undone.')) {
+                                                   alert('Document deleted (simulated)');
+                                                   setDocuments(prev => prev.filter(d => String((d as Record<string, unknown>)['id']) !== id));
+                                                 }
+                                              }}
+                                              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                              title="Delete Document"
+                                            >
+                                              <Trash2 size={16} />
+                                            </button>
+                                          </>
+                                        )}
                                       </div>
                                     </td>
                                  </tr>
@@ -599,8 +619,9 @@ function AdminContent() {
                                  <td className="px-6 py-4">
                                    <select 
                                      value={String(userObj['department'] ?? '')}
+                                     disabled={!isAdmin}
                                      onChange={(e) => handleDepartmentChange(uid, e.target.value)}
-                                     className="bg-white border border-[#E2E8F0] text-sm rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                     className="bg-white border border-[#E2E8F0] text-sm rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                    >
                                      {systemConfig.departments.map(dept => (
                                        <option key={dept} value={dept}>{dept}</option>
@@ -610,8 +631,9 @@ function AdminContent() {
                                  <td className="px-6 py-4">
                                      <select 
                                      value={String(userObj['role'] ?? 'VIEWER')}
+                                     disabled={!isAdmin}
                                      onChange={(e) => handleRoleChange(uid, e.target.value)}
-                                     className="bg-white border border-[#E2E8F0] text-sm rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                     className="bg-white border border-[#E2E8F0] text-sm rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                    >
                                      <option value="ADMIN">ADMIN</option>
                                      <option value="MANAGER">MANAGER</option>
@@ -625,23 +647,25 @@ function AdminContent() {
                                    </span>
                                  </td>
                                  <td className="px-6 py-4 text-right">
-                                   <div className="flex items-center justify-end gap-2">
-                                     <button 
-                                       onClick={() => handleResetPassword(uid)}
-                                       className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                                       title="Reset Password"
-                                     >
-                                       <ShieldCheck size={16} />
-                                     </button>
-                                     <button 
-                                       onClick={() => handleDeleteUser(uid)}
-                                       disabled={String(userObj['email'] ?? '') === String(currentUser?.['email'] ?? '')}
-                                       className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30"
-                                       title="Delete User"
-                                     >
-                                       <Trash2 size={16} />
-                                     </button>
-                                   </div>
+                                   {isAdmin && (
+                                     <div className="flex items-center justify-end gap-2">
+                                       <button 
+                                         onClick={() => handleResetPassword(uid)}
+                                         className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                         title="Reset Password"
+                                       >
+                                         <ShieldCheck size={16} />
+                                       </button>
+                                       <button 
+                                         onClick={() => handleDeleteUser(uid)}
+                                         disabled={String(userObj['email'] ?? '') === String(currentUser?.['email'] ?? '')}
+                                         className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30"
+                                         title="Delete User"
+                                       >
+                                         <Trash2 size={16} />
+                                       </button>
+                                     </div>
+                                   )}
                                  </td>
                                </tr>
                                );

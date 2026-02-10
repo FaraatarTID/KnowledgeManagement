@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { BookOpen, Plus, FileText, MessageSquare } from 'lucide-react';
+import { BookOpen, Plus, FileText, MessageSquare, Cloud } from 'lucide-react';
 import { useStorage } from '@/hooks/useStorage';
 import { useDebounce } from '@/hooks/useDebounce';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -234,6 +234,23 @@ function AIKBContent() {
     }
   }, [documents, saveChatHistory]);
 
+  const handleCloudBackup = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      toast.info('در حال پشتیبان‌گیری ابری...');
+      const result = await api.cloudBackup();
+      if (result.success) {
+        toast.success('پشتیبان‌گیری موفق: پایگاه داده با گوگل درایو همگام شد');
+      } else {
+        toast.error(`خطا در پشتیبان‌گیری: ${result.error || 'خطای ناشناخته'}`);
+      }
+    } catch (error: any) {
+      toast.error(`خطا در اتصال: ${error.message || 'ارتباط با سرور برقرار نشد'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50" dir="rtl">
       <header className="bg-white border-b border-gray-200 shadow-sm">
@@ -253,6 +270,15 @@ function AIKBContent() {
               </div>
             </div>
             <div className="flex gap-2">
+              <button
+                onClick={handleCloudBackup}
+                disabled={isLoading}
+                title="Backup database to Google Drive"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-all disabled:opacity-50"
+              >
+                <Cloud size={20} className="text-blue-500" />
+                <span>پشتیبان‌گیری ابری</span>
+              </button>
               <button
                 onClick={() => setShowAddDoc(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-all"

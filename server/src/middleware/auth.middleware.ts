@@ -15,6 +15,7 @@ export interface AuthRequest extends Request {
 }
 
 import { env } from '../config/env.js';
+import { Logger } from '../utils/logger.js';
 
 let _authService: any = null;
 const getAuthService = async () => {
@@ -59,7 +60,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
       return res.status(401).json({ error: 'Account no longer exists' });
     }
     
-    if (user.status === 'Inactive') {
+    if (String(user.status).toLowerCase() === 'inactive') {
       return res.status(403).json({ error: 'Account is deactivated' });
     }
 
@@ -70,7 +71,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
         userId: decoded.id,
         email: decoded.email,
         tokenRole: decoded.role,
-        dbRole: user.role,
+        dbRole: (user as any).role,
         ip: req.ip,
         userAgent: req.get('user-agent')
       });

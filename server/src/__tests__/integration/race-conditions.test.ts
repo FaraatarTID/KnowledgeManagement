@@ -1,13 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-// Provide a `jest` alias for tests that expect jest globals
-// Provide a minimal `jest` compatibility object mapping to `vi` APIs
-// Provide a minimal `jest` compatibility object mapping to `vi` APIs
-const _jestShim = (global as any).jest ?? {};
-_jestShim.fn = _jestShim.fn ?? function(...args: any[]) { return vi.fn(...args); };
-_jestShim.spyOn = _jestShim.spyOn ?? function(...args: any[]) { return vi.spyOn(...args); };
-_jestShim.mock = _jestShim.mock ?? function(...args: any[]) { return undefined; };
-(global as any).jest = _jestShim;
 import { VectorService } from '../../services/vector.service.js';
+import { SqliteMetadataService } from '../../services/sqlite-metadata.service.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -16,18 +9,17 @@ describe('VectorService Race Condition Tests', () => {
   const testProjectId = 'aikb-mock-project';
   const testDataFile = path.join(process.cwd(), 'data', 'vectors-test.json');
 
+  let testDbFile: string;
+
   beforeEach(() => {
-    // Clean up test data
-    if (fs.existsSync(testDataFile)) {
-      try { fs.unlinkSync(testDataFile); } catch {}
-    }
-    vectorService = new VectorService(testProjectId, 'us-central1', testDataFile);
+    testDbFile = path.join(process.cwd(), 'data', `test-metadata-${Math.random().toString(36).substring(7)}.db`);
+    const metadataStore = new SqliteMetadataService(testDbFile);
+    vectorService = new VectorService(testProjectId, 'us-central1', metadataStore, true);
   });
 
   afterEach(() => {
-    // Clean up
-    if (fs.existsSync(testDataFile)) {
-      fs.unlinkSync(testDataFile);
+    if (fs.existsSync(testDbFile)) {
+      try { fs.unlinkSync(testDbFile); } catch {}
     }
   });
 
@@ -62,22 +54,12 @@ describe('VectorService Race Condition Tests', () => {
     expect(allVectors.length).toBeGreaterThanOrEqual(5);
   }, 30000);
 
-  it('should recover from corrupted data file', async () => {
-    // Create corrupted data file
-    const corruptedData = '{ invalid json }';
-    fs.writeFileSync(testDataFile, corruptedData);
+  async function getAllVectorsWorkaround(service: VectorService) {
+    // Hack to get internal data for testing since VectorService doesn't export it
+    // In LOCAL mode, we scan metadataStore
+    return Object.keys((service as any).metadataStore.getAllOverrides()).length;
+  }
 
-    // Should not crash, should initialize empty
-    const newService = new VectorService(testProjectId, 'us-central1', testDataFile);
-    
-    // Should be able to use it
-    await newService.upsertVectors([
-      { id: 'test1', values: Array(768).fill(0.1), metadata: { text: 'test' } }
-    ]);
-
-    const vectors = await newService.getAllVectors();
-    expect(vectors.length).toBe(1);
-  });
 
   it('should prevent data corruption during concurrent writes', async () => {
     // Stress test: many concurrent operations
@@ -121,7 +103,7 @@ describe('QueryAI Race Condition Tests', () => {
     let callCount = 0;
 
     // Mock fetch with delayed responses
-    global.fetch = jest.fn((url: string, options?: any) => {
+    global.fetch = vi.fn((url: string, options?: any) => {
       const body = JSON.parse(options.body);
       const queryNum = ++callCount;
       
@@ -135,7 +117,7 @@ describe('QueryAI Race Condition Tests', () => {
             json: async () => ({
               content: `Response ${queryNum} for: ${body.query}`
             })
-          });
+          } as any);
         }, delay);
       });
     }) as any;

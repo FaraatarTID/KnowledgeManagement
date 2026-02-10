@@ -7,14 +7,25 @@ import {
   vectorService, 
   userService, 
   auditService, 
-  configService 
+  configService,
+  backupService
 } from '../container.js';
 import type { AuthRequest } from '../middleware/auth.middleware.js';
 import { Logger } from '../utils/logger.js';
 import { catchAsync } from '../utils/catchAsync.js';
 
 export class SystemController {
-  
+
+  static cloudBackup: RequestHandler = catchAsync(async (req: Request, res: Response) => {
+    Logger.info('SystemController: Cloud backup triggered manually');
+    const result = await backupService.backupToCloud();
+    if (result.success) {
+      res.json({ success: true, fileId: result.fileId });
+    } else {
+      res.status(500).json({ success: false, error: result.error });
+    }
+  });
+
   static health: RequestHandler = catchAsync(async (req: Request, res: Response) => {
     const geminiHealth = await geminiService.checkHealth();
     const driveHealth = await driveService.checkHealth();

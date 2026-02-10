@@ -37,7 +37,11 @@ app.use(express.json());
 
 import { errorHandler } from "./middleware/error.middleware.js";
 import { sanitizationMiddleware } from "./middleware/sanitization.middleware.js";
-import { vectorService, userService } from "./container.js";
+import { 
+  vectorService, 
+  userService, 
+  auditService
+} from "./container.js";
 
 app.use(sanitizationMiddleware);
 
@@ -73,19 +77,17 @@ app.get("/health", async (req, res) => {
     },
     checks: {
       api: "ok",
-      disk: "pending"
+      db: "pending"
     }
   };
 
-  try {
-    const testFile = path.join(process.cwd(), 'data', '.healthcheck');
-    await fs.promises.writeFile(testFile, Date.now().toString());
-    await fs.promises.unlink(testFile);
-    health.checks.disk = "ok";
-  } catch (e) {
-    health.status = "error";
-    health.checks.disk = "error";
-    Logger.error('Health check disk failure', { error: (e as any).message });
+  const serviceHealth = await vectorService.checkHealth();
+  if (serviceHealth.status === 'ERROR') {
+    health.status = 'error';
+    health.checks.db = serviceHealth.message || 'unhealthy';
+    Logger.error('Health check failed', { error: serviceHealth.message });
+  } else {
+    health.checks.db = 'ok';
   }
 
   res.status(health.status === "ok" ? 200 : 503).json(health);
@@ -114,8 +116,9 @@ if (process.env.NODE_ENV !== 'test') {
           Logger.info('HTTP server closed. Flushing buffers...');
 
           // Flush audit logs (CRITICAL - prevents data loss)
-          if (userService?.auditService?.flush) {
-            await userService.auditService.flush();
+          // Flush audit logs (CRITICAL - prevents data loss)
+          if (auditService?.flush) {
+            await auditService.flush();
             Logger.info('✅ Audit logs flushed');
           }
 

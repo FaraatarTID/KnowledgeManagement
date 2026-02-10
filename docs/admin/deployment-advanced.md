@@ -1,6 +1,7 @@
-# 🌍 Production Deployment Guide: AIKB on the Web
-
 This guide explains how to take the AIKB app from your computer and put it on the internet so your whole company can use it securely.
+
+> [!TIP]
+> **New to Google Cloud or Admin setup?** Read the [Setup Guide](SETUP_GUIDE.md) first for a simplified step-by-step walkthrough.
 
 ### 🔑 Admin Bootstrapping
 
@@ -87,7 +88,8 @@ GCP_REGION=us-central1
 GCP_KEY_FILE=gcp-key.json
 GOOGLE_DRIVE_FOLDER_ID=...
 
-# Database (Supabase) - REQUIRED for production users
+# Database (Supabase) - OPTIONAL for production
+# If omitted, system runs in Local Mode using an internal SQLite database.
 SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
 
@@ -127,9 +129,9 @@ The server validates its entire `.env` environment at startup using **Zod**. If 
 
 ---
 
-### 2. Initialize Database (Supabase)
+### 2. Initialize Database (Supabase - Optional)
 
-Run this SQL to establish the hardened schema:
+If using Supabase, run this SQL to establish the hardened schema. **If you are running in Local Mode (no Supabase), skip this step; the SQLite database is initialized automatically.**
 
 ```sql
 -- 1. Users (Hardened Isolation)
@@ -199,9 +201,13 @@ The `/health` endpoint is **Deep**. It monitors:
 - **Memory RSS**: Tracks usage to prevent OOM during massive indexing.
 - **Vector Count**: Real-time status of the local semantic index.
 
-### Scale Strategy
+### ☁️ Cloud Persistence (No Supabase)
 
-The JSON Vector Store is designed for **Speed and Simplicity**. For extreme scale (>10,000 documents), we recommend moving the file storage to a high-speed SSD and monitoring the `resources.memory.heapUsed` metric in the health check.
+If you are running in **Local Mode** (no Supabase), your data is stored in `server/data/vectors.db`. To prevent data loss on stateless platforms (e.g. Docker, Heroku):
+
+1. **Configure Google Drive**: Set `GOOGLE_DRIVE_FOLDER_ID` in `.env`.
+2. **Manual Sync**: Admins can click the **"Cloud Backup"** button in the dashboard to push the current `vectors.db` to the cloud.
+3. **Mount Volume**: If using Docker, ensure the `./data` folder is mounted as a persistent volume.
 
 ---
 

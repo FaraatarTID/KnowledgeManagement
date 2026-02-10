@@ -18,7 +18,7 @@ const router = Router();
 // Upload 
 router.post('/upload', 
   authMiddleware, 
-  requireRole('ADMIN', 'MANAGER'), 
+  requireRole('ADMIN'), 
   uploadMiddleware.single('file'), 
   validateBody(uploadDocumentSchema),
   DocumentController.upload as RequestHandler
@@ -34,12 +34,14 @@ router.get('/documents',
 // Admin Operations
 router.patch('/documents/:id', 
   authMiddleware, 
+  requireRole('ADMIN'),
   validate(z.object({ params: documentIdSchema, body: updateDocumentSchema })),
   DocumentController.update as RequestHandler
 );
 
 router.delete('/documents/:id', 
   authMiddleware, 
+  requireRole('ADMIN'),
   validate(z.object({ params: documentIdSchema })),
   DocumentController.delete as RequestHandler
 );

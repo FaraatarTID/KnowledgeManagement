@@ -127,3 +127,13 @@ data/*.lock
 data/.healthcheck
 data/uploads/*
 !data/uploads/.gitkeep
+
+# Secrets
+key.json
+*.key
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
