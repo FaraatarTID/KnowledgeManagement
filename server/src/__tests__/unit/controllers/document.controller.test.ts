@@ -188,6 +188,20 @@ describe('DocumentController', () => {
                 doc_id: 'doc3'
             }));
         });
+
+
+        it('should canonicalize numeric suffix chunk ids on delete', async () => {
+            mockRequest.params = { id: 'manual-123_0' };
+            mockRequest.user = { email: 'admin@aikb.com' };
+
+            await DocumentController.delete(mockRequest, mockResponse, nextMock);
+
+            expect(vectorService.deleteDocument).toHaveBeenCalledWith('manual-123');
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                event_type: 'DELETED',
+                doc_id: 'manual-123'
+            }));
+        });
     });
 
     describe('update', () => {
@@ -261,6 +275,21 @@ describe('DocumentController', () => {
 
             expect(vectorService.updateDocumentMetadata).toHaveBeenCalledWith('doc3', expect.anything());
             expect(driveService.renameFile).toHaveBeenCalledWith('doc3', 'Doc 3');
+        });
+
+
+        it('should canonicalize numeric suffix chunk ids on update', async () => {
+            mockRequest.params = { id: 'manual-123_0' };
+            mockRequest.body = { title: 'Manual Title' };
+            mockRequest.user = { email: 'alice@aikb.com', role: 'EDITOR' };
+
+            vi.mocked(vectorService.getAllMetadata).mockResolvedValue({
+                'manual-123': { owner: 'alice@aikb.com', category: 'IT' }
+            });
+
+            await DocumentController.update(mockRequest, mockResponse, nextMock);
+
+            expect(vectorService.updateDocumentMetadata).toHaveBeenCalledWith('manual-123', expect.anything());
         });
 
         it('should reject update when user is not owner or admin', async () => {
