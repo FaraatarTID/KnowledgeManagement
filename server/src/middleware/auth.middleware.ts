@@ -36,7 +36,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
   const secret = env.JWT_SECRET;
   
   try {
-    const decoded = jwt.verify(token, secret) as AuthUser;
+    const decoded = jwt.verify(token, secret, { algorithms: ['HS256'] }) as AuthUser;
     
     // SECURITY: Validate token timing claims to prevent clock skew attacks
     const payload = jwt.decode(token) as any;

@@ -342,7 +342,6 @@ export class VectorService {
       await storeVectorEntries();
       Logger.info('VectorService: Upserted to Vertex AI', { count: items.length });
     } catch (error) {
-      Logger.error('VectorService: Upsert to Vertex AI failed', { error });
       // DO NOT FALLBACK - fail loudly so we detect the issue immediately
       throw error;
     }
@@ -630,7 +629,18 @@ export class VectorService {
       await this.upsertToVertexAI(items);
       Logger.debug('VectorService: Upserted vectors', { count: vectors.length });
     } catch (e) {
-      Logger.error('VectorService: Failed to upsert vectors', { error: e, count: vectors.length });
+      const meta = { error: e, count: vectors.length };
+      const isExpectedVertexFailureInTest =
+        (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') &&
+        e instanceof Error &&
+        e.message.includes('Vertex AI Index Service unavailable');
+
+      if (isExpectedVertexFailureInTest) {
+        Logger.warn('VectorService: Failed to upsert vectors (expected in fail-loud tests)', meta);
+      } else {
+        Logger.error('VectorService: Failed to upsert vectors', meta);
+      }
+
       throw e;
     }
   }
