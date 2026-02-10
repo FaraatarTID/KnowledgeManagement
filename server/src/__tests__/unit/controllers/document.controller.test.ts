@@ -67,6 +67,27 @@ describe('DocumentController', () => {
             expect(historyService.recordEvent).toHaveBeenCalled();
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
         });
+
+
+        it('should return success when upload indexing fails', async () => {
+            mockRequest.file = { path: 'tmp/path', mimetype: 'app/pdf', originalname: 'test.pdf' };
+            mockRequest.body = { category: 'IT' };
+
+            vi.mocked(driveService.uploadFile).mockResolvedValue('file-id-1');
+            vi.mocked(syncService.indexFile).mockRejectedValue(new Error('embedding service unavailable'));
+
+            await DocumentController.upload(mockRequest, mockResponse, nextMock);
+
+            expect(vectorService.updateDocumentMetadata).toHaveBeenCalledWith('file-id-1', expect.anything());
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                event_type: 'CREATED',
+                details: expect.stringContaining('Uploaded (index pending)')
+            }));
+            expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
+                success: true,
+                indexingStatus: 'pending'
+            }));
+        });
     });
 
     describe('list', () => {
@@ -86,15 +107,15 @@ describe('DocumentController', () => {
     });
 
     describe('syncAll', () => {
-        it('should return operational error when drive folder is not configured', async () => {
+        it('should skip full sync when drive folder is not configured', async () => {
             process.env.GOOGLE_DRIVE_FOLDER_ID = '';
 
             await DocumentController.syncAll(mockRequest, mockResponse, nextMock);
 
             expect(syncService.syncAll).not.toHaveBeenCalled();
-            expect(nextMock).toHaveBeenCalledWith(expect.objectContaining({
-                statusCode: 503,
-                message: expect.stringContaining('Google Drive is not configured')
+            expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
+                status: 'skipped',
+                processed: 0
             }));
         });
 
@@ -188,6 +209,20 @@ describe('DocumentController', () => {
                 doc_id: 'doc3'
             }));
         });
+
+
+        it('should canonicalize numeric suffix chunk ids on delete', async () => {
+            mockRequest.params = { id: 'manual-123_0' };
+            mockRequest.user = { email: 'admin@aikb.com' };
+
+            await DocumentController.delete(mockRequest, mockResponse, nextMock);
+
+            expect(vectorService.deleteDocument).toHaveBeenCalledWith('manual-123');
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                event_type: 'DELETED',
+                doc_id: 'manual-123'
+            }));
+        });
     });
 
     describe('update', () => {
@@ -210,7 +245,7 @@ describe('DocumentController', () => {
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));
         });
 
-        it('should mark drive rename as not_configured when drive is disabled', async () => {
+        it('should mark drive rename as not_applicable for manual docs when drive is disabled', async () => {
             mockRequest.params = { id: 'manual-1' };
             mockRequest.body = { title: 'New Local Title' };
             mockRequest.user = { email: 'alice@aikb.com', role: 'EDITOR' };
@@ -224,10 +259,29 @@ describe('DocumentController', () => {
 
             expect(driveService.renameFile).not.toHaveBeenCalled();
             expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
-                details: expect.stringContaining('Drive Rename: not_configured')
+                details: expect.stringContaining('Drive Rename: not_applicable')
             }));
         });
 
+
+
+        it('should mark drive rename as not_configured for drive docs when drive is disabled', async () => {
+            mockRequest.params = { id: 'drive-1' };
+            mockRequest.body = { title: 'New Drive Title' };
+            mockRequest.user = { email: 'alice@aikb.com', role: 'EDITOR' };
+            process.env.GOOGLE_DRIVE_FOLDER_ID = '';
+
+            vi.mocked(vectorService.getAllMetadata).mockResolvedValue({
+                'drive-1': { owner: 'alice@aikb.com', category: 'IT' }
+            });
+
+            await DocumentController.update(mockRequest, mockResponse, nextMock);
+
+            expect(driveService.renameFile).not.toHaveBeenCalled();
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                details: expect.stringContaining('Drive Rename: not_configured')
+            }));
+        });
 
         it('should mark drive rename as not_applicable for manual docs when drive is configured', async () => {
             mockRequest.params = { id: 'manual-1' };
@@ -261,6 +315,21 @@ describe('DocumentController', () => {
 
             expect(vectorService.updateDocumentMetadata).toHaveBeenCalledWith('doc3', expect.anything());
             expect(driveService.renameFile).toHaveBeenCalledWith('doc3', 'Doc 3');
+        });
+
+
+        it('should canonicalize numeric suffix chunk ids on update', async () => {
+            mockRequest.params = { id: 'manual-123_0' };
+            mockRequest.body = { title: 'Manual Title' };
+            mockRequest.user = { email: 'alice@aikb.com', role: 'EDITOR' };
+
+            vi.mocked(vectorService.getAllMetadata).mockResolvedValue({
+                'manual-123': { owner: 'alice@aikb.com', category: 'IT' }
+            });
+
+            await DocumentController.update(mockRequest, mockResponse, nextMock);
+
+            expect(vectorService.updateDocumentMetadata).toHaveBeenCalledWith('manual-123', expect.anything());
         });
 
         it('should reject update when user is not owner or admin', async () => {

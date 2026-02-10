@@ -340,7 +340,7 @@ function AdminContent() {
     console.log('Admin: Opening Edit Modal for doc:', doc);
     setEditingDoc(doc);
     setEditForm({
-      title: String(doc['name'] ?? ''),
+      title: String(doc['title'] ?? doc['name'] ?? ''),
       category: String(doc['category'] ?? 'General'),
       sensitivity: String(doc['sensitivity'] ?? 'INTERNAL'),
       department: String(doc['department'] ?? 'General')
@@ -505,7 +505,7 @@ function AdminContent() {
                                {documents.map((doc) => {
                                  const d = (doc as Record<string, unknown>) || {};
                                  const id = String(d['id'] ?? Math.random());
-                                 const name = String(d['name'] ?? 'Untitled');
+                                 const name = String(d['title'] ?? d['name'] ?? 'Untitled');
                                  const category = String(d['category'] ?? '');
                                  const department = String(d['department'] ?? 'General');
                                  const sensitivity = String(d['sensitivity'] ?? 'INTERNAL');

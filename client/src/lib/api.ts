@@ -115,9 +115,9 @@ export const authApi = {
       .catch((err: unknown) => {
         if (axios.isAxiosError(err)) {
           const status = err.response?.status;
-          // Treat auth/bootstrap/server hiccups as no active session for this call.
+          // Treat auth/bootstrap/network/server hiccups as no active session for this call.
           // This prevents uncaught promise noise in page initialization flows.
-          if (status === 401 || status === 403 || status === 404 || status === 500 || status === 503) {
+          if (!status || status === 401 || status === 403 || status === 404 || status === 500 || status === 503) {
             if (typeof window !== 'undefined') {
               localStorage.removeItem('user');
             }
