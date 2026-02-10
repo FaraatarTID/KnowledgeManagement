@@ -7,16 +7,29 @@ import {
   ShieldCheck, 
   Clock, 
   LogOut,
-  Settings
+  Settings,
+  type LucideIcon
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { authApi } from '@/lib/api';
+
+interface SidebarUser {
+  role?: string;
+}
+
+interface NavItem {
+  name: string;
+  icon: LucideIcon;
+  path: string;
+  isActive: boolean;
+  requiredRoles?: string[];
+}
 
 export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [user, setUser] = useState<Record<string, unknown> | null>(null);
+  const [user, setUser] = useState<SidebarUser | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
   const activeTab = searchParams ? searchParams.get('tab') : null;
@@ -24,7 +37,7 @@ export default function Sidebar() {
   useEffect(() => {
     // Defer setting mounted and user to avoid synchronous setState inside effect
     const storedUser = localStorage.getItem('user');
-    let parsedUser: Record<string, unknown> | null = null;
+    let parsedUser: SidebarUser | null = null;
     if (storedUser) {
       try {
         parsedUser = JSON.parse(storedUser);
@@ -44,7 +57,7 @@ export default function Sidebar() {
       if (e.key === 'user') {
         if (e.newValue) {
           try {
-            setUser(JSON.parse(e.newValue));
+            setUser(JSON.parse(e.newValue) as SidebarUser);
           } catch {
             setUser(null);
           }
@@ -73,7 +86,7 @@ export default function Sidebar() {
     authApi.logout();
   };
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { 
       name: 'Chat Assistant', 
       icon: MessageSquare, 
@@ -118,9 +131,9 @@ export default function Sidebar() {
   ];
 
   // Filter nav items based on user role
-  const visibleItems = navItems.filter(item => {
-    if (!(item as any).requiredRoles) return true;
-    return (item as any).requiredRoles.includes(user?.role);
+  const visibleItems = navItems.filter((item) => {
+    if (!item.requiredRoles) return true;
+    return item.requiredRoles.includes(user?.role ?? '');
   });
 
   // Prevent hydration mismatch by showing skeleton before mount
