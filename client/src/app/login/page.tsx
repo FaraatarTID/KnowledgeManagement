@@ -42,8 +42,12 @@ export default function LoginPage() {
         if (code === 'ERR_NETWORK') {
           msg = 'Cannot reach the backend API. Check that the backend is running, NEXT_PUBLIC_API_URL is correct, and your CSP/connect-src allows the API origin.';
         } else if (typeof resp === 'object' && resp !== null) {
+          const status = (resp as Record<string, unknown>)['status'];
           const data = (resp as Record<string, unknown>)['data'];
-          if (typeof data === 'object' && data !== null && typeof (data as Record<string, unknown>)['error'] === 'string') {
+
+          if (status === 404) {
+            msg = 'Login endpoint was not found. Ensure Next.js rewrite /api/v1 -> backend is active and backend server is reachable.';
+          } else if (typeof data === 'object' && data !== null && typeof (data as Record<string, unknown>)['error'] === 'string') {
             msg = String((data as Record<string, unknown>)['error']);
           }
         }

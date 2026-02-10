@@ -1,5 +1,28 @@
 import type { NextConfig } from "next";
 
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/$/, "");
+}
+
+function normalizeBackendBaseUrl(value: string): string {
+  const trimmed = trimTrailingSlash(value.trim());
+  return trimmed.endsWith('/api/v1') ? trimmed.slice(0, -7) : trimmed;
+}
+
+function resolveBackendBaseUrl(): string {
+  const internal = process.env.API_INTERNAL_URL?.trim();
+  if (internal) {
+    return normalizeBackendBaseUrl(internal);
+  }
+
+  const publicApi = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (publicApi) {
+    return normalizeBackendBaseUrl(publicApi);
+  }
+
+  return 'http://localhost:3001';
+}
+
 function resolveConnectSources(): string[] {
   const base = [
     "'self'",
@@ -29,8 +52,18 @@ function resolveConnectSources(): string[] {
 }
 
 const connectSrc = resolveConnectSources().join(' ');
+const backendBaseUrl = resolveBackendBaseUrl();
 
 const nextConfig: NextConfig = {
+  async rewrites() {
+    return [
+      {
+        source: '/api/v1/:path*',
+        destination: `${backendBaseUrl}/api/v1/:path*`
+      }
+    ];
+  },
+
   async headers() {
     return [
       {
