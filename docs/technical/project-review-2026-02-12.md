@@ -32,7 +32,7 @@ These are directional engineering-risk estimates based on current absence of rep
 
 ## Single best next move
 
-Create one non-negotiable release gate: `server build+test` and `client install+build+test+lint` must all pass in CI on a clean environment, then pin/adjust the client testing dependency set to be React 19 compatible (or deliberately downgrade React to match the testing stack). Do that first; everything else is optimization.
+Create one non-negotiable release gate: `server lint+build+test` and `client doctor:deps:strict + install+build+test+lint` must all pass in CI on a clean environment, then pin/adjust the client testing dependency set to be React 19 compatible (or deliberately downgrade React to match the testing stack). Do that first; everything else is optimization.
 
 ## Files changed in this review
 
