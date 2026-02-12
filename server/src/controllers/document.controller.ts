@@ -62,6 +62,7 @@ export class DocumentController {
 
         // STEP 2: Persist Metadata Overrides
         const finalDepartment = department || req.user?.department || 'General';
+        const source = driveFolderId ? 'drive' : 'local';
         
         await vectorService.updateDocumentMetadata(driveFileId, {
           title: fileName,
@@ -81,7 +82,7 @@ export class DocumentController {
             name: fileName,
             mimeType: req.file!.mimetype,
             modifiedTime: new Date().toISOString()
-          });
+          }, undefined, !driveFolderId ? { localFilePath: req.file!.path } : undefined);
           saga.addStep('ai_indexed', { driveFileId });
         } catch (indexError: any) {
           indexingStatus = 'pending';
@@ -99,8 +100,8 @@ export class DocumentController {
           doc_id: driveFileId,
           doc_name: fileName,
           details: indexingStatus === 'indexed'
-            ? `Uploaded & indexed: ${finalDepartment}/${category || 'General'}`
-            : `Uploaded (index pending): ${finalDepartment}/${category || 'General'}. Reason: ${indexingError}`
+            ? `Uploaded & indexed (${source}): ${finalDepartment}/${category || 'General'}`
+            : `Uploaded (index pending, ${source}): ${finalDepartment}/${category || 'General'}. Reason: ${indexingError}`
         });
         saga.addStep('history_recorded', { driveFileId, indexingStatus });
 
