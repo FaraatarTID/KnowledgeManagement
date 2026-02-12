@@ -88,6 +88,25 @@ cd server && npm run dev
 cd client && npm run dev
 ```
 
+### 3.1 Common startup issue (Windows): `ERR_MODULE_NOT_FOUND` for `express`
+
+If backend startup fails with `Cannot find package .../server/node_modules/express/index.js`, dependencies were not installed (or install was partial).
+
+```bash
+cd server
+npm install
+npm run dev
+```
+
+If login shows **HTTP 500** with proxy `ECONNREFUSED`, this indicates the backend is not reachable on port `3001`.
+
+Quick verification:
+```bash
+# In a separate terminal while backend is running
+curl http://localhost:3001/api/v1/system/health
+```
+Expected response includes `{"status":"healthy"`.
+
 ### 4. Login
 
 - **URL**: [http://localhost:3000](http://localhost:3000)
