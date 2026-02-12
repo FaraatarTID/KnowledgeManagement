@@ -39,7 +39,7 @@
 
 ## 🛠️ System Requirements
 
-- **Node.js**: v18 or newer.
+- **Node.js**: v20+ (v20 LTS recommended for local Windows development).
 - **AI Backend**: Google Gemini API Key (Easy Mode) OR Google Cloud Project (Enterprise).
 - **Storage**: Local SQLite (Default) OR Supabase (for distributed deployments).
 
@@ -64,6 +64,22 @@ npm install
 cp .env.example .env
 ```
 
+
+### 1.1 Fast bootstrap on Windows
+
+If you cloned the repo on Windows, use:
+
+```bat
+run_app.bat
+```
+
+It now does first-run safety checks automatically:
+- verifies Node.js 20+
+- creates `server/.env` and `client/.env` from examples if missing
+- installs dependencies if `node_modules` is missing
+- validates server env before startup
+- starts backend + frontend in separate terminals
+
 ### 2. Configuration (Minimum for Easy Mode)
 
 In `server/.env`:
@@ -87,6 +103,59 @@ cd server && npm run dev
 ```bash
 cd client && npm run dev
 ```
+
+### 3.1 Common startup issue (Windows): `ERR_MODULE_NOT_FOUND` for `express`
+
+If backend startup fails with `Cannot find package .../server/node_modules/express/index.js`, dependencies were not installed (or install was partial).
+
+```bash
+cd server
+npm install
+npm run dev
+```
+
+If login shows **HTTP 500** with proxy `ECONNREFUSED`, this indicates the backend is not reachable on port `3001`.
+
+Quick verification:
+```bash
+# In a separate terminal while backend is running
+curl http://localhost:3001/api/v1/system/health
+```
+Expected response includes `{"status":"healthy"`.
+
+### 3.2 Windows install issue: `better-sqlite3` / `node-gyp` build errors
+
+If `npm install` fails in `server/` with logs like:
+- `prebuild-install warn install Request timed out`
+- `gyp ERR! find VS ... could not find any Visual Studio installation`
+
+then native module `better-sqlite3` could not download a prebuilt binary and fell back to local compilation.
+
+If startup fails with `JWT_SECRET` format errors in LOCAL mode, remove `JWT_SECRET` from `server/.env` and restart; the server will generate an ephemeral dev secret.
+
+Use this recovery flow:
+
+```powershell
+# 1) Stop running Node processes that may lock node_modules
+taskkill /F /IM node.exe
+
+# 2) Clean install folder
+cd server
+rmdir /s /q node_modules
+del package-lock.json
+
+# 3) Ensure Visual Studio Build Tools are available for node-gyp
+# Install "Visual Studio 2022 Build Tools" with:
+#   - Desktop development with C++
+#   - MSVC v143 build tools
+#   - Windows 10/11 SDK
+
+# 4) Tell npm which MSVC version to use, then reinstall
+npm config set msvs_version 2022
+npm install
+```
+
+Alternative (simplest): use Node.js 20 LTS for local dev, then reinstall dependencies.
 
 ### 4. Login
 

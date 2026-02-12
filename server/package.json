@@ -11,7 +11,8 @@
     "test": "node scripts/run-vitest.mjs",
     "doctor:proxy": "node scripts/proxy-env-check.mjs",
     "test:ci": "node scripts/proxy-env-check.mjs --strict && node scripts/run-vitest.mjs --maxWorkers=1",
-    "doctor:proxy:strict": "node scripts/proxy-env-check.mjs --strict"
+    "doctor:proxy:strict": "node scripts/proxy-env-check.mjs --strict",
+    "preinstall": "node scripts/preinstall-check.mjs"
   },
   "keywords": [],
   "author": "",
@@ -60,5 +61,8 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^4.0.16"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
