@@ -112,7 +112,7 @@ export class SyncService {
   async indexFile(
     file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] },
     initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string },
-    options?: { allowDuringFullSync?: boolean }
+    options?: { allowDuringFullSync?: boolean, localFileBuffer?: Buffer }
   ): Promise<string> {
     if (this.isSyncing && !options?.allowDuringFullSync) {
        Logger.warn('SyncService: Cannot index file while a full sync is in progress.', {
@@ -151,7 +151,7 @@ export class SyncService {
                  file.mimeType?.startsWith('text/') ||
                  file.mimeType?.includes('markdown')) {
          try {
-           const buffer = await this.driveService.downloadFile(file.id);
+           const buffer = options?.localFileBuffer || await this.driveService.downloadFile(file.id);
            textContent = await this.extractionService.extractFromBuffer(buffer, file.mimeType || 'application/octet-stream');
          } catch (e: any) {
            await this.logExtractionFailure(file, e, 'download/extract');
