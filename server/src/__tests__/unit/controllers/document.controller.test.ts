@@ -152,6 +152,32 @@ describe('DocumentController', () => {
         });
     });
 
+
+        it('should index local PDF content when drive is not configured', async () => {
+            process.env.GOOGLE_DRIVE_FOLDER_ID = '';
+            fs.mkdirSync('data/uploads', { recursive: true });
+            fs.writeFileSync(tempUploadPath, Buffer.from('%PDF-1.4 local file test'));
+
+            mockRequest.file = {
+                path: tempUploadPath,
+                mimetype: 'application/pdf',
+                originalname: 'local-test.pdf',
+                size: 24,
+                filename: 'local-test.pdf'
+            };
+            mockRequest.body = { category: 'IT' };
+
+            await DocumentController.upload(mockRequest, mockResponse, nextMock);
+
+            expect(driveService.uploadFile).not.toHaveBeenCalled();
+            expect(syncService.indexFile).toHaveBeenCalledWith(
+                expect.objectContaining({ id: expect.stringMatching(/^manual-/) }),
+                undefined,
+                expect.objectContaining({ localFileBuffer: expect.any(Buffer) })
+            );
+            expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+        });
+
     describe('list', () => {
         it('should list files filtering by department for viewer', async () => {
              mockRequest.user = { role: 'VIEWER', department: 'HR' };

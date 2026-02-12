@@ -39,6 +39,7 @@ export class DocumentController {
         // STEP 1: Upload to Google Drive
         let driveFileId = docId;
         const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+        let localFileBuffer: Buffer | undefined;
 
         if (driveFolderId) {
           driveFileId = await driveService.uploadFile(
@@ -58,6 +59,9 @@ export class DocumentController {
               Logger.warn('Compensation: Could not delete Drive file', { driveFileId, error: e });
             }
           });
+        } else if (req.file?.path && fs.existsSync(req.file.path)) {
+          // Easy/local mode: index directly from uploaded file when Drive is disabled
+          localFileBuffer = fs.readFileSync(req.file.path);
         }
 
         // STEP 2: Persist Metadata Overrides
