@@ -5,6 +5,21 @@ import { useRouter } from 'next/navigation';
 import { ShieldCheck, User, Loader2, Bot } from 'lucide-react';
 import { authApi } from '@/lib/api';
 
+const PROXY_FAILURE_SIGNATURES = [
+  'ECONNREFUSED',
+  'Failed to proxy',
+  'connect ECONNREFUSED',
+  'fetch failed',
+  'socket hang up',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ENOTFOUND'
+];
+
+function hasProxyFailureSignature(text: string): boolean {
+  return PROXY_FAILURE_SIGNATURES.some((needle) => text.includes(needle));
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -53,13 +68,7 @@ export default function LoginPage() {
               String((e['message'] ?? '')),
               responseText
             ].join(' ');
-            const proxyFailureHint = [
-              'ECONNREFUSED',
-              'Failed to proxy',
-              'connect ECONNREFUSED',
-              'fetch failed',
-              'socket hang up'
-            ].some((needle) => errorText.includes(needle));
+            const proxyFailureHint = hasProxyFailureSignature(errorText);
 
             if (proxyFailureHint) {
               msg = 'Backend is unreachable. Start API server with `cd server && npm install && npm run dev`, then retry login.';
@@ -68,7 +77,7 @@ export default function LoginPage() {
             } else if (typeof data === 'object' && data !== null && typeof (data as Record<string, unknown>)['error'] === 'string') {
               msg = String((data as Record<string, unknown>)['error']);
             } else {
-              msg = 'Backend login service returned HTTP 500. Check backend logs in the server terminal for the real error.';
+              msg = 'Backend login failed (HTTP 500). Most commonly this means the API is down or dependencies are missing. Run `cd server && npm install && npm run dev`, then verify `http://localhost:3001/api/v1/system/health` before retrying.';
             }
           } else if (typeof data === 'object' && data !== null && typeof (data as Record<string, unknown>)['error'] === 'string') {
             msg = String((data as Record<string, unknown>)['error']);
