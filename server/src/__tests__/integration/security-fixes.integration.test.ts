@@ -144,7 +144,7 @@ describe('Security Fixes: Phase 1 (CRITICAL)', () => {
       const callArgs = findNeighbors.mock.calls[0][0];
       expect(callArgs.neighbors[0].restricts).toEqual([
         { namespace: 'department', allow_tokens: ['engineering'] },
-        { namespace: 'roles', allow_tokens: ['viewer'] }
+        { namespace: 'roles', allow_tokens: ['VIEWER', 'USER', 'IC'] }
       ]);
     });
   });

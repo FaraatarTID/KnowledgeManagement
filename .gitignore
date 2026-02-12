@@ -20,6 +20,7 @@ dist/
 
 # Env
 .env*
+!.env.example
 
 # Data
 server/data/*.json
