@@ -66,11 +66,15 @@ describe('DocumentController', () => {
 
     const expectLocalIndexFileCall = (expectedLocalFilePath: string) => {
         expect(syncService.indexFile).toHaveBeenCalledTimes(1);
-        const [indexedFile, metadata, options] = vi.mocked(syncService.indexFile).mock.calls.at(0) ?? [];
+        const callArgs = vi.mocked(syncService.indexFile).mock.calls.at(0) ?? [];
+        const [indexedFile, metadata, options] = callArgs;
 
+        expect(callArgs).toHaveLength(3);
         expect(indexedFile).toBeTruthy();
         expect(indexedFile?.id).toMatch(/^manual-/);
         expect(metadata).toBeUndefined();
+        expect(options).toBeTruthy();
+        expect(Object.keys(options ?? {}).sort()).toEqual(['localFilePath']);
         expect(options?.localFilePath).toBe(expectedLocalFilePath);
         expect(options?.localFileBuffer).toBeUndefined();
     };
