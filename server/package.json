@@ -13,7 +13,8 @@
     "test:ci": "node scripts/proxy-env-check.mjs --strict && node scripts/run-vitest.mjs --maxWorkers=1",
     "doctor:proxy:strict": "node scripts/proxy-env-check.mjs --strict",
     "preinstall": "node scripts/preinstall-check.mjs",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "simulate:local-aistudio": "node scripts/simulate-local-aistudio-chat.mjs --help"
   },
   "keywords": [],
   "author": "",

@@ -61,6 +61,14 @@ export class RAGService {
     return Math.ceil(text.length / 4);
   }
 
+  private remainingBudgetMs(operationDeadline: number): number {
+    const remaining = operationDeadline - Date.now();
+    if (remaining <= 0) {
+      return 100;
+    }
+    return Math.min(remaining, REQUEST_TIMEOUTS.RAG_QUERY);
+  }
+
   async query(params: {
     query: string;
     userId: string;
@@ -261,7 +269,7 @@ export class RAGService {
         userProfile,
         history
       }),
-      REQUEST_TIMEOUTS.RAG_QUERY - (Date.now() - operationDeadline), // Remaining time in RAG query
+      this.remainingBudgetMs(operationDeadline),
       'RAG: Gemini query'
     );
 

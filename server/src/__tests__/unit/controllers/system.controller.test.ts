@@ -49,12 +49,43 @@ describe('SystemController', () => {
 
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
                 status: 'online',
+                mode: expect.objectContaining({
+                    driveConfigured: false,
+                    ingestionMode: 'local_manual'
+                }),
                 services: expect.objectContaining({
                     gemini: { status: 'OK' },
                     drive: { status: 'OK' }
                 }),
                 vectors: { count: 10 }
             }));
+        });
+
+
+        it('should expose drive mode when drive folder is configured', async () => {
+            const prev = process.env.GOOGLE_DRIVE_FOLDER_ID;
+            process.env.GOOGLE_DRIVE_FOLDER_ID = 'folder-123';
+
+            try {
+                vi.mocked(geminiService.checkHealth).mockResolvedValue({ status: 'OK' });
+                vi.mocked(driveService.checkHealth).mockResolvedValue({ status: 'OK' });
+                vi.mocked(vectorService.getVectorCount).mockResolvedValue(10);
+
+                await SystemController.health(mockRequest, mockResponse, nextMock);
+
+                expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
+                    mode: expect.objectContaining({
+                        driveConfigured: true,
+                        ingestionMode: 'google_drive'
+                    })
+                }));
+            } finally {
+                if (typeof prev === 'string') {
+                    process.env.GOOGLE_DRIVE_FOLDER_ID = prev;
+                } else {
+                    delete process.env.GOOGLE_DRIVE_FOLDER_ID;
+                }
+            }
         });
     });
 

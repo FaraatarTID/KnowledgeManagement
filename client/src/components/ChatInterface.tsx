@@ -63,8 +63,8 @@ export function ChatInterface({
             </p>
           </div>
         ) : (
-          chatHistory.map((msg, idx) => (  
-            <div key={idx} className={`flex ${msg.type === 'user' ? 'justify-start' : 'justify-end'}`}>
+          chatHistory.map((msg) => (  
+            <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-start' : 'justify-end'}`}>
               <div className={`max-w-[80%] rounded-lg p-4 ${
                 msg.type === 'user'
                   ? 'bg-white border border-gray-200'
