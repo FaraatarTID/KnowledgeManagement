@@ -220,7 +220,7 @@ function AIKBContent() {
             timestamp: new Date().toISOString()
           }
         ];
-        saveChatHistory(finalHistory, documents).catch(console.error);
+        Promise.resolve(saveChatHistory(finalHistory, documents)).catch(console.error);
         return finalHistory;
       });
       toast.success('Response received');
