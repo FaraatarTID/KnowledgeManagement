@@ -45,7 +45,16 @@ export class ChatController {
 
     try {
       const aiResponse = await chatService.queryChatLegacy(query, documents);
-      res.json({ content: aiResponse });
+      res.json({
+        answer: aiResponse,
+        content: aiResponse,
+        sources: [],
+        integrity: {
+          confidence: 'Unknown',
+          isVerified: false,
+          reason: 'Legacy endpoint response'
+        }
+      });
     } catch (error: any) {
       Logger.error('Legacy chat error', { error: error.message });
       res.status(500).json({ message: 'Failed to process chat request.', error: String((error as any)?.message ?? error) });
@@ -63,7 +72,16 @@ export class ChatController {
 
     try {
       const aiResponse = await chatService.queryChatLegacy(query, documents);
-      res.json({ content: aiResponse });
+      res.json({
+        answer: aiResponse,
+        content: aiResponse,
+        sources: [],
+        integrity: {
+          confidence: 'Unknown',
+          isVerified: false,
+          reason: 'Legacy endpoint response'
+        }
+      });
     } catch (error) {
       Logger.error('Legacy endpoint error', { error: (error as any).message });
       res.status(500).json({ message: 'Failed to process chat request.', error: String((error as any)?.message ?? error) });

@@ -90,7 +90,10 @@ describe('Chat API', () => {
             });
 
         expect(res.status).toBe(200);
+        expect(res.body).toHaveProperty('answer', 'Mock Legacy Answer');
         expect(res.body).toHaveProperty('content', 'Mock Legacy Answer');
+        expect(res.body).toHaveProperty('sources');
+        expect(res.body).toHaveProperty('integrity');
     });
 
     it('should reject empty modern query', async () => {

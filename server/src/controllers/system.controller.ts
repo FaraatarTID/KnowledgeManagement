@@ -30,10 +30,15 @@ export class SystemController {
     const geminiHealth = await geminiService.checkHealth();
     const driveHealth = await driveService.checkHealth();
     const vectorCount = await vectorService.getVectorCount();
+    const driveConfigured = Boolean(process.env.GOOGLE_DRIVE_FOLDER_ID);
 
     res.json({
       status: 'online',
       timestamp: new Date().toISOString(),
+      mode: {
+        driveConfigured,
+        ingestionMode: driveConfigured ? 'google_drive' : 'local_manual'
+      },
       services: {
         gemini: geminiHealth,
         drive: driveHealth

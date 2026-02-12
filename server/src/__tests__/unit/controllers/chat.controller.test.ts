@@ -98,7 +98,16 @@ describe('ChatController', () => {
             await ChatController.legacyChat(mockRequest, mockResponse, nextMock);
 
             expect(chatService.queryChatLegacy).toHaveBeenCalledWith('Hi', [{id:'1', content:'A'}]);
-            expect(jsonMock).toHaveBeenCalledWith({ content: 'Response' });
+            expect(jsonMock).toHaveBeenCalledWith({
+                answer: 'Response',
+                content: 'Response',
+                sources: [],
+                integrity: {
+                    confidence: 'Unknown',
+                    isVerified: false,
+                    reason: 'Legacy endpoint response'
+                }
+            });
         });
     });
 });
