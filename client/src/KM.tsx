@@ -26,6 +26,7 @@ function AIKBContent() {
   const [activeTab, setActiveTab] = useState('documents');
   
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const hasLocalChangesRef = useRef(false);
   const { loadData, saveDocuments, saveChatHistory } = useStorage();
   
   const searchTerm = useDebounce(rawSearchTerm, 300);
@@ -93,6 +94,10 @@ function AIKBContent() {
           const safeDocs = Array.isArray(loadedDocs) ? loadedDocs.map(normalizeDoc) : [];
           const safeChat = Array.isArray(loadedChat) ? loadedChat.map(normalizeMsg) : [];
 
+          if (hasLocalChangesRef.current) {
+            return;
+          }
+
           setDocuments(safeDocs);
           setChatHistory(safeChat);
 
@@ -107,7 +112,8 @@ function AIKBContent() {
       } catch {
         toast.error('Failed to load data. Starting with empty state.');
         setDocuments([]);
-        setChatHistory([]);
+        hasLocalChangesRef.current = true;
+      setChatHistory([]);
       }
     };
 
@@ -128,6 +134,7 @@ function AIKBContent() {
     };
     
     const updatedDocs = [...documents, newDoc];
+    hasLocalChangesRef.current = true;
     setDocuments(updatedDocs);
     
     try {
@@ -145,6 +152,7 @@ function AIKBContent() {
   const deleteDocument = useCallback(async (id: string) => {
     if (!confirm('Are you sure you want to delete this document?')) return;
     const updatedDocs = documents.filter(doc => doc.id !== id);
+    hasLocalChangesRef.current = true;
     setDocuments(updatedDocs);
     
     try {
@@ -184,6 +192,7 @@ function AIKBContent() {
       timestamp: new Date().toISOString()
     };
 
+    hasLocalChangesRef.current = true;
     setChatHistory(prev => [...prev, userMsg]);
     const queryToSubmit = currentQuery;
     setCurrentQuery('');
@@ -230,6 +239,7 @@ function AIKBContent() {
   const clearChat = useCallback(async () => {
     if (!confirm('Are you sure you want to clear the chat history?')) return;
     try {
+      hasLocalChangesRef.current = true;
       setChatHistory([]);
       await saveChatHistory([], documents);
       toast.success('Chat history cleared');
