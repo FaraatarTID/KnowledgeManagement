@@ -20,7 +20,7 @@ function AIKBContent() {
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatMsg[]>([]);
   const [currentQuery, setCurrentQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState(0);
   const [showAddDoc, setShowAddDoc] = useState(false);
   const [rawSearchTerm, setRawSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('documents');
@@ -29,6 +29,7 @@ function AIKBContent() {
   const { loadData, saveDocuments, saveChatHistory } = useStorage();
   
   const searchTerm = useDebounce(rawSearchTerm, 300);
+  const isLoading = pendingRequests > 0;
 
   const syncDocumentsToBackend = useCallback(async (docsToSync: Doc[]) => {
     if (docsToSync.length === 0) return;
@@ -176,9 +177,8 @@ function AIKBContent() {
       return;
     }
 
-    const queryId = uuidv4();
     const userMsg: ChatMsg = {
-      id: queryId,
+      id: uuidv4(),
       type: 'user',
       content: currentQuery,
       timestamp: new Date().toISOString()
@@ -187,39 +187,43 @@ function AIKBContent() {
     setChatHistory(prev => [...prev, userMsg]);
     const queryToSubmit = currentQuery;
     setCurrentQuery('');
-    setIsLoading(true);
+    setPendingRequests(prev => prev + 1);
 
     try {
-      const data = await api.query(queryToSubmit, AbortSignal.timeout(30000));
-      const aiResponse = data.answer;
+      const timeoutMs = 30000;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Request timed out. Please try again.')), timeoutMs);
+      });
 
-      setChatHistory(prev => {
-        const p = prev as ChatMsg[];
-        if (!p.some((msg) => msg.id === queryId)) return prev;
+      const data = await Promise.race([
+        api.query(queryToSubmit),
+        timeoutPromise
+      ]);
 
+      const aiResponse = String(data.answer ?? (data as { content?: string }).content ?? '');
+      setChatHistory((prev) => {
         const finalHistory: ChatMsg[] = [
-          ...p.filter((msg) => msg.id !== queryId),
-          userMsg,
+          ...prev,
           {
             id: uuidv4(),
             type: 'ai',
-            content: String(aiResponse ?? ''),
+            content: aiResponse,
             timestamp: new Date().toISOString()
-          } as ChatMsg
+          }
         ];
-
         saveChatHistory(finalHistory, documents).catch(console.error);
         return finalHistory;
       });
-      
       toast.success('Response received');
 
     } catch (error: unknown) {
-      setChatHistory(prev => prev.filter((msg) => msg.id !== queryId));
+      setCurrentQuery(queryToSubmit);
       const emsg = error instanceof Error ? error.message : String(error);
-      toast.error(emsg.includes('AbortError') ? 'Request timed out.' : (emsg.includes('Failed to fetch') ? 'Cannot connect to server.' : emsg));
+      toast.error(emsg.includes('Request timed out') || emsg.includes('AbortError')
+        ? 'Request timed out. Please try again.'
+        : (emsg.includes('Failed to fetch') ? 'Cannot connect to server.' : emsg));
     } finally {
-      setIsLoading(false);
+      setPendingRequests(prev => Math.max(0, prev - 1));
     }
   }, [currentQuery, documents, saveChatHistory]);
 
@@ -236,7 +240,7 @@ function AIKBContent() {
 
   const handleCloudBackup = useCallback(async () => {
     try {
-      setIsLoading(true);
+      setPendingRequests(prev => prev + 1);
       toast.info('در حال پشتیبان‌گیری ابری...');
       const result = await api.cloudBackup();
       if (result.success) {
@@ -248,7 +252,7 @@ function AIKBContent() {
       const message = error instanceof Error ? error.message : 'ارتباط با سرور برقرار نشد';
       toast.error(`خطا در اتصال: ${message}`);
     } finally {
-      setIsLoading(false);
+      setPendingRequests(prev => Math.max(0, prev - 1));
     }
   }, []);
 
