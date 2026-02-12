@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "doctor:deps": "node scripts/preflight-client-deps.mjs",
+    "doctor:deps:strict": "node scripts/preflight-client-deps.mjs --strict"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.64.1",
