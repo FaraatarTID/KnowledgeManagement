@@ -15,8 +15,8 @@ if errorlevel 1 (
     goto :end
 )
 
-for /f "tokens=1,2 delims=.v" %%a in ('node -v') do (
-  set NODE_MAJOR=%%b
+for /f "tokens=1 delims=v." %%a in ('node -v') do (
+  set NODE_MAJOR=%%a
 )
 if not defined NODE_MAJOR set NODE_MAJOR=0
 if !NODE_MAJOR! LSS 20 (
