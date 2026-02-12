@@ -18,6 +18,7 @@ import { HistoryService } from '../../../services/history.service.js';
 
 describe('HistoryService', () => {
   const originalNodeEnv = process.env.NODE_ENV;
+  const sqliteRows: Array<Record<string, any>> = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -28,6 +29,7 @@ describe('HistoryService', () => {
     insertMock.mockReset();
     selectAllMock.mockReset();
     fromMock.mockReset();
+    sqliteRows.length = 0;
   });
 
   afterAll(() => {
@@ -38,18 +40,37 @@ describe('HistoryService', () => {
     getDatabase: () => ({
       prepare: (query: string) => {
         if (query.startsWith('INSERT INTO history')) {
-          return { run: insertMock };
+          return {
+            run: (...args: any[]) => {
+              const [_id, event_type, doc_id, doc_name, details, user_id, metadata] = args;
+              sqliteRows.unshift({
+                id: _id,
+                event_type,
+                doc_id,
+                doc_name,
+                details,
+                user_id,
+                metadata
+              });
+              return insertMock(...args);
+            }
+          };
         }
         if (query.startsWith('SELECT * FROM history')) {
-          return { all: selectAllMock };
+          return {
+            all: (limit: number) => {
+              const override = selectAllMock(limit);
+              return override ?? sqliteRows.slice(0, limit);
+            }
+          };
         }
         throw new Error(`Unexpected query: ${query}`);
       }
     })
   };
 
-  it('stores and returns events in mock mode instead of hardcoded fake event', async () => {
-    const service = new HistoryService();
+  it('stores and returns events in local sqlite mode', async () => {
+    const service = new HistoryService(sqlite);
 
     await service.recordEvent({
       event_type: 'DELETED',

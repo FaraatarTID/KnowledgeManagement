@@ -262,7 +262,7 @@ function AdminContent() {
     setIsSyncing(true);
     try {
       const res = await api.post('/sync');
-      // res.data.message often contains "Demo Sync" or "Sync complete"
+      // Server message can vary by runtime mode; log for operator visibility.
       console.log('Sync result:', res.data);
       // Refresh current tab data
       fetchData();

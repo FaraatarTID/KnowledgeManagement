@@ -29,9 +29,20 @@ export class SyncService {
     this.historyService = historyService || new HistoryService();
     this.localMetadataService = new LocalMetadataService();
     this.extractionService = new ExtractionService();
+
+    const ocrCapability = this.extractionService.getOcrCapability();
+    if (!ocrCapability.available) {
+      Logger.warn('SyncService: OCR fallback tools unavailable; scanned PDFs may fail extraction.', ocrCapability);
+    } else {
+      Logger.info('SyncService: OCR fallback tools detected.', ocrCapability);
+    }
     
     const defaultPath = path.join(process.cwd(), 'data', 'sync_status.json');
     this.statusStore = new JSONStore(statusStoragePath || defaultPath, {});
+  }
+
+  getOcrCapability() {
+    return this.extractionService.getOcrCapability();
   }
 
   async syncAll(folderId: string) {
@@ -163,7 +174,16 @@ export class SyncService {
 
       if (!textContent) {
         Logger.warn('SyncService: No content extracted', { transactionId, fileName: file.name, fileId: file.id });
-        return file.id;
+        await this.updateSyncStatus(file.id, {
+          status: 'FAILED',
+          message: file.mimeType === 'application/pdf'
+            ? 'No extractable PDF text. Document may be scanned; OCR tools (pdftoppm+tesseract) may be required.'
+            : 'No extractable text content.',
+          transactionId,
+          lastSync: new Date().toISOString(),
+          fileName: file.name
+        });
+        throw new Error('No extractable content available for indexing');
       }
 
       // 2. Metadata Extraction & Normalization

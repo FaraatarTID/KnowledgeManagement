@@ -651,15 +651,15 @@ Solution:
 
 ### Chat Issues
 
-**Problem: "AI Not Connected (Mock Mode)"**
+**Problem: "AI Not Connected"**
 
 ```
-This means: AI configuration is missing in your .env file.
+This means: AI configuration is missing in your `.env` file.
 Solution:
 1. Use the "Easy Mode" (Option 1 in Setup Guide).
 2. Get a free Gemini API Key from Google AI Studio.
 3. Add it to GOOGLE_API_KEY in your server/.env file.
-4. Restart the app. Real AI answers will now work instantly.
+4. Restart the app. AI answers will now work instantly.
 ```
 
 **Problem: "Chat Takes Too Long"**

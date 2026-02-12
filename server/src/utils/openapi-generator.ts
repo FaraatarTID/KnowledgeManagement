@@ -487,7 +487,7 @@ export function generateOpenAPISpec(): OpenAPISpec {
       // =====================================================================
       // CHAT ENDPOINTS
       // =====================================================================
-      '/chat/query': {
+      '/query': {
         post: {
           summary: 'Query knowledge base',
           description: 'Submit a natural language query to the knowledge base. Returns AI-generated response with source documents.',

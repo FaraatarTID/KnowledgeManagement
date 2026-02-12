@@ -15,8 +15,6 @@ export class HistoryService {
   private supabase: SupabaseClient | null = null;
   private sqlite?: any; // SqliteMetadataService
   private isLocalMode: boolean = false;
-  private isMock: boolean = false;
-  private mockEvents: Array<Record<string, any>> = [];
 
   constructor(sqlite?: any) {
     this.sqlite = sqlite;
@@ -30,12 +28,7 @@ export class HistoryService {
       this.isLocalMode = true;
       Logger.info('HistoryService: Supabase missing. Initialized in LOCAL MODE (SQLite).');
     } else {
-      if (process.env.NODE_ENV === 'test') {
-        Logger.info('HistoryService: Supabase and SQLite missing; entering MOCK MODE for tests.');
-        this.isMock = true;
-      } else {
-        throw new Error('FATAL: Supabase credentials and Local Storage both unavailable in HistoryService.');
-      }
+      throw new Error('FATAL: Supabase credentials and Local Storage both unavailable in HistoryService.');
     }
   }
 
@@ -62,24 +55,6 @@ export class HistoryService {
   }
 
   async recordEvent(event: HistoryEvent) {
-    if (this.isMock) {
-      this.mockEvents.unshift({
-        id: uuidv4(),
-        created_at: new Date().toISOString(),
-        ...event
-      });
-
-      if (this.mockEvents.length > 1000) {
-        this.mockEvents = this.mockEvents.slice(0, 1000);
-      }
-
-      Logger.info('HistoryService: Recorded in-memory history event (MOCK MODE)', {
-        eventType: event.event_type,
-        docId: event.doc_id
-      });
-      return;
-    }
-
     try {
       if (this.isLocalMode) {
         this.writeToSqlite(event);
@@ -119,10 +94,6 @@ export class HistoryService {
   }
 
   async getHistory(limit: number = 100) {
-    if (this.isMock) {
-      return this.mockEvents.slice(0, limit);
-    }
-
     try {
       if (this.isLocalMode) {
         const rows = this.sqlite.getDatabase()

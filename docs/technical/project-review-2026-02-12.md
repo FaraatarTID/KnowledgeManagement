@@ -18,7 +18,7 @@ The repo is close to operationally strong on the backend but is not currently pr
 
 The main risk is false confidence from backend-only validation while client verification is absent. `README.md` labels the system as "Production Ready", but client build validation is currently unavailable in this environment, and client dependency constraints include a known tension (`react@19` with `@testing-library/react@14`) that can create flaky local setup behavior and avoidable CI churn.
 
-A secondary risk was server release fragility from TypeScript strictness regressions. `server/src/services/user.service.ts` had a typed status mismatch in mock-user creation, and `server/src/services/vector.service.ts` had possible undefined array access in top-K similarity selection. Those are now fixed and server build compiles successfully.
+A secondary risk was server release fragility from TypeScript strictness regressions. `server/src/services/user.service.ts` had a typed status mismatch in test-only user creation, and `server/src/services/vector.service.ts` had possible undefined array access in top-K similarity selection. Those are now fixed and server build compiles successfully.
 
 ## Quantified risk estimate
 
@@ -36,7 +36,7 @@ Create one non-negotiable release gate: `server lint+build+test` and `client doc
 
 ## Files changed in this review
 
-- `server/src/services/user.service.ts`: tightened mock user typing to satisfy strict compile-time `UserStatus` constraints.
+- `server/src/services/user.service.ts`: tightened test-user typing to satisfy strict compile-time `UserStatus` constraints.
 - `server/src/services/vector.service.ts`: guarded top-K lowest-score comparisons against possibly undefined indexed items under strict TS settings.
 - `server/package.json`: added a missing `lint` script (`tsc --noEmit`) so lint gate exists in CI.
 - `client/package.json` and `client/scripts/preflight-client-deps.mjs`: added dependency preflight commands (`doctor:deps` warning mode and `doctor:deps:strict` fail mode) to detect blocked packages before install/build/lint/test runs.

@@ -22,8 +22,8 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own data" ON public.users FOR
 SELECT USING (auth.uid () = id);
 
--- Policy: Admins can view all data (This requires additional setup for custom claims or role tables usually)
--- For simplicity in this demo migration, we might just allow service role key full access
+-- Policy: Admins can view all data (this usually requires custom claims or role tables)
+-- service role key has full access for server-side operations
 -- service_role key bypasses RLS, so this table is secure by default from public anon access
 
 -- Indexes

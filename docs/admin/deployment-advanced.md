@@ -158,7 +158,7 @@ npm install
 npm test
 ```
 
-_Note: Backend tests require either a valid Supabase connection or for the server to be in a controlled test environment. Insecure legacy "Demo Codes" have been completely removed._
+_Note: Backend tests require either a valid Supabase connection or a controlled test environment. Legacy insecure access-code paths have been removed._
 
 ### 4. Start the App
 

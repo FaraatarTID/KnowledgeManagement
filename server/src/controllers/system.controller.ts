@@ -8,7 +8,8 @@ import {
   userService, 
   auditService, 
   configService,
-  backupService
+  backupService,
+  syncService
 } from '../container.js';
 import type { AuthRequest } from '../middleware/auth.middleware.js';
 import { Logger } from '../utils/logger.js';
@@ -31,6 +32,7 @@ export class SystemController {
     const driveHealth = await driveService.checkHealth();
     const vectorCount = await vectorService.getVectorCount();
     const driveConfigured = Boolean(process.env.GOOGLE_DRIVE_FOLDER_ID);
+    const ocrCapability = syncService.getOcrCapability();
 
     res.json({
       status: 'online',
@@ -41,7 +43,11 @@ export class SystemController {
       },
       services: {
         gemini: geminiHealth,
-        drive: driveHealth
+        drive: driveHealth,
+        ocr: {
+          status: ocrCapability.available ? 'OK' : 'WARN',
+          ...ocrCapability
+        }
       },
       vectors: {
         count: vectorCount
@@ -79,8 +85,6 @@ export class SystemController {
     let systemHealth = 'Optimal';
     if (errors.length > 0) {
       systemHealth = 'Critical';
-    } else if (healthChecks.some(h => h.message?.includes('Mock'))) {
-      systemHealth = 'Warning';
     }
 
     res.json({

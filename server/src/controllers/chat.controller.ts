@@ -4,6 +4,7 @@ import { chatService, ragService } from '../container.js';
 import type { AuthRequest } from '../middleware/auth.middleware.js';
 import { Logger } from '../utils/logger.js';
 import { catchAsync } from '../utils/catchAsync.js';
+import { AppError } from '../middleware/error.middleware.js';
 
 export class ChatController {
   
@@ -17,15 +18,21 @@ export class ChatController {
     const { query } = req.body;
     const user = req.user!; 
 
-    const result = await ragService.query({
-      query,
-      userId: user.id || 'anonymous',
-      userProfile: {
-        name: user.name || 'User',
-        department: user.department || 'General',
-        role: user.role || 'VIEWER'
-      }
-    });
+    let result: any;
+    try {
+      result = await ragService.query({
+        query,
+        userId: user.id || 'anonymous',
+        userProfile: {
+          name: user.name || 'User',
+          department: user.department || 'General',
+          role: user.role || 'VIEWER'
+        }
+      });
+    } catch (error: any) {
+      Logger.error('ChatController: Modern query failed', { error: error?.message, userId: user.id });
+      throw new AppError('Failed to process query request.', 503);
+    }
 
     // Hallucination verdict is already integrated in integrity field
     // Client can check result.integrity.hallucinationVerdict === 'reject' to warn user

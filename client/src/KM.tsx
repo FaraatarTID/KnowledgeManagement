@@ -221,14 +221,23 @@ function AIKBContent() {
 
     try {
       const timeoutMs = 30000;
+      const controller = new AbortController();
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Request timed out. Please try again.')), timeoutMs);
+        timeoutId = setTimeout(() => {
+          controller.abort();
+          reject(new Error('Request timed out. Please try again.'));
+        }, timeoutMs);
       });
-
-      const data = await Promise.race([
-        api.query(queryToSubmit),
-        timeoutPromise
-      ]);
+      let data: Awaited<ReturnType<typeof api.query>>;
+      try {
+        data = await Promise.race([
+          api.query(queryToSubmit, controller.signal),
+          timeoutPromise
+        ]);
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
 
       const aiResponse = String(data.answer ?? (data as { content?: string }).content ?? '');
       setChatHistory((prev) => {
@@ -249,7 +258,7 @@ function AIKBContent() {
     } catch (error: unknown) {
       setCurrentQuery(queryToSubmit);
       const emsg = error instanceof Error ? error.message : String(error);
-      toast.error(emsg.includes('Request timed out') || emsg.includes('AbortError')
+      toast.error(emsg.includes('Request timed out') || emsg.includes('AbortError') || emsg.includes('aborted')
         ? 'Request timed out. Please try again.'
         : (emsg.includes('Failed to fetch') ? 'Cannot connect to server.' : emsg));
     } finally {

@@ -9,7 +9,7 @@ export class RedactionService {
 
     let redactedContent = content;
     for (const field of rules.redactFields) {
-      // Simple regex replacement for demonstration
+      // Basic regex replacement for configured key-value patterns
       // Matches "field: value" or "field=value"
       const regex = new RegExp(`${field}\\s*[:=]\\s*[^\\n,]+`, 'gi');
       redactedContent = redactedContent.replace(regex, `${field}: [REDACTED]`);

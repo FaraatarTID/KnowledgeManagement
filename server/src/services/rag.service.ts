@@ -76,6 +76,7 @@ export class RAGService {
     history?: { role: 'user' | 'model'; content: string }[];
   }) {
     const { query, userId, userProfile, history = [] } = params;
+    const redactedQuery = this.redactionService.redactPII(query);
     const operationDeadline = Date.now() + REQUEST_TIMEOUTS.RAG_QUERY;
     let totalInputTokens = 0;
     let estimatedCost = 0;
@@ -139,7 +140,7 @@ export class RAGService {
         await this.auditService.log({
           userId,
           action: 'RAG_QUERY',
-          query,
+          query: redactedQuery,
           granted: true,
           reason: 'No matching documents found'
         });
@@ -184,12 +185,19 @@ export class RAGService {
         isTruncated = true;
         // Try to add partial content if this is first block
         if (blockCount === 0) {
-          const availableTokens = env.RAG_MAX_INPUT_TOKENS - totalInputTokens;
-          // Rough estimate: truncate to ~85% of available tokens
-          const truncatedText = text.substring(0, Math.floor(text.length * 0.85));
-          const truncatedBlock = `SOURCE: ${res.metadata.title || 'Untitled'}\nCONTENT: ${truncatedText}\n...[TRUNCATED - token limit reached]`;
-          context.push(truncatedBlock);
-          contextTokens += this.countTokens(truncatedBlock);
+          const availableTokens = env.RAG_MAX_INPUT_TOKENS - totalInputTokens - contextTokens;
+          const sourceTitle = res.metadata.title || 'Untitled';
+          const prefix = `SOURCE: ${sourceTitle}\nCONTENT: `;
+          const suffix = `\n...[TRUNCATED - token limit reached]`;
+          const reservedTokens = this.countTokens(prefix + suffix);
+          const budgetForText = Math.max(0, availableTokens - reservedTokens);
+          const truncatedText = this.truncateToTokenBudget(text, budgetForText);
+          const truncatedBlock = `${prefix}${truncatedText}${suffix}`;
+          const truncatedBlockTokens = this.countTokens(truncatedBlock);
+          if (truncatedText.length > 0 && truncatedBlockTokens <= availableTokens) {
+            context.push(truncatedBlock);
+            contextTokens += truncatedBlockTokens;
+          }
         }
         break;
       }
@@ -211,13 +219,13 @@ export class RAGService {
         inputTokens: totalInputTokens
       });
 
-      await this.auditService.log({
-        userId: userId || 'anonymous',
-        action: 'RAG_QUERY',
-        query,
-        granted: false,
-        reason: `Query cost ($${estimatedCost.toFixed(2)}) exceeds limit ($${env.RAG_MAX_COST_PER_REQUEST})`
-      });
+        await this.auditService.log({
+          userId: userId || 'anonymous',
+          action: 'RAG_QUERY',
+          query: redactedQuery,
+          granted: false,
+          reason: `Query cost ($${estimatedCost.toFixed(2)}) exceeds limit ($${env.RAG_MAX_COST_PER_REQUEST})`
+        });
 
       return {
         answer: 'Query is too expensive to process. Please try a more specific search.',
@@ -245,7 +253,7 @@ export class RAGService {
       await this.auditService.log({
         userId,
         action: 'RAG_QUERY',
-        query,
+        query: redactedQuery,
         granted: true,
         reason: 'Context empty after filtering'
       });
@@ -260,8 +268,6 @@ export class RAGService {
 
     // 5. Generate response with Gemini (with timeout)
     // SECURITY: Redact PII from user query before sending to LLM
-    const redactedQuery = this.redactionService.redactPII(query);
-
     const { text, usageMetadata } = await TimeoutUtil.timeout(
       this.geminiService.queryKnowledgeBase({
         query: redactedQuery,
@@ -346,7 +352,7 @@ export class RAGService {
       await this.auditService.log({
         userId: userId || 'anonymous',
         action: 'RAG_QUERY',
-        query,
+        query: redactedQuery,
         granted: true,
         metadata: {
           hallucinationDetected: true,
@@ -377,7 +383,7 @@ export class RAGService {
     await this.auditService.log({
       userId: userId || 'anonymous',
       action: 'RAG_QUERY',
-      query,
+      query: redactedQuery,
       granted: true,
       resourceId: citations[0]?.id,
       metadata: {
@@ -409,7 +415,7 @@ export class RAGService {
         await this.auditService.log({
           userId: userId || 'anonymous',
           action: 'RAG_QUERY',
-          query,
+          query: redactedQuery,
           granted: false,
           reason: `Query failed: ${error instanceof Error ? error.message : 'Unknown error'}`
         });
@@ -417,19 +423,37 @@ export class RAGService {
         Logger.error('RAGService: Failed to log query failure', { auditError });
       }
 
-      // Return error response
-      return {
-        answer: 'An error occurred while processing your query. Please try again.',
-        sources: [],
-        ai_citations: [],
-        usage: undefined,
-        integrity: {
-          confidence: 'Low',
-          isVerified: false,
-          reason: error instanceof Error ? error.message : 'Unknown error'
-        }
-      };
+      throw new Error('RAG_QUERY_FAILED');
     }
+  }
+
+  private truncateToTokenBudget(text: string, tokenBudget: number): string {
+    if (tokenBudget <= 0 || text.length === 0) {
+      return '';
+    }
+
+    if (this.countTokens(text) <= tokenBudget) {
+      return text;
+    }
+
+    let low = 0;
+    let high = text.length;
+    let best = '';
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const candidate = text.slice(0, mid);
+      const tokens = this.countTokens(candidate);
+
+      if (tokens <= tokenBudget) {
+        best = candidate;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    return best;
   }
 
   /**

@@ -144,10 +144,6 @@ const validateEnv = (): Env => {
        if (!resolved.SUPABASE_URL || !resolved.SUPABASE_SERVICE_ROLE_KEY || resolved.SUPABASE_URL === '') {
           console.warn('⚠️  Supabase credentials missing. Switching to LOCAL STORAGE MODE (SQLite).');
        }
-       
-       if (resolved.GOOGLE_CLOUD_PROJECT_ID && resolved.GOOGLE_CLOUD_PROJECT_ID.includes('mock') && resolved.NODE_ENV === 'production') {
-          throw new Error('GOOGLE_CLOUD_PROJECT_ID cannot be a mock project in production.');
-       }
     }
     
     return resolved;

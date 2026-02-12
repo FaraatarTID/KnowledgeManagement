@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SystemController } from '../../../controllers/system.controller.js';
-import { geminiService, driveService, vectorService, userService, auditService } from '../../../container.js';
+import { geminiService, driveService, vectorService, userService, auditService, syncService } from '../../../container.js';
 
 vi.mock('../../../container.js', () => ({
   geminiService: { checkHealth: vi.fn() },
@@ -16,6 +16,7 @@ vi.mock('../../../container.js', () => ({
       initialize: vi.fn().mockResolvedValue(undefined)
   },
   auditService: { getResolutionStats: vi.fn() },
+  syncService: { getOcrCapability: vi.fn() },
   configService: { getConfig: vi.fn(), updateCategories: vi.fn(), updateDepartments: vi.fn() }
 }));
 
@@ -44,6 +45,7 @@ describe('SystemController', () => {
             vi.mocked(geminiService.checkHealth).mockResolvedValue({ status: 'OK' });
             vi.mocked(driveService.checkHealth).mockResolvedValue({ status: 'OK' });
             vi.mocked(vectorService.getVectorCount).mockResolvedValue(10);
+            vi.mocked(syncService.getOcrCapability).mockReturnValue({ available: true, pdftoppm: true, tesseract: true });
 
             await SystemController.health(mockRequest, mockResponse, nextMock);
 
@@ -55,7 +57,8 @@ describe('SystemController', () => {
                 }),
                 services: expect.objectContaining({
                     gemini: { status: 'OK' },
-                    drive: { status: 'OK' }
+                    drive: { status: 'OK' },
+                    ocr: expect.objectContaining({ status: 'OK', available: true })
                 }),
                 vectors: { count: 10 }
             }));
@@ -70,6 +73,7 @@ describe('SystemController', () => {
                 vi.mocked(geminiService.checkHealth).mockResolvedValue({ status: 'OK' });
                 vi.mocked(driveService.checkHealth).mockResolvedValue({ status: 'OK' });
                 vi.mocked(vectorService.getVectorCount).mockResolvedValue(10);
+                vi.mocked(syncService.getOcrCapability).mockReturnValue({ available: true, pdftoppm: true, tesseract: true });
 
                 await SystemController.health(mockRequest, mockResponse, nextMock);
 

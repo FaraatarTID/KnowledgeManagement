@@ -9,9 +9,13 @@ const normalized = args.flatMap((arg) => {
   return [arg];
 });
 
-const child = spawn('npx', ['vitest', ...normalized], {
+const command = process.platform === 'win32' ? 'cmd.exe' : 'npx';
+const commandArgs = process.platform === 'win32'
+  ? ['/d', '/s', '/c', 'npx', 'vitest', ...normalized]
+  : ['vitest', ...normalized];
+
+const child = spawn(command, commandArgs, {
   stdio: 'inherit',
-  shell: true,
 });
 
 child.on('exit', (code, signal) => {

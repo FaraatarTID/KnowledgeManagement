@@ -77,8 +77,10 @@ describe('ChatController', () => {
              vi.mocked(ragService.query).mockRejectedValue(new Error('AI Down'));
 
               await ChatController.query(mockRequest, mockResponse, nextMock);
-             
-             expect(nextMock).toHaveBeenCalledWith(expect.any(Error));
+              
+              expect(nextMock).toHaveBeenCalledWith(expect.any(Error));
+              const forwardedError = nextMock.mock.calls[0][0];
+              expect(forwardedError.statusCode).toBe(503);
         });
     });
 
