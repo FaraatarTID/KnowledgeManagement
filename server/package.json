@@ -13,7 +13,9 @@
     "test:ci": "node scripts/proxy-env-check.mjs --strict && node scripts/run-vitest.mjs --maxWorkers=1",
     "doctor:proxy:strict": "node scripts/proxy-env-check.mjs --strict",
     "preinstall": "node scripts/preinstall-check.mjs",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:local-upload": "node scripts/run-vitest.mjs --run src/__tests__/unit/controllers/document.controller.test.ts -t \"should index local PDF content when drive is not configured\"",
+    "test:local-indexing": "node scripts/run-vitest.mjs --run src/__tests__/unit/controllers/document.controller.test.ts src/__tests__/unit/services/sync.service.test.ts"
   },
   "keywords": [],
   "author": "",
