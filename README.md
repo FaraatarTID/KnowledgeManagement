@@ -115,6 +115,8 @@ If `npm install` fails in `server/` with logs like:
 
 then native module `better-sqlite3` could not download a prebuilt binary and fell back to local compilation.
 
+If startup fails with `JWT_SECRET` format errors in LOCAL mode, remove `JWT_SECRET` from `server/.env` and restart; the server will generate an ephemeral dev secret.
+
 Use this recovery flow:
 
 ```powershell

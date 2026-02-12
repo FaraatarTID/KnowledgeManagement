@@ -5,10 +5,7 @@ import { randomBytes } from 'crypto';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('3001'),
-  JWT_SECRET: z.string()
-    .min(64, "JWT_SECRET must be at least 64 characters long (use: node -e 'console.log(require(\"crypto\").randomBytes(32).toString(\"hex\"))')")
-    .regex(/^[a-f0-9]{64,}$/, "JWT_SECRET must be hex-encoded random bytes")
-    .optional(),
+  JWT_SECRET: z.string().optional(),
   
   // Google Cloud / AI Studio
   GOOGLE_CLOUD_PROJECT_ID: z.string().optional(),
@@ -92,6 +89,17 @@ const validateEnv = (): Env => {
     const parsed = envSchema.parse({ ...process.env, ...testDefaults });
 
     const resolved: Env = { ...parsed, JWT_SECRET: parsed.JWT_SECRET ?? "" };
+
+    const isValidJwtSecret = (value: string): boolean => value.length >= 64 && /^[a-f0-9]{64,}$/.test(value);
+
+    if (resolved.JWT_SECRET && !isValidJwtSecret(resolved.JWT_SECRET)) {
+      if (resolved.VECTOR_STORE_MODE === 'LOCAL' && resolved.NODE_ENV !== 'production') {
+        resolved.JWT_SECRET = randomBytes(32).toString('hex');
+        console.warn('⚠️  JWT_SECRET is invalid. In LOCAL mode we generated an ephemeral secret for this process. Use a 64+ char hex secret to persist sessions across restarts.');
+      } else {
+        throw new Error('JWT_SECRET must be 64+ hex characters (use: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))")');
+      }
+    }
 
     if (!resolved.JWT_SECRET) {
       if (resolved.VECTOR_STORE_MODE === 'LOCAL') {
