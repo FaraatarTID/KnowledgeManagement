@@ -27,6 +27,7 @@ function AIKBContent() {
   
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const hasLocalChangesRef = useRef(false);
+  const pendingDocSyncRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { loadData, saveDocuments, saveChatHistory } = useStorage();
   
   const searchTerm = useDebounce(rawSearchTerm, 300);
@@ -139,8 +140,23 @@ function AIKBContent() {
     
     try {
       await saveDocuments(updatedDocs, chatHistory);
-      await api.addDocument(newDoc);
-      toast.success('Document added and synced for AI search');
+
+      if (pendingDocSyncRef.current) {
+        clearTimeout(pendingDocSyncRef.current);
+      }
+
+      pendingDocSyncRef.current = setTimeout(async () => {
+        try {
+          await api.addDocument(newDoc);
+          toast.success('Document added and synced for AI search');
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : String(error);
+          toast.error(msg.includes('Failed to fetch') ? 'Document saved locally. Cannot connect to server.' : (msg || 'Document saved locally. Sync failed.'));
+        } finally {
+          pendingDocSyncRef.current = null;
+        }
+      }, 200);
+
       setShowAddDoc(false);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -191,6 +207,11 @@ function AIKBContent() {
       content: currentQuery,
       timestamp: new Date().toISOString()
     };
+
+    if (pendingDocSyncRef.current) {
+      clearTimeout(pendingDocSyncRef.current);
+      pendingDocSyncRef.current = null;
+    }
 
     hasLocalChangesRef.current = true;
     setChatHistory(prev => [...prev, userMsg]);

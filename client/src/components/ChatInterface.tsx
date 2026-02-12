@@ -100,7 +100,7 @@ export function ChatInterface({
             className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
-            <span>{isLoading ? 'در حال پردازش...' : 'ارسال'}</span>
+            <span>ارسال</span>
           </button>
         </div>
         {!hasDocuments && (

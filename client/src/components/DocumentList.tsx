@@ -78,9 +78,11 @@ export function DocumentList({
                 </div>
                 <p className="text-sm text-gray-600 mb-2 line-clamp-2 h-10">{doc.content}</p>
                 <div className="flex items-center justify-between text-xs mt-auto">
-                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full truncate max-w-[120px]">
-                    {doc.category}
-                  </span>
+                  {doc.category && doc.category !== doc.title && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full truncate max-w-[120px]">
+                      {doc.category}
+                    </span>
+                  )}
                   <span className="text-gray-400 flex-shrink-0">
                     {doc.createdAt
                       ? new Date(doc.createdAt).toLocaleDateString('fa-IR')
