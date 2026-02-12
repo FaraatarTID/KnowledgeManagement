@@ -64,6 +64,22 @@ npm install
 cp .env.example .env
 ```
 
+
+### 1.1 Fast bootstrap on Windows
+
+If you cloned the repo on Windows, use:
+
+```bat
+run_app.bat
+```
+
+It now does first-run safety checks automatically:
+- verifies Node.js 20+
+- creates `server/.env` and `client/.env` from examples if missing
+- installs dependencies if `node_modules` is missing
+- validates server env before startup
+- starts backend + frontend in separate terminals
+
 ### 2. Configuration (Minimum for Easy Mode)
 
 In `server/.env`:
