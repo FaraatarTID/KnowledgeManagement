@@ -136,9 +136,9 @@ function AIKBContent() {
       toast.success('Document added and synced for AI search');
       setShowAddDoc(false);
     } catch (error: unknown) {
-      setDocuments(documents);
       const msg = error instanceof Error ? error.message : String(error);
-      toast.error(msg.includes('Failed to fetch') ? 'Document saved locally. Cannot connect to server.' : (msg || 'Failed to save document'));
+      toast.error(msg.includes('Failed to fetch') ? 'Document saved locally. Cannot connect to server.' : (msg || 'Document saved locally. Sync failed.'));
+      setShowAddDoc(false);
     }
   }, [documents, chatHistory, saveDocuments]);
 
