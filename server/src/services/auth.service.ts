@@ -125,15 +125,9 @@ export class AuthService {
       return isValid && userData ? { ...userData, password_hash: undefined } as User : null;
 
     } catch (err) {
-      const error = err as Error;
-      Logger.error('Auth: validateCredentials error', { 
-        error: error.message,
-        stack: error.stack,
-        email: normalizedEmail 
-      });
+      Logger.error('Auth: validateCredentials error', { error: err });
       await this.enforceMinimumTime(startTarget, MIN_EXEC_TIME);
-      // Re-throw the error to be handled by the controller
-      throw new Error(`Authentication error: ${error.message}`);
+      return null;
     }
   }
 

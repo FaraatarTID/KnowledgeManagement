@@ -46,10 +46,8 @@ app.use(sanitizationMiddleware);
 
 Logger.info('Middleware Stack Initialized');
 
-// Initialize services (e.g., seeding) - await to ensure admin is created before accepting requests
-userService.initialize().then(() => {
-  Logger.info('UserService initialization completed successfully');
-}).catch(err => Logger.error('UserService initialization failed', { error: err.message }));
+// Initialize services (e.g., seeding)
+userService.initialize().catch(err => Logger.error('UserService initialization failed', { error: err.message }));
 
 // Main API Mount
 app.use("/api/v1", apiRoutes);

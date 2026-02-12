@@ -98,39 +98,26 @@ export class UserService {
       }
 
       Logger.info(`UserService: No admins found. Seeding initial Admin (${adminEmail})...`);
+      const password_hash = await this.authService.hashPassword(adminPassword);
       
-      try {
-        const password_hash = await this.authService.hashPassword(adminPassword);
-        
-        if (this.isLocalMode) {
-          const result = this.sqlite.getDatabase()
-            .prepare('INSERT INTO users (id, email, name, password_hash, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), adminEmail, adminName, password_hash, 'ADMIN', 'IT', 'Active');
-          Logger.info(`UserService: Admin seeded successfully. Insert result: ${JSON.stringify(result)}`);
-        } else if (this.supabase) {
-          const { error: insertError } = await this.supabase
-            .from('users')
-            .insert({
-              email: adminEmail,
-              name: adminName,
-              password_hash,
-              role: 'ADMIN',
-              department: 'IT',
-              status: 'Active'
-            });
-          if (insertError) {
-            Logger.error('UserService: Failed to seed admin', insertError);
-            throw new Error(`Failed to seed admin: ${insertError.message}`);
-          }
-          Logger.info('UserService: Admin seeded successfully via Supabase.');
-        }
-        Logger.info('UserService: Initial Admin seeded successfully.');
-      } catch (error) {
-        Logger.error('UserService: Error during admin seeding', { error });
-        throw error;
+      if (this.isLocalMode) {
+        this.sqlite.getDatabase()
+          .prepare('INSERT INTO users (id, email, name, password_hash, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .run(uuidv4(), adminEmail, adminName, password_hash, 'ADMIN', 'IT', 'Active');
+      } else if (this.supabase) {
+        const { error: insertError } = await this.supabase
+          .from('users')
+          .insert({
+            email: adminEmail,
+            name: adminName,
+            password_hash,
+            role: 'ADMIN',
+            department: 'IT',
+            status: 'Active'
+          });
+        if (insertError) Logger.error('UserService: Failed to seed admin', insertError);
       }
-    } else {
-      Logger.info('UserService: Admin already exists, skipping seeding.');
+      Logger.info('UserService: Initial Admin seeded successfully.');
     }
   }
 
