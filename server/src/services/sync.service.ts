@@ -10,6 +10,13 @@ import { Logger } from '../utils/logger.js';
 import fs from 'fs';
 import path from 'path';
 
+class NoContentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NoContentError';
+  }
+}
+
 export class SyncService {
   private parsingService: ParsingService;
   private historyService: HistoryService;
@@ -112,8 +119,10 @@ export class SyncService {
   async indexFile(
     file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] },
     initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string },
-    options?: { allowDuringFullSync?: boolean }
+    options?: { allowDuringFullSync?: boolean, localFilePath?: string }
   ): Promise<string> {
+    const sourceMode: 'drive' | 'local' = options?.localFilePath ? 'local' : 'drive';
+
     if (this.isSyncing && !options?.allowDuringFullSync) {
        Logger.warn('SyncService: Cannot index file while a full sync is in progress.', {
          fileName: file.name,
@@ -143,27 +152,36 @@ export class SyncService {
          try {
            textContent = await this.driveService.exportDocument(file.id);
          } catch (e: any) {
-           await this.logExtractionFailure(file, e, 'export');
-           textContent = `Filename: ${file.name}\nType: ${file.mimeType}\n\n(Content export failed: ${e.message})`;
+           await this.logExtractionFailure(file, e, 'export', sourceMode);
+           textContent = '';
          }
       } else if (file.mimeType === 'application/pdf' || 
                  file.mimeType?.includes('wordprocessing') || 
                  file.mimeType?.startsWith('text/') ||
                  file.mimeType?.includes('markdown')) {
          try {
-           const buffer = await this.driveService.downloadFile(file.id);
+           const buffer = await this.resolveFileBuffer(file, options);
            textContent = await this.extractionService.extractFromBuffer(buffer, file.mimeType || 'application/octet-stream');
          } catch (e: any) {
-           await this.logExtractionFailure(file, e, 'download/extract');
-           textContent = `Filename: ${file.name}\nType: ${file.mimeType}\n\n(Content extraction failed: ${e.message})`;
+           await this.logExtractionFailure(file, e, 'download/extract', sourceMode);
+           textContent = '';
          }
       } else {
          textContent = `Filename: ${file.name}\nType: ${file.mimeType}`; 
       }
 
       if (!textContent) {
-        Logger.warn('SyncService: No content extracted', { transactionId, fileName: file.name, fileId: file.id });
-        return file.id;
+        const noContentError = new NoContentError(`No extractable content from ${sourceMode} source`);
+        Logger.warn('SyncService: No content extracted', { transactionId, fileName: file.name, fileId: file.id, source: sourceMode });
+        await this.updateSyncStatus(file.id, {
+          status: 'NO_CONTENT',
+          message: noContentError.message,
+          transactionId,
+          lastSync: new Date().toISOString(),
+          fileName: file.name,
+          source: sourceMode
+        });
+        throw noContentError;
       }
 
       // 2. Metadata Extraction & Normalization
@@ -229,7 +247,7 @@ export class SyncService {
           event_type: 'UPDATED', 
           doc_id: file.id,
           doc_name: file.name,
-          details: `Indexed ${chunks.length} chunks. TX: ${transactionId}`
+          details: `Indexed ${chunks.length} chunks. Source: ${sourceMode}. TX: ${transactionId}`
         });
 
         await this.updateSyncStatus(file.id, {
@@ -237,7 +255,8 @@ export class SyncService {
           message: `Indexed ${chunks.length} chunks`,
           transactionId,
           lastSync: new Date().toISOString(),
-          fileName: file.name
+          fileName: file.name,
+          source: sourceMode
         });
       }
 
@@ -245,6 +264,10 @@ export class SyncService {
       return file.id;
 
     } catch (e: any) {
+      if (e instanceof NoContentError) {
+        throw e;
+      }
+
       Logger.error('SyncService: Index transaction failed', { transactionId, fileName: file.name, fileId: file.id, error: e });
       
       // SECURITY: Rollback only if it was a new document attempt 
@@ -259,7 +282,8 @@ export class SyncService {
         message: e.message,
         transactionId,
         lastSync: new Date().toISOString(),
-        fileName: file.name
+        fileName: file.name,
+        source: sourceMode
       });
       throw e;
     }
@@ -292,6 +316,22 @@ export class SyncService {
     } catch (e: any) {
       Logger.error('SyncService: Failed to update sync status', { docId, error: e });
     }
+  }
+
+
+  private async resolveFileBuffer(file: { id: string }, options?: { localFilePath?: string }): Promise<Buffer> {
+    if (options?.localFilePath) {
+      try {
+        return await fs.promises.readFile(options.localFilePath);
+      } catch (error: any) {
+        if (error?.code === 'ENOENT') {
+          throw new Error(`Local file not found for indexing: ${options.localFilePath}`);
+        }
+        throw error;
+      }
+    }
+
+    return this.driveService.downloadFile(file.id);
   }
 
   private detectDepartment(filename: string): string {
@@ -358,13 +398,13 @@ export class SyncService {
     }
   }
 
-  private async logExtractionFailure(file: { id: string, name: string, mimeType?: string }, error: any, operation: string) {
+  private async logExtractionFailure(file: { id: string, name: string, mimeType?: string }, error: any, operation: string, source: 'drive' | 'local') {
     Logger.warn('SyncService: Extraction failure', { fileName: file.name, fileId: file.id, operation, error });
     await this.historyService.recordEvent({
       event_type: 'EXTRACTION_FAILED',
       doc_id: file.id,
       doc_name: file.name,
-      details: `Operation ${operation} failed: ${error.message}`
+      details: `Operation ${operation} failed (${source}): ${error.message}`
     });
   }
 }
