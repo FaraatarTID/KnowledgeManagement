@@ -48,11 +48,28 @@ export default function LoginPage() {
           if (status === 404) {
             msg = 'Login endpoint was not found. Ensure Next.js rewrite /api/v1 -> backend is active and backend server is reachable.';
           } else if (status === 500) {
-            const responseText = typeof data === 'string' ? data : '';
-            const proxyFailureHint = responseText.includes('ECONNREFUSED') || responseText.includes('Failed to proxy');
-            msg = proxyFailureHint
-              ? 'Backend is unreachable. Start API server with `cd server && npm install && npm run dev`, then retry login.'
-              : 'Backend login service returned HTTP 500. Check backend logs in the server terminal for the real error.';
+            const responseText = typeof data === 'string' ? data : JSON.stringify(data ?? '');
+            const errorText = [
+              String((e['message'] ?? '')),
+              responseText
+            ].join(' ');
+            const proxyFailureHint = [
+              'ECONNREFUSED',
+              'Failed to proxy',
+              'connect ECONNREFUSED',
+              'fetch failed',
+              'socket hang up'
+            ].some((needle) => errorText.includes(needle));
+
+            if (proxyFailureHint) {
+              msg = 'Backend is unreachable. Start API server with `cd server && npm install && npm run dev`, then retry login.';
+            } else if (typeof data === 'object' && data !== null && typeof (data as Record<string, unknown>)['message'] === 'string') {
+              msg = String((data as Record<string, unknown>)['message']);
+            } else if (typeof data === 'object' && data !== null && typeof (data as Record<string, unknown>)['error'] === 'string') {
+              msg = String((data as Record<string, unknown>)['error']);
+            } else {
+              msg = 'Backend login service returned HTTP 500. Check backend logs in the server terminal for the real error.';
+            }
           } else if (typeof data === 'object' && data !== null && typeof (data as Record<string, unknown>)['error'] === 'string') {
             msg = String((data as Record<string, unknown>)['error']);
           }
