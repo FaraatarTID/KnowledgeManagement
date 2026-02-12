@@ -47,6 +47,8 @@ export default function LoginPage() {
 
           if (status === 404) {
             msg = 'Login endpoint was not found. Ensure Next.js rewrite /api/v1 -> backend is active and backend server is reachable.';
+          } else if (status === 500) {
+            msg = 'Backend login service is unavailable (HTTP 500). Ensure server dependencies are installed (`cd server && npm install`) and backend is running on port 3001.';
           } else if (typeof data === 'object' && data !== null && typeof (data as Record<string, unknown>)['error'] === 'string') {
             msg = String((data as Record<string, unknown>)['error']);
           }
