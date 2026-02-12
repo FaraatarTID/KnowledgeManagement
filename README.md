@@ -1,6 +1,6 @@
 # AIKB Knowledge Management System
 
-**Version:** 2.1.0 | **Status:** ✅ Production Ready
+**Version:** 2.1.0 | **Status:** ⚠️ Production Candidate (CI release gate required)
 
 > AI-powered knowledge management with secure access, reliable document processing, and complete operational observability.
 

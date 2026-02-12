@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import type { User, CreateUserDTO, UpdateUserDTO } from '../types/user.types.js';
+import type { User, UserStatus, CreateUserDTO, UpdateUserDTO } from '../types/user.types.js';
 import { env } from '../config/env.js';
 import { AuthService } from './auth.service.js';
 import { Logger } from '../utils/logger.js';
@@ -217,14 +217,14 @@ export class UserService {
       const exists = this.mockUsers.some(u => u.email === normalizedEmail);
       if (exists) return null;
 
-      const user = {
+      const user: User & { password_hash: string } = {
         id,
         email: normalizedEmail,
         name: userData.name.trim(),
         password_hash,
         role: userData.role || 'VIEWER',
         department: userData.department || 'General',
-        status: 'Active'
+        status: 'Active' as UserStatus
       };
 
       this.mockUsers.push(user);

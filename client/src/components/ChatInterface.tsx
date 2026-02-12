@@ -89,18 +89,18 @@ export function ChatInterface({
             type="text"
             value={currentQuery}
             onChange={(e) => setCurrentQuery(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && !isLoading && onQueryAI()}
+            onKeyPress={(e) => e.key === 'Enter' && onQueryAI()}
             placeholder="سوال خود را بپرسید..."
-            disabled={isLoading || !hasDocuments}
+            disabled={!hasDocuments}
             className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
           />
           <button
             onClick={onQueryAI}
-            disabled={isLoading || !currentQuery.trim() || !hasDocuments}
+            disabled={!currentQuery.trim() || !hasDocuments}
             className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
-            <span>{isLoading ? 'در حال پردازش...' : 'ارسال'}</span>
+            <span>ارسال</span>
           </button>
         </div>
         {!hasDocuments && (

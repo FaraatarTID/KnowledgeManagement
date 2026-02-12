@@ -12,7 +12,8 @@
     "doctor:proxy": "node scripts/proxy-env-check.mjs",
     "test:ci": "node scripts/proxy-env-check.mjs --strict && node scripts/run-vitest.mjs --maxWorkers=1",
     "doctor:proxy:strict": "node scripts/proxy-env-check.mjs --strict",
-    "preinstall": "node scripts/preinstall-check.mjs"
+    "preinstall": "node scripts/preinstall-check.mjs",
+    "lint": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",

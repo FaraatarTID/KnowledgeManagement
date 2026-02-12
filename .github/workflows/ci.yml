@@ -28,7 +28,7 @@ jobs:
             server/package-lock.json
             client/package-lock.json
 
-      - name: Install & Test server
+      - name: Install, Lint, Build & Test server
         working-directory: ./server
         env:
           NODE_ENV: test
@@ -39,11 +39,18 @@ jobs:
           npm ci
           # Create mock key.json for tests
           echo '{"type":"service_account","project_id":"aikb-mock-project"}' > key.json
+          npm run lint
+          npm run build
           npm test
 
-      - name: Install & Build client
+      - name: Preflight client dependencies (strict)
+        working-directory: ./client
+        run: npm run doctor:deps:strict
+
+      - name: Install, Build, Lint & Test client
         working-directory: ./client
         run: |
           npm ci --legacy-peer-deps
           npm run build
           npm run lint
+          npm test

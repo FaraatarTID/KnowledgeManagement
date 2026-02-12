@@ -51,3 +51,6 @@ Object.defineProperty(window, 'location', {
   value: locationMock,
   writable: true,
 });
+
+// Enable React act() behavior in Vitest/jsdom
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

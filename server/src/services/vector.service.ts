@@ -285,12 +285,15 @@ export class VectorService {
 
       let lowestScoreIndex = 0;
       for (let i = 1; i < topMatches.length; i++) {
-        if (topMatches[i].score < topMatches[lowestScoreIndex].score) {
+        const current = topMatches[i];
+        const lowest = topMatches[lowestScoreIndex];
+        if (current && lowest && current.score < lowest.score) {
           lowestScoreIndex = i;
         }
       }
 
-      if (candidate.score > topMatches[lowestScoreIndex].score) {
+      const lowest = topMatches[lowestScoreIndex];
+      if (lowest && candidate.score > lowest.score) {
         topMatches[lowestScoreIndex] = candidate;
       }
     }
