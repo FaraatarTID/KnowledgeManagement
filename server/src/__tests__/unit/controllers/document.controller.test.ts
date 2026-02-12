@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DocumentController } from '../../../controllers/document.controller.js';
 import { driveService, vectorService, syncService, historyService } from '../../../container.js';
+import fs from 'fs';
+import path from 'path';
 
 vi.mock('../../../container.js', () => ({
   driveService: {
@@ -28,6 +30,7 @@ vi.mock('../../../container.js', () => ({
 
 describe('DocumentController', () => {
     let mockRequest: any;
+    let tempUploadPath: string;
     let mockResponse: any;
     let jsonMock: any;
     let statusMock: any;
@@ -43,9 +46,37 @@ describe('DocumentController', () => {
             status: statusMock,
             json: jsonMock
         };
+
+        tempUploadPath = path.join(
+            'data',
+            'uploads',
+            `test-local-upload-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`
+        );
+
         vi.resetAllMocks();
         process.env.GOOGLE_DRIVE_FOLDER_ID = 'real-folder';
     });
+
+    afterEach(() => {
+        if (fs.existsSync(tempUploadPath)) {
+            fs.unlinkSync(tempUploadPath);
+        }
+    });
+
+
+    const expectLocalIndexFileCall = (expectedLocalFilePath: string) => {
+        expect(syncService.indexFile).toHaveBeenCalledTimes(1);
+        const [indexedFile, metadata, options] = vi.mocked(syncService.indexFile).mock.calls.at(0) ?? [];
+
+        expect(indexedFile).toEqual(expect.objectContaining({
+            id: expect.stringMatching(/^manual-/)
+        }));
+        expect(metadata).toBeUndefined();
+        expect(options).toMatchObject({
+            localFilePath: expectedLocalFilePath
+        });
+        expect(options?.localFileBuffer).toBeUndefined();
+    };
 
     describe('upload', () => {
         it('should return 400 for upload if no file via next', async () => {
@@ -81,10 +112,61 @@ describe('DocumentController', () => {
             expect(vectorService.updateDocumentMetadata).toHaveBeenCalledWith('file-id-1', expect.anything());
             expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
                 event_type: 'CREATED',
-                details: expect.stringContaining('Uploaded (index pending)')
+                details: expect.stringContaining('Uploaded (index pending, drive)')
             }));
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
                 success: true,
+                indexingStatus: 'pending'
+            }));
+        });
+
+        it('should index local PDF content when drive is not configured', async () => {
+            process.env.GOOGLE_DRIVE_FOLDER_ID = '';
+            fs.mkdirSync('data/uploads', { recursive: true });
+            fs.writeFileSync(tempUploadPath, Buffer.from('%PDF-1.4 local file test'));
+
+            mockRequest.file = {
+                path: tempUploadPath,
+                mimetype: 'application/pdf',
+                originalname: 'local-test.pdf',
+                size: 24,
+                filename: 'local-test.pdf'
+            };
+            mockRequest.body = { category: 'IT' };
+
+            await DocumentController.upload(mockRequest, mockResponse, nextMock);
+
+            expect(driveService.uploadFile).not.toHaveBeenCalled();
+            expectLocalIndexFileCall(tempUploadPath);
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                details: expect.stringContaining('Uploaded & indexed (local)')
+            }));
+            expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+        });
+
+        it('should mark local upload indexing as pending when no extractable content is found', async () => {
+            process.env.GOOGLE_DRIVE_FOLDER_ID = '';
+            fs.mkdirSync('data/uploads', { recursive: true });
+            fs.writeFileSync(tempUploadPath, Buffer.from('%PDF-1.4 local file test'));
+
+            mockRequest.file = {
+                path: tempUploadPath,
+                mimetype: 'application/pdf',
+                originalname: 'local-test.pdf',
+                size: 24,
+                filename: 'local-test.pdf'
+            };
+            mockRequest.body = { category: 'IT' };
+
+            vi.mocked(syncService.indexFile).mockRejectedValue(new Error('No extractable content from local source'));
+
+            await DocumentController.upload(mockRequest, mockResponse, nextMock);
+
+            expectLocalIndexFileCall(tempUploadPath);
+            expect(historyService.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+                details: expect.stringContaining('Uploaded (index pending, local)')
+            }));
+            expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
                 indexingStatus: 'pending'
             }));
         });
