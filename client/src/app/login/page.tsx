@@ -48,7 +48,11 @@ export default function LoginPage() {
           if (status === 404) {
             msg = 'Login endpoint was not found. Ensure Next.js rewrite /api/v1 -> backend is active and backend server is reachable.';
           } else if (status === 500) {
-            msg = 'Backend login service is unavailable (HTTP 500). Ensure server dependencies are installed (`cd server && npm install`) and backend is running on port 3001.';
+            const responseText = typeof data === 'string' ? data : '';
+            const proxyFailureHint = responseText.includes('ECONNREFUSED') || responseText.includes('Failed to proxy');
+            msg = proxyFailureHint
+              ? 'Backend is unreachable. Start API server with `cd server && npm install && npm run dev`, then retry login.'
+              : 'Backend login service returned HTTP 500. Check backend logs in the server terminal for the real error.';
           } else if (typeof data === 'object' && data !== null && typeof (data as Record<string, unknown>)['error'] === 'string') {
             msg = String((data as Record<string, unknown>)['error']);
           }

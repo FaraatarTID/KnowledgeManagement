@@ -98,7 +98,14 @@ npm install
 npm run dev
 ```
 
-If login shows **HTTP 500** with proxy `ECONNREFUSED`, this also indicates the backend is not reachable on port `3001`.
+If login shows **HTTP 500** with proxy `ECONNREFUSED`, this indicates the backend is not reachable on port `3001`.
+
+Quick verification:
+```bash
+# In a separate terminal while backend is running
+curl http://localhost:3001/api/v1/system/health
+```
+Expected response includes `{"status":"healthy"`.
 
 ### 4. Login
 
