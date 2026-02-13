@@ -29,10 +29,17 @@ if defined NODE_BIN (
 )
 
 set "NODE_MAJOR="
-for /f %%a in ('"!NODE_EXE!" -p "process.versions.node.split('.')[0]" 2^>nul') do (
-  set NODE_MAJOR=%%a
+set "NODE_VERSION_RAW="
+for /f "delims=" %%a in ('"!NODE_EXE!" -v 2^>nul') do (
+  if not defined NODE_VERSION_RAW set "NODE_VERSION_RAW=%%a"
 )
-if not defined NODE_MAJOR set NODE_MAJOR=0
+if defined NODE_VERSION_RAW (
+    set "NODE_VERSION_RAW=!NODE_VERSION_RAW:v=!"
+    for /f "tokens=1 delims=." %%a in ("!NODE_VERSION_RAW!") do (
+        if not defined NODE_MAJOR set "NODE_MAJOR=%%a"
+    )
+)
+if not defined NODE_MAJOR set "NODE_MAJOR=0"
 if !NODE_MAJOR! LSS 20 (
     echo [ERROR] Detected Node.js major version !NODE_MAJOR!.
     echo This project requires Node.js 20+ ^(Node 20 LTS recommended^).
