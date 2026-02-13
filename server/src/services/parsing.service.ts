@@ -11,6 +11,7 @@ export interface DocumentMetadata {
   version?: string;
   status?: string;
   sensitivity: string;
+  roles?: string[] | string;
   ai_access?: {
     allowed: boolean;
     agent_types?: string[];

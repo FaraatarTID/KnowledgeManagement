@@ -28,7 +28,7 @@ export const LoginResponseSchema = z.object({
   user: z.object({
     id: z.string(),
     email: z.string(),
-    role: z.enum(['user', 'admin', 'reviewer']),
+    role: z.enum(['VIEWER', 'EDITOR', 'MANAGER', 'ADMIN']),
     department: z.string()
   })
 });
@@ -67,7 +67,7 @@ export const ChatRequestSchema = z.object({
   message: z.string().min(1, 'Message cannot be empty'),
   context: z.object({
     department: z.string().optional(),
-    role: z.enum(['user', 'admin', 'reviewer']).optional(),
+    role: z.enum(['VIEWER', 'EDITOR', 'MANAGER', 'ADMIN']).optional(),
     documentIds: z.array(z.string()).optional()
   }).optional()
 });

@@ -96,6 +96,19 @@ describe('DocumentController', () => {
                 indexingStatus: 'pending'
             }));
         });
+
+        it('persists explicit document roles on upload metadata', async () => {
+            mockRequest.file = { path: 'tmp/path', mimetype: 'app/pdf', originalname: 'test.pdf' };
+            mockRequest.body = { category: 'IT', roles: ['EDITOR', 'VIEWER'] };
+
+            vi.mocked(driveService.uploadFile).mockResolvedValue('file-id-1');
+
+            await DocumentController.upload(mockRequest, mockResponse, nextMock);
+
+            expect(vectorService.updateDocumentMetadata).toHaveBeenCalledWith('file-id-1', expect.objectContaining({
+                roles: 'VIEWER,EDITOR'
+            }));
+        });
     });
 
 
@@ -118,7 +131,11 @@ describe('DocumentController', () => {
             expect(driveService.uploadFile).not.toHaveBeenCalled();
             expect(syncService.indexFile).toHaveBeenCalledWith(
                 expect.objectContaining({ id: expect.stringMatching(/^manual-/) }),
-                undefined,
+                expect.objectContaining({
+                    category: 'IT',
+                    sensitivity: 'INTERNAL',
+                    roles: 'VIEWER'
+                }),
                 expect.objectContaining({ localFileBuffer: expect.any(Buffer) })
             );
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
@@ -397,6 +414,22 @@ describe('DocumentController', () => {
             
             expect(vectorService.updateDocumentMetadata).toHaveBeenCalled();
             expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));
+        });
+
+        it('should normalize and persist roles on metadata update', async () => {
+            mockRequest.params = { id: '1' };
+            mockRequest.body = { roles: ['MANAGER', 'VIEWER'] };
+            mockRequest.user = { email: 'admin@aikb.com', role: 'ADMIN' };
+
+            vi.mocked(vectorService.getAllMetadata).mockResolvedValue({
+                '1': { owner: 'alice@aikb.com', category: 'IT' }
+            });
+
+            await DocumentController.update(mockRequest, mockResponse, nextMock);
+
+            expect(vectorService.updateDocumentMetadata).toHaveBeenCalledWith('1', expect.objectContaining({
+                roles: 'VIEWER,MANAGER'
+            }));
         });
     });
 });

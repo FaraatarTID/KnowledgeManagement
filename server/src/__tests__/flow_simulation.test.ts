@@ -30,9 +30,7 @@ vi.mock('../container.js', () => ({
          integrity: { isVerified: true }
      })
   },
-  chatService: {
-    queryChatLegacy: vi.fn().mockResolvedValue('Mock Legacy Answer')
-  },
+  chatService: {},
   driveService: {},
   syncService: {},
   historyService: {},
@@ -79,17 +77,15 @@ describe('End-to-End Chat Flow Simulation', () => {
         expect(res.body.answer).toBeDefined();
     });
 
-    it('Scenario 2: Legacy Chat with Documents', async () => {
-        const testDocuments = [{ id: "1", content: "text" }];
+    it('Scenario 2: Legacy endpoint remains removed', async () => {
         const res = await request(app)
             .post('/api/v1/chat')
             .set('Cookie', `token=${token}`)
-            .send({ 
-                query: 'Tell me everything', 
-                documents: testDocuments
+            .send({
+                query: 'Tell me everything',
+                documents: [{ id: '1', content: 'text' }]
             });
-        
-        expect(res.status).toBe(200);
-        expect(res.body.content).toBeDefined();
+
+        expect(res.status).toBe(404);
     });
 });

@@ -11,6 +11,7 @@ import { Logger } from '../utils/logger.js';
 import { AppError } from '../middleware/error.middleware.js';
 import { catchAsync } from '../utils/catchAsync.js';
 import { executeSaga } from '../utils/saga-transaction.js';
+import { serializeRoleList } from '../utils/roles.js';
 
 export class DocumentController {
   private static toCanonicalDocumentId(id: string): string {
@@ -26,8 +27,9 @@ export class DocumentController {
   static upload: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
     if (!req.file) throw new AppError('No file uploaded', 400);
 
-    const { category, department, title } = req.body;
+    const { category, department, title, roles } = req.body;
     const fileName = title || req.file.originalname;
+    const persistedRoles = serializeRoleList(roles, ['VIEWER']);
 
     Logger.info('Starting document upload', { fileName, size: req.file.size, user: req.user?.email });
 
@@ -72,6 +74,7 @@ export class DocumentController {
           category: category || 'General',
           department: finalDepartment,
           sensitivity: 'INTERNAL',
+          roles: persistedRoles
         });
         saga.addStep('metadata_persisted', { driveFileId });
 
@@ -85,7 +88,12 @@ export class DocumentController {
             name: fileName,
             mimeType: req.file!.mimetype,
             modifiedTime: new Date().toISOString()
-          }, undefined, localFileBuffer ? { localFileBuffer } : undefined);
+          }, {
+            department: finalDepartment,
+            sensitivity: 'INTERNAL',
+            category: category || 'General',
+            roles: persistedRoles
+          }, localFileBuffer ? { localFileBuffer } : undefined);
           saga.addStep('ai_indexed', { driveFileId });
         } catch (indexError: any) {
           indexingStatus = 'pending';
@@ -164,10 +172,10 @@ export class DocumentController {
   static update: RequestHandler = catchAsync(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const canonicalId = id ? DocumentController.toCanonicalDocumentId(id) : id;
-    const { title, category, sensitivity, department } = req.body;
+    const { title, category, sensitivity, department, roles } = req.body;
     const user = req.user!;
 
-    if (!title && !category && !sensitivity && !department) {
+    if (!title && !category && !sensitivity && !department && !roles) {
       throw new AppError('At least one metadata field must be provided', 400);
     }
 
@@ -186,7 +194,15 @@ export class DocumentController {
       throw new AppError('Permission denied', 403);
     }
 
-    await vectorService.updateDocumentMetadata(canonicalId, { title, category, sensitivity, department });
+    const normalizedRoles = roles ? serializeRoleList(roles) : undefined;
+    const metadataUpdate = {
+      title,
+      category,
+      sensitivity,
+      department,
+      ...(normalizedRoles ? { roles: normalizedRoles } : {})
+    };
+    await vectorService.updateDocumentMetadata(canonicalId, metadataUpdate);
     
     const isManualDocument = canonicalId.startsWith('manual-');
     let driveRenameStatus = 'skipped';
@@ -206,7 +222,10 @@ export class DocumentController {
       details: `Metadata updated by ${user.email}. Drive Rename: ${driveRenameStatus}`
     });
 
-    Logger.info('Document metadata updated', { docId: canonicalId, changes: { title, category, sensitivity, department } });
+    Logger.info('Document metadata updated', {
+      docId: canonicalId,
+      changes: { title, category, sensitivity, department, roles: normalizedRoles }
+    });
 
     res.json({ 
       status: 'success', 
@@ -331,7 +350,8 @@ export class DocumentController {
           metadata: {
             category: doc.category || 'General',
             department: doc.department || req.user?.department || 'General',
-            sensitivity: doc.sensitivity || 'INTERNAL'
+            sensitivity: doc.sensitivity || 'INTERNAL',
+            roles: serializeRoleList(doc.roles, ['VIEWER'])
           }
         });
         successes++;

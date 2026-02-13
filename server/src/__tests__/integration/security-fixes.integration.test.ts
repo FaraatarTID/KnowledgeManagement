@@ -147,6 +147,37 @@ describe('Security Fixes: Phase 1 (CRITICAL)', () => {
         { namespace: 'roles', allow_tokens: ['VIEWER', 'USER', 'IC'] }
       ]);
     });
+
+    it('should bypass department filter for admin queries', async () => {
+      const previousEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'development';
+      const mockMetadataStore = {} as any;
+      const vectorService = new VectorService('test-project', 'us-central1', mockMetadataStore, false);
+      const findNeighbors = vi.fn().mockResolvedValue({ neighbors: [{ id: 'doc-1' }] });
+
+      (vectorService as any).vertexAI = {
+        getIndexServiceClient: async () => ({
+          findNeighbors
+        })
+      };
+
+      await vectorService.similaritySearch({
+        embedding: [0.1, 0.2, 0.3],
+        topK: 5,
+        filters: {
+          department: 'engineering',
+          role: 'ADMIN'
+        }
+      });
+
+      process.env.NODE_ENV = previousEnv;
+
+      expect(findNeighbors).toHaveBeenCalledTimes(1);
+      const callArgs = findNeighbors.mock.calls[0][0];
+      expect(callArgs.neighbors[0].restricts).toEqual([
+        { namespace: 'roles', allow_tokens: ['ADMIN', 'MANAGER', 'EDITOR', 'VIEWER', 'USER', 'IC'] }
+      ]);
+    });
   });
 
   describe('1.5 Saga Compensation with Retry Logic', () => {

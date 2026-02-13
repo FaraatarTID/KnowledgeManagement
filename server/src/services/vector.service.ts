@@ -5,6 +5,7 @@ import { VertexAI } from '@google-cloud/vertexai';
 import { Logger } from '../utils/logger.js';
 import { VectorSearchCache, MetadataCache } from '../utils/cache.util.js';
 import { cacheInvalidation } from '../utils/cache-invalidation.js';
+import { getAllowedRoleTokens, normalizeRoleToken } from '../utils/roles.js';
 import { env } from '../config/env.js';
 
 interface VectorItem {
@@ -210,30 +211,11 @@ export class VectorService {
 
 
   private normalizeRole(role?: string): string {
-    const normalized = String(role || 'VIEWER').trim().toUpperCase();
-    const aliases: Record<string, string> = {
-      USER: 'VIEWER',
-      IC: 'VIEWER'
-    };
-    return aliases[normalized] || normalized;
+    return normalizeRoleToken(role) || 'VIEWER';
   }
 
   private getAllowedRoleTokens(role?: string): string[] {
-    const normalized = this.normalizeRole(role);
-
-    if (normalized === 'ADMIN') {
-      return ['ADMIN', 'MANAGER', 'EDITOR', 'VIEWER', 'USER', 'IC'];
-    }
-
-    if (normalized === 'MANAGER') {
-      return ['MANAGER', 'EDITOR', 'VIEWER', 'USER', 'IC'];
-    }
-
-    if (normalized === 'EDITOR') {
-      return ['EDITOR', 'VIEWER', 'USER', 'IC'];
-    }
-
-    return ['VIEWER', 'USER', 'IC'];
+    return getAllowedRoleTokens(role);
   }
 
   private async queryLocal(params: {
@@ -420,14 +402,16 @@ export class VectorService {
       const { embedding, topK, filters = {} } = params;
 
       // SECURITY: Enforce RBAC filtering at API level (not application)
-      // This ensures we retrieve TOP-K from FILTERED subset, not filtered after retrieval
+      // This ensures we retrieve TOP-K from FILTERED subset, not filtered after retrieval.
+      // Admins bypass department filters, matching local-mode behavior and document listing policy.
+      const normalizedRole = this.normalizeRole(filters.role);
       const restricts = [
-        // Department-based filtering: user can only see docs in their department
-        {
-          namespace: 'department',
-          allow_tokens: [filters.department || 'public']
-        },
-        // Role-based filtering: user must have required role to see docs
+        ...(normalizedRole === 'ADMIN'
+          ? []
+          : [{
+              namespace: 'department',
+              allow_tokens: [filters.department || 'public']
+            }]),
         {
           namespace: 'roles',
           allow_tokens: this.getAllowedRoleTokens(filters.role)
@@ -438,6 +422,7 @@ export class VectorService {
         topK,
         department: filters.department,
         role: filters.role,
+        adminBypassDepartment: normalizedRole === 'ADMIN',
         restricts
       });
 
@@ -543,7 +528,7 @@ export class VectorService {
     }
   }
 
-  async getAllMetadata(): Promise<Record<string, { category?: string; sensitivity?: string; department?: string; title?: string; owner?: string; link?: string }>> {
+  async getAllMetadata(): Promise<Record<string, { category?: string; sensitivity?: string; department?: string; roles?: string; title?: string; owner?: string; link?: string }>> {
     try {
       // Retrieve all metadata from local storage
       // In production, this would be fetched from Vertex AI with pagination
@@ -559,6 +544,7 @@ export class VectorService {
           category: data.category,
           sensitivity: data.sensitivity,
           department: data.department,
+          roles: data.roles as string | undefined,
           owner: data.owner,
           link: data.link
         };
@@ -639,7 +625,7 @@ export class VectorService {
     }
   }
 
-  async updateDocumentMetadata(docId: string, metadata: { title?: string; category?: string; sensitivity?: string; department?: string }) {
+  async updateDocumentMetadata(docId: string, metadata: { title?: string; category?: string; sensitivity?: string; department?: string; roles?: string }) {
     try {
       // Update metadata in local storage
       await this.metadataStore.setOverride(docId, { ...metadata, docId });

@@ -1,15 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatController } from '../../../controllers/chat.controller.js';
-import { ragService, chatService } from '../../../container.js';
-import { Request, Response } from 'express';
+import { ragService } from '../../../container.js';
 
 vi.mock('../../../container.js', () => ({
   ragService: {
     query: vi.fn()
   },
-  chatService: {
-    queryChatLegacy: vi.fn()
-  }
+  chatService: {}
 }));
 
 describe('ChatController', () => {
@@ -84,32 +81,4 @@ describe('ChatController', () => {
         });
     });
 
-    describe('legacyChat', () => {
-        it('should return 400 if documents missing', async () => {
-            mockRequest.body = { query: 'Hi' };
-            await ChatController.legacyChat(mockRequest, mockResponse, nextMock);
-            // Validation now handled by middleware; controller assumes valid shape or throws
-            // If it throws, next(err) is called.
-
-        });
-
-        it('should pass data to legacy service', async () => {
-            mockRequest.body = { query: 'Hi', documents: [{id:'1', content:'A'}] };
-            vi.mocked(chatService.queryChatLegacy).mockResolvedValue('Response');
-
-            await ChatController.legacyChat(mockRequest, mockResponse, nextMock);
-
-            expect(chatService.queryChatLegacy).toHaveBeenCalledWith('Hi', [{id:'1', content:'A'}]);
-            expect(jsonMock).toHaveBeenCalledWith({
-                answer: 'Response',
-                content: 'Response',
-                sources: [],
-                integrity: {
-                    confidence: 'Unknown',
-                    isVerified: false,
-                    reason: 'Legacy endpoint response'
-                }
-            });
-        });
-    });
 });

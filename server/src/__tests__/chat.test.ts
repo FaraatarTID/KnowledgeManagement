@@ -30,9 +30,7 @@ vi.mock('../container.js', () => ({
          integrity: { isVerified: true }
      })
   },
-  chatService: {
-    queryChatLegacy: vi.fn().mockResolvedValue('Mock Legacy Answer')
-  },
+  chatService: {},
   driveService: {},
   syncService: {},
   historyService: {},
@@ -79,21 +77,13 @@ describe('Chat API', () => {
         expect(res.body).toHaveProperty('answer', 'Mock Modern Answer');
     });
 
-    it('Legacy Chat: should respond to /chat', async () => {
-        const testDocuments = [{ id: "1", content: "text" }];
+    it('Legacy endpoint /chat should be unavailable', async () => {
         const res = await request(app)
             .post('/api/v1/chat')
             .set('Cookie', `token=${token}`)
-            .send({ 
-                query: 'Legacy query', 
-                documents: testDocuments
-            });
+            .send({ query: 'Legacy query', documents: [{ id: '1', content: 'text' }] });
 
-        expect(res.status).toBe(200);
-        expect(res.body).toHaveProperty('answer', 'Mock Legacy Answer');
-        expect(res.body).toHaveProperty('content', 'Mock Legacy Answer');
-        expect(res.body).toHaveProperty('sources');
-        expect(res.body).toHaveProperty('integrity');
+        expect(res.status).toBe(404);
     });
 
     it('should reject empty modern query', async () => {

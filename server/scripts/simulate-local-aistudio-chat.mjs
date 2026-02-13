@@ -44,6 +44,22 @@ Examples:
     report.steps.push({ name, status, details });
   };
 
+  const isDegradedAnswer = (payload) => {
+    const answer = String(payload?.answer || '').toLowerCase();
+    const integrityReason = String(payload?.integrity?.reason || '').toLowerCase();
+    const knownSignals = [
+      'service unavailable',
+      'temporarily unavailable',
+      'service error',
+      'an error occurred while processing your query',
+      'encountered an error',
+      'location is not supported for the api use',
+      'circuit breaker open',
+      'query failed'
+    ];
+    return knownSignals.some((signal) => answer.includes(signal) || integrityReason.includes(signal));
+  };
+
   const fetchJson = async (url, options = {}) => {
     const res = await fetch(url, options);
     const text = await res.text();
@@ -103,17 +119,24 @@ Examples:
       const mode = health.json?.mode?.ingestionMode;
       const driveConfigured = health.json?.mode?.driveConfigured;
       const geminiStatus = health.json?.services?.gemini?.status;
+      const geminiMessage = health.json?.services?.gemini?.message;
 
       report.mode = mode || 'unknown';
       report.gemini = geminiStatus || 'unknown';
 
       const modePass = mode === 'local_manual' && driveConfigured === false;
+      const geminiPass = !strict || geminiStatus === 'OK';
       pushStep('health', modePass ? 'PASS' : 'FAIL', {
         mode,
         driveConfigured,
         geminiStatus,
+        ...(geminiMessage ? { geminiMessage } : {}),
+        ...(strict && !geminiPass ? { strictFailure: 'Gemini health must be OK in strict mode' } : {}),
         url: healthUrl
       });
+      if (strict && !geminiPass) {
+        report.steps[report.steps.length - 1].status = 'FAIL';
+      }
     } else {
       pushStep('health', 'PASS', {
         status: health.json?.status || 'ok',
@@ -136,11 +159,14 @@ Examples:
       const shapePass = q.res.ok
         && typeof q.json?.answer === 'string'
         && typeof q.json?.integrity === 'object';
+      const degraded = isDegradedAnswer(q.json);
+      const queryPass = shapePass && (!strict || !degraded);
 
-      pushStep('query', shapePass ? 'PASS' : 'FAIL', {
+      pushStep('query', queryPass ? 'PASS' : 'FAIL', {
         status: q.res.status,
         hasAnswer: typeof q.json?.answer === 'string',
-        hasIntegrity: typeof q.json?.integrity === 'object'
+        hasIntegrity: typeof q.json?.integrity === 'object',
+        degraded
       });
     }
 

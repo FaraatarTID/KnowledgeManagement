@@ -3,6 +3,7 @@ export interface MetadataOverride {
   category?: string;
   sensitivity?: string;
   department?: string;
+  roles?: string;
   owner?: string;
   link?: string;
   docId?: string;

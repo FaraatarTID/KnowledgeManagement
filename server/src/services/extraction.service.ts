@@ -13,6 +13,8 @@ export class ExtractionService {
   private readonly maxConcurrentOcrJobs = 2;
   private activeOcrJobs = 0;
   private ocrQueue: Array<() => void> = [];
+  private commandPathCache = new Map<string, string | null>();
+  private commandExecutionCache = new Map<string, boolean>();
 
   getOcrCapability(): { available: boolean; pdftoppm: boolean; tesseract: boolean } {
     const pdftoppm = this.isCommandAvailable('pdftoppm');
@@ -159,13 +161,25 @@ export class ExtractionService {
   }
 
   private isCommandAvailable(command: string): boolean {
-    const locator = process.platform === 'win32' ? 'where' : 'which';
-    return spawnSyncSafe(locator, [command], 5000);
+    const resolved = this.resolveCommandPath(command);
+    if (!resolved) {
+      return false;
+    }
+
+    const cacheKey = `${command}:${resolved}`;
+    if (this.commandExecutionCache.has(cacheKey)) {
+      return this.commandExecutionCache.get(cacheKey) ?? false;
+    }
+
+    const executable = this.canExecuteCommand(command, resolved);
+    this.commandExecutionCache.set(cacheKey, executable);
+    return executable;
   }
 
   private async runCommand(command: string, args: string[], timeoutMs: number): Promise<{ code: number | null; stdout: string; stderr: string }> {
+    const executable = this.resolveCommandPath(command) || command;
     return new Promise((resolve) => {
-      const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(executable, args, { stdio: ['ignore', 'pipe', 'pipe'] });
       let stdout = '';
       let stderr = '';
       let settled = false;
@@ -200,6 +214,163 @@ export class ExtractionService {
     });
   }
 
+  private resolveCommandPath(command: string): string | null {
+    if (this.commandPathCache.has(command)) {
+      return this.commandPathCache.get(command) ?? null;
+    }
+
+    const fromPath = this.resolveFromPath(command);
+    if (fromPath) {
+      this.commandPathCache.set(command, fromPath);
+      return fromPath;
+    }
+
+    const fromEnv = this.resolveFromEnv(command);
+    if (fromEnv) {
+      this.commandPathCache.set(command, fromEnv);
+      return fromEnv;
+    }
+
+    if (process.platform === 'win32') {
+      for (const candidate of this.getWindowsCommandCandidates(command)) {
+        if (fs.existsSync(candidate)) {
+          this.commandPathCache.set(command, candidate);
+          return candidate;
+        }
+      }
+    }
+
+    this.commandPathCache.set(command, null);
+    return null;
+  }
+
+  private canExecuteCommand(command: string, executablePath: string): boolean {
+    const versionArgsByCommand: Record<string, string[]> = {
+      tesseract: ['-v'],
+      pdftoppm: ['-v']
+    };
+
+    const args = versionArgsByCommand[command] || ['--version'];
+
+    try {
+      const child = spawnSync(executablePath, args, {
+        stdio: 'ignore',
+        timeout: 5000
+      });
+      return child.status === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  private resolveFromEnv(command: string): string | null {
+    const envVar = command === 'tesseract'
+      ? 'TESSERACT_PATH'
+      : command === 'pdftoppm'
+        ? 'PDFTOPPM_PATH'
+        : undefined;
+
+    if (!envVar) {
+      return null;
+    }
+
+    const candidate = process.env[envVar];
+    if (!candidate) {
+      return null;
+    }
+
+    return fs.existsSync(candidate) ? candidate : null;
+  }
+
+  private resolveFromPath(command: string): string | null {
+    const locator = process.platform === 'win32' ? 'where' : 'which';
+    try {
+      const child = spawnSync(locator, [command], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+        encoding: 'utf8',
+        timeout: 5000
+      });
+
+      if (child.status !== 0 || !child.stdout) {
+        return null;
+      }
+
+      const firstLine = child.stdout
+        .split(/\r?\n/)
+        .map((line: string) => line.trim())
+        .find((line: string) => line.length > 0);
+
+      return firstLine || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private getWindowsCommandCandidates(command: string): string[] {
+    const candidates = new Set<string>();
+
+    if (command === 'tesseract') {
+      if (process.env.TESSERACT_PATH) {
+        candidates.add(process.env.TESSERACT_PATH);
+      }
+      candidates.add(path.join('C:\\Program Files\\Tesseract-OCR', 'tesseract.exe'));
+      candidates.add(path.join('C:\\Program Files (x86)\\Tesseract-OCR', 'tesseract.exe'));
+    }
+
+    if (command === 'pdftoppm') {
+      if (process.env.PDFTOPPM_PATH) {
+        candidates.add(process.env.PDFTOPPM_PATH);
+      }
+      candidates.add(path.join('C:\\Program Files\\Poppler\\Library\\bin', 'pdftoppm.exe'));
+      candidates.add(path.join('C:\\Program Files\\poppler\\Library\\bin', 'pdftoppm.exe'));
+      candidates.add(path.join('C:\\cygwin64\\bin', 'pdftoppm.exe'));
+
+      const wingetPoppler = this.findWingetPopplerBinary();
+      if (wingetPoppler) {
+        candidates.add(wingetPoppler);
+      }
+    }
+
+    return [...candidates];
+  }
+
+  private findWingetPopplerBinary(): string | null {
+    const localAppData = process.env.LOCALAPPDATA;
+    if (!localAppData) {
+      return null;
+    }
+
+    const wingetPackagesDir = path.join(localAppData, 'Microsoft', 'WinGet', 'Packages');
+    try {
+      if (!fs.existsSync(wingetPackagesDir)) {
+        return null;
+      }
+
+      const packageDirs = fs.readdirSync(wingetPackagesDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith('oschwartz10612.Poppler_'))
+        .map((entry) => path.join(wingetPackagesDir, entry.name));
+
+      for (const packageDir of packageDirs) {
+        const versionDirs = fs.readdirSync(packageDir, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory() && entry.name.startsWith('poppler-'))
+          .map((entry) => entry.name)
+          .sort()
+          .reverse();
+
+        for (const version of versionDirs) {
+          const candidate = path.join(packageDir, version, 'Library', 'bin', 'pdftoppm.exe');
+          if (fs.existsSync(candidate)) {
+            return candidate;
+          }
+        }
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
+  }
+
   private async acquireOcrSlot(): Promise<void> {
     if (this.activeOcrJobs < this.maxConcurrentOcrJobs) {
       this.activeOcrJobs++;
@@ -216,14 +387,5 @@ export class ExtractionService {
     if (next) {
       next();
     }
-  }
-}
-
-function spawnSyncSafe(command: string, args: string[], timeoutMs: number): boolean {
-  try {
-    const child = spawnSync(command, args, { stdio: 'ignore', timeout: timeoutMs });
-    return child.status === 0;
-  } catch {
-    return false;
   }
 }

@@ -7,6 +7,7 @@ import { LocalMetadataService } from './localMetadata.service.js';
 import { ExtractionService } from './extraction.service.js';
 import { JSONStore } from '../utils/jsonStore.js';
 import { Logger } from '../utils/logger.js';
+import { serializeRoleList } from '../utils/roles.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -122,7 +123,7 @@ export class SyncService {
    */
   async indexFile(
     file: { id: string, name: string, mimeType?: string, webViewLink?: string, modifiedTime?: string, owners?: any[] },
-    initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string },
+    initialMetadata?: { department: string, sensitivity: string, category: string, owner?: string, roles?: string },
     options?: { allowDuringFullSync?: boolean, localFileBuffer?: Buffer }
   ): Promise<string> {
     if (this.isSyncing && !options?.allowDuringFullSync) {
@@ -192,10 +193,14 @@ export class SyncService {
       
       const finalMetadata = {
         title: override?.title || metadata.title || file.name,
-        department: override?.department || metadata.department || this.detectDepartment(file.name),
-        sensitivity: override?.sensitivity || metadata.sensitivity || 'INTERNAL',
-        category: override?.category || metadata.category || 'General',
-        owner: metadata.owner || file.owners?.[0]?.emailAddress
+        department: override?.department || initialMetadata?.department || metadata.department || this.detectDepartment(file.name),
+        sensitivity: override?.sensitivity || initialMetadata?.sensitivity || metadata.sensitivity || 'INTERNAL',
+        category: override?.category || initialMetadata?.category || metadata.category || 'General',
+        owner: metadata.owner || initialMetadata?.owner || file.owners?.[0]?.emailAddress,
+        roles: serializeRoleList(
+          override?.roles ?? metadata.roles ?? initialMetadata?.roles,
+          ['VIEWER']
+        )
       };
 
       // 3. Chunking & Embedding
@@ -331,7 +336,7 @@ export class SyncService {
     id: string, 
     name: string, 
     content: string, 
-    metadata: { category: string, department: string, sensitivity: string } 
+    metadata: { category: string, department: string, sensitivity: string, roles?: string } 
   }): Promise<string> {
     const { id, name, content, metadata } = params;
     const transactionId = `tx-content-${Date.now()}`;
@@ -355,6 +360,7 @@ export class SyncService {
             text: chunk,
             title: name,
             ...metadata,
+            roles: serializeRoleList(metadata.roles, ['VIEWER']),
             modifiedAt: new Date().toISOString()
           }
         });
